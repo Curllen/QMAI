@@ -77,16 +77,14 @@ export function ChangelogSection() {
   async function handleInstallNow() {
     if (!isTauri()) return
     try {
-      const { relaunch } = await import("@tauri-apps/plugin-process" as string)
-      await relaunch()
-    } catch {
-      // Fallback: try downloadAndInstall again
+      // Tauri updater's downloadAndInstall typically auto-restarts on Windows
+      // If we have the update handle, calling it again triggers install
       if (updateHandleRef.current) {
-        try {
-          const update = updateHandleRef.current as { downloadAndInstall: () => Promise<void> }
-          await update.downloadAndInstall()
-        } catch { /* expected restart */ }
+        const update = updateHandleRef.current as { downloadAndInstall: () => Promise<void> }
+        await update.downloadAndInstall()
       }
+    } catch {
+      // Expected: app restarts during install
     }
   }
 
