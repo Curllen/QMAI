@@ -10,6 +10,7 @@ export interface NovelSearchParams {
   query: string
   chapterNumber?: number
   topK?: number
+  authoritativeOnly?: boolean
   includeGraph?: boolean
   includeVector?: boolean
   includeKeyword?: boolean
@@ -45,6 +46,16 @@ const SOURCE_TIE_PRIORITY: Record<NovelSearchResult["type"], number> = {
   graph: 2,
   canon: 3,
   recent_chapter: 4,
+}
+
+export function isAuthoritativeGenerationPath(path: string): boolean {
+  return /\/wiki\/(entities|concepts|memory|chapters)\//.test(path)
+    || /\/wiki\/canon\.md$/.test(path)
+    || /\/\.novel\/snapshots\//.test(path)
+}
+
+export function isHistoricalProjectionSnippet(path: string, snippet: string): boolean {
+  return /\/history\//.test(path) || /is_historical:\s*true/i.test(snippet)
 }
 
 export async function novelMixedSearch(params: NovelSearchParams): Promise<NovelSearchResult[]> {
@@ -107,12 +118,19 @@ export async function novelMixedSearch(params: NovelSearchParams): Promise<Novel
   console.log("[novelMixedSearch] all promises resolved, total results:", results.length)
 
   const merged = deduplicateResults(results, topK)
-  console.log("[novelMixedSearch] dedup done, merged:", merged.length)
+  const filtered = params.authoritativeOnly
+    ? merged.filter((item) => {
+      if (isHistoricalProjectionSnippet(item.path, item.snippet)) return false
+      if (item.type === "canon" || item.type === "recent_chapter") return true
+      return isAuthoritativeGenerationPath(item.path)
+    })
+    : merged
+  console.log("[novelMixedSearch] dedup done, merged:", merged.length, "filtered:", filtered.length)
 
   console.log("[novelMixedSearch] calling rerankCandidates...")
   const reranked = await rerankCandidates(
     params.query,
-    merged.map((item) => ({
+    filtered.map((item) => ({
       ...item,
       id: `${item.type}:${normalizeResultPath(item.path)}`,
       source: item.type,

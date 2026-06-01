@@ -68,12 +68,13 @@ function fileNameToId(fileName: string): string {
   return fileName.replace(/\.md$/, "")
 }
 
-function extractFrontmatter(content: string): { title: string; type: string; sources: string[] } {
+function extractFrontmatter(content: string): { title: string; type: string; sources: string[]; isHistorical: boolean } {
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
   const fm = fmMatch ? fmMatch[1] : ""
 
   const titleMatch = fm.match(/^title:\s*["']?(.+?)["']?\s*$/m)
   const typeMatch = fm.match(/^type:\s*["']?(.+?)["']?\s*$/m)
+  const historicalMatch = fm.match(/^is_historical:\s*(true|false)\s*$/mi)
 
   // Parse sources array from YAML frontmatter
   const sources: string[] = []
@@ -108,6 +109,7 @@ function extractFrontmatter(content: string): { title: string; type: string; sou
     title,
     type: typeMatch ? typeMatch[1].trim().toLowerCase() : "other",
     sources,
+    isHistorical: historicalMatch?.[1]?.toLowerCase() === "true",
   }
 }
 
@@ -194,6 +196,9 @@ export async function buildRetrievalGraph(
     }
 
     const fm = extractFrontmatter(content)
+    if (fm.isHistorical) {
+      continue
+    }
     rawNodes.push({
       id,
       title: fm.title || file.name.replace(/\.md$/, "").replace(/-/g, " "),

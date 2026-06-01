@@ -9,8 +9,8 @@ import { getOutputLanguage, buildLanguageReminder } from "@/lib/output-language"
 import type { LlmConfig } from "@/stores/wiki-store"
 import { canonicalizeSnapshotCharacters, writeSnapshotToWiki, writePatchFieldsToWiki } from "./graph-adapter"
 import { emptyCognitionState, mergeCognitionFromSnapshot, loadCognitionState, saveCognitionState } from "./character-cognition"
-import { loadCharacterStates, saveCharacterStates } from "./character-state"
-import { loadForeshadowingTracker, saveForeshadowingTracker, type Foreshadowing } from "./foreshadowing-tracker"
+import { createEmptyCharacterStateStore, loadCharacterStates, saveCharacterStates, type CharacterStateStore } from "./character-state"
+import { createEmptyForeshadowingStore, loadForeshadowingTracker, saveForeshadowingTracker, type Foreshadowing, type ForeshadowingStore } from "./foreshadowing-tracker"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
 import { buildChapterIngestOutput, type ChapterIngestOutput } from "./chapter-ingest-output"
 import { createChapterPipeline } from "./chapter-pipeline"
@@ -279,7 +279,7 @@ function materializeRestoredCurrentSnapshot(
   return ensureSnapshotIdentity(archived, {
     revision: nextRevision,
     snapshotId: buildSnapshotRevisionId(archived, nextRevision),
-    supersedes: archived.snapshotId,
+    supersedes: current?.snapshotId ?? archived.snapshotId,
     isHistorical: false,
   })
 }
@@ -782,6 +782,11 @@ export async function restoreSnapshotHistory(
   }
   const restoredCurrent = materializeRestoredCurrentSnapshot(snapshot, currentSnapshot)
   await saveSnapshot(pp, restoredCurrent)
+  const writtenEntityPaths = await writeSnapshotToWiki(pp, restoredCurrent)
+  await cleanupSupersededEntityFiles(pp, restoredCurrent, writtenEntityPaths)
+  await rebuildDerivedMemoryFromSnapshots(pp, restoredCurrent)
+  clearGraphCache()
+  useWikiStore.getState().bumpDataVersion()
   return restoredCurrent
 }
 
@@ -856,9 +861,11 @@ async function listActualChapterNumbers(projectPath: string): Promise<number[]> 
   }
 }
 
-export async function exportStructuredMemoryToWiki(projectPath: string, snapshot: ChapterSnapshot): Promise<string[]> {
+async function loadValidMemorySnapshots(
+  projectPath: string,
+  latestSnapshot?: ChapterSnapshot,
+): Promise<ChapterSnapshot[]> {
   const pp = normalizePath(projectPath)
-  const memoryDir = `${pp}/wiki/memory`
   const actualChapterNumbers = await listActualChapterNumbers(pp)
   const snapshotNumbers = await listSnapshots(pp)
   const snapshotMap = new Map<number, ChapterSnapshot>()
@@ -870,15 +877,22 @@ export async function exportStructuredMemoryToWiki(projectPath: string, snapshot
     }
   }
 
-  if (isValidMemorySnapshot(snapshot, actualChapterNumbers)) {
-    snapshotMap.set(snapshot.chapterNumber, snapshot)
+  if (isValidMemorySnapshot(latestSnapshot ?? null, actualChapterNumbers)) {
+    snapshotMap.set(latestSnapshot!.chapterNumber, latestSnapshot!)
   }
 
-  if (snapshotMap.size === 0) {
+  return [...snapshotMap.values()].sort((a, b) => a.chapterNumber - b.chapterNumber)
+}
+
+export async function exportStructuredMemoryToWiki(projectPath: string, snapshot: ChapterSnapshot): Promise<string[]> {
+  const pp = normalizePath(projectPath)
+  const memoryDir = `${pp}/wiki/memory`
+  const snapshots = await loadValidMemorySnapshots(pp, snapshot)
+  if (snapshots.length === 0) {
     return []
   }
 
-  const memoryDocuments = buildStructuredMemoryDocuments([...snapshotMap.values()])
+  const memoryDocuments = buildStructuredMemoryDocuments(snapshots)
 
   await createDirectory(memoryDir)
   const writtenPaths: string[] = []
@@ -921,6 +935,7 @@ export async function syncSnapshotToMemory(
   } catch { /* entities dir may not exist */ }
 
   const writtenEntityPaths = await writeSnapshotToWiki(pp, syncedSnapshot)
+  await cleanupSupersededEntityFiles(pp, syncedSnapshot, writtenEntityPaths)
 
   // 清理旧实体：如果一个实体文件不在新写入列表中，且其内容引用了当前快照的 source，则删除
   const writtenFileNames = new Set(writtenEntityPaths.map(p => p.split("/").pop() ?? ""))
@@ -931,6 +946,10 @@ export async function syncSnapshotToMemory(
     try {
       const filePath = `${entitiesDir}/${oldFile}`
       const content = await readFile(filePath)
+      if (shouldDeleteSupersededProjectionContent(content, syncedSnapshot)) {
+        await deleteFile(filePath)
+        continue
+      }
       // 只删除引用了当前快照 source 的实体文件
       if (Array.from(snapshotSourceFiles).some(sourceFile => content.includes(sourceFile))) {
         // 检查是否还被其他快照引用
@@ -974,8 +993,82 @@ function snapshotSourceFileNameCandidates(chapterNumber: number): string[] {
   return Array.from(new Set([canonical, legacy]))
 }
 
-async function syncCharacterStateChanges(projectPath: string, snapshot: ChapterSnapshot): Promise<void> {
-  const existingChars = await loadCharacterStates(projectPath)
+function extractFrontmatterString(content: string, key: string): string | null {
+  const match = content.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?\\s*$`, "m"))
+  return match?.[1]?.trim() || null
+}
+
+function extractFrontmatterNumber(content: string, key: string): number | null {
+  const value = extractFrontmatterString(content, key)
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function shouldDeleteSupersededProjectionContent(content: string, snapshot: ChapterSnapshot): boolean {
+  const currentSnapshot = ensureSnapshotIdentity(snapshot)
+  const snapshotId = extractFrontmatterString(content, "snapshot_id")
+  if (snapshotId && currentSnapshot.supersedes && snapshotId === currentSnapshot.supersedes) {
+    return true
+  }
+
+  const sourceType = extractFrontmatterString(content, "source_type")
+  const sourceSequence = extractFrontmatterNumber(content, "source_sequence")
+  const sourceRevision = extractFrontmatterNumber(content, "source_revision")
+  if (
+    sourceType
+    && sourceSequence
+    && sourceRevision
+    && sourceType === currentSnapshot.sourceType
+    && sourceSequence === currentSnapshot.sourceSequence
+    && sourceRevision < (currentSnapshot.revision ?? 1)
+  ) {
+    return true
+  }
+
+  return false
+}
+
+async function cleanupSupersededEntityFiles(
+  projectPath: string,
+  snapshot: ChapterSnapshot,
+  writtenEntityPaths: string[],
+): Promise<void> {
+  const entitiesDir = `${projectPath}/wiki/entities`
+  const writtenFileNames = new Set(writtenEntityPaths.map((path) => path.split("/").pop() ?? ""))
+  const snapshotSourceFiles = new Set(snapshotSourceFileNameCandidates(snapshot.chapterNumber))
+
+  let oldEntityFiles: string[] = []
+  try {
+    const tree = await listDirectory(entitiesDir)
+    oldEntityFiles = tree.filter((file) => file.name.endsWith(".md")).map((file) => file.name)
+  } catch {
+    return
+  }
+
+  for (const oldFile of oldEntityFiles) {
+    if (writtenFileNames.has(oldFile)) continue
+    try {
+      const filePath = `${entitiesDir}/${oldFile}`
+      const content = await readFile(filePath)
+      if (shouldDeleteSupersededProjectionContent(content, snapshot)) {
+        await deleteFile(filePath)
+        continue
+      }
+      if (Array.from(snapshotSourceFiles).some((sourceFile) => content.includes(sourceFile))) {
+        const allSources = content.match(/[A-Za-z0-9_-]+\.snapshot\.json/g) ?? []
+        const onlyCurrentSource = allSources.length > 0 && allSources.every((sourceFile) => snapshotSourceFiles.has(sourceFile))
+        if (onlyCurrentSource) {
+          await deleteFile(filePath)
+        }
+      }
+    } catch {
+      // ignore cleanup failures per file
+    }
+  }
+}
+
+function applyCharacterStateChangesToStore(existingChars: CharacterStateStore, snapshot: ChapterSnapshot): CharacterStateStore {
   for (const change of snapshot.characterStateChanges) {
     const colonIdx = change.indexOf(":") >= 0 ? change.indexOf(":") : change.indexOf("：")
     if (colonIdx > 0) {
@@ -1008,11 +1101,16 @@ async function syncCharacterStateChanges(projectPath: string, snapshot: ChapterS
     }
   }
   existingChars.lastUpdated = new Date().toISOString()
+  return existingChars
+}
+
+async function syncCharacterStateChanges(projectPath: string, snapshot: ChapterSnapshot): Promise<void> {
+  const existingChars = await loadCharacterStates(projectPath)
+  applyCharacterStateChangesToStore(existingChars, snapshot)
   await saveCharacterStates(projectPath, existingChars)
 }
 
-async function syncForeshadowingChanges(projectPath: string, snapshot: ChapterSnapshot): Promise<void> {
-  const existingForeshadows = await loadForeshadowingTracker(projectPath)
+function applyForeshadowingChangesToStore(existingForeshadows: ForeshadowingStore, snapshot: ChapterSnapshot): ForeshadowingStore {
   for (const change of snapshot.foreshadowingChanges) {
     const trimmed = change.trim()
     if (trimmed.startsWith("新增伏笔") || trimmed.startsWith("新增:")) {
@@ -1055,7 +1153,38 @@ async function syncForeshadowingChanges(projectPath: string, snapshot: ChapterSn
     }
   }
   existingForeshadows.lastUpdated = new Date().toISOString()
+  return existingForeshadows
+}
+
+async function syncForeshadowingChanges(projectPath: string, snapshot: ChapterSnapshot): Promise<void> {
+  const existingForeshadows = await loadForeshadowingTracker(projectPath)
+  applyForeshadowingChangesToStore(existingForeshadows, snapshot)
   await saveForeshadowingTracker(projectPath, existingForeshadows)
+}
+
+async function rebuildDerivedMemoryFromSnapshots(projectPath: string, latestSnapshot?: ChapterSnapshot): Promise<void> {
+  const snapshots = await loadValidMemorySnapshots(projectPath, latestSnapshot)
+  if (snapshots.length === 0) return
+
+  const cognitionState = snapshots.reduce(
+    (state, snapshot) => mergeCognitionFromSnapshot(state, snapshot),
+    emptyCognitionState(),
+  )
+  await saveCognitionState(projectPath, cognitionState)
+
+  const characterStateStore = createEmptyCharacterStateStore()
+  for (const snapshot of snapshots) {
+    applyCharacterStateChangesToStore(characterStateStore, snapshot)
+  }
+  await saveCharacterStates(projectPath, characterStateStore)
+
+  const foreshadowingStore = createEmptyForeshadowingStore()
+  for (const snapshot of snapshots) {
+    applyForeshadowingChangesToStore(foreshadowingStore, snapshot)
+  }
+  await saveForeshadowingTracker(projectPath, foreshadowingStore)
+
+  await exportStructuredMemoryToWiki(projectPath, snapshots[snapshots.length - 1])
 }
 
 async function saveSnapshot(projectPath: string, snapshot: ChapterSnapshot): Promise<void> {

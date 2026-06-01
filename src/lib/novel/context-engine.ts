@@ -10,7 +10,7 @@ import { buildRevisionDirectives, loadRevisionFeedbackForContext } from "./revis
 import { loadCognitionState, cognitionToContextText } from "./character-cognition"
 import { getChapterVolumes } from "./volume"
 import { buildCharacterAuraContext } from "./character-aura"
-import { novelMixedSearch } from "./search-adapter"
+import { isAuthoritativeGenerationPath, isHistoricalProjectionSnippet, novelMixedSearch } from "./search-adapter"
 import { readSoulDoc } from "./soul-doc"
 import { rerankCandidates } from "@/lib/rerank"
 
@@ -507,7 +507,7 @@ async function readVolumeContext(
   }
 }
 
-async function searchRelevantContent(
+export async function searchRelevantContent(
   pp: string,
   task: string,
   chapterNumber: number | undefined,
@@ -575,13 +575,13 @@ async function searchRelevantContentUnified(
   }
   const query = queryParts.join(" ")
 
-  const [legacyResults, semanticResults, indexResults, vectorResults] = await Promise.all([
-    searchRelevantContent(pp, task, chapterNumber, limit).catch(() => ""),
+  const [semanticResults, indexResults, vectorResults] = await Promise.all([
     novelMixedSearch({
       projectPath: pp,
       query,
       chapterNumber,
       topK: Math.max(limit * 2, 6),
+      authoritativeOnly: true,
       includeKeyword: true,
       includeVector: true,
       includeGraph: true,
@@ -597,34 +597,35 @@ async function searchRelevantContentUnified(
   ])
 
   const candidates = [
-    ...legacyResults.split("\n").map((line, index) => {
-      const text = line.replace(/^- /, "").trim()
-      return {
-        id: `legacy:${index}`,
-        title: text.split(":")[0] || `legacy-${index}`,
-        snippet: text,
-        source: "legacy_context",
-      }
-    }).filter((item) => item.snippet),
     ...semanticResults.map((result) => ({
       id: `${result.type}:${result.path}`,
+      path: result.path,
       title: result.title,
       snippet: result.snippet ?? "",
       source: result.type,
     })),
     ...indexResults.map((result) => ({
       id: `index:${result.path}`,
+      path: result.path,
       title: result.title,
       snippet: result.snippet ?? "",
       source: "index",
     })),
     ...vectorResults.map((result, index) => ({
       id: `vector-context:${index}:${result.title}`,
+      path: result.path,
       title: result.title,
       snippet: result.snippet,
       source: "vector_context",
     })),
-  ]
+  ].filter((item) => {
+    const path = typeof (item as { path?: unknown }).path === "string"
+      ? (item as { path?: string }).path ?? ""
+      : ""
+    const snippet = item.snippet ?? ""
+    if (!path || isHistoricalProjectionSnippet(path, snippet)) return false
+    return isAuthoritativeGenerationPath(path)
+  })
 
   const reranked = await rerankCandidates(query, candidates, {
     topK: Math.max(limit * 2, limit),
@@ -647,7 +648,7 @@ async function runVectorSearchForContext(
   pp: string,
   query: string,
   limit: number,
-): Promise<{ title: string; snippet: string }[]> {
+): Promise<{ title: string; snippet: string; path: string }[]> {
   const embCfg = useWikiStore.getState().embeddingConfig
   if (!embCfg.enabled || !embCfg.model) return []
 
@@ -656,7 +657,7 @@ async function runVectorSearchForContext(
     const vectorResults = await searchByEmbedding(pp, query, embCfg, Math.max(limit * 2, 10))
     if (vectorResults.length === 0) return []
 
-    const items: { title: string; snippet: string }[] = []
+    const items: { title: string; snippet: string; path: string }[] = []
     const dirs = ["entities", "concepts", "sources", "synthesis", "comparison", "queries"]
 
     for (const vr of vectorResults.slice(0, limit)) {
@@ -668,7 +669,7 @@ async function runVectorSearchForContext(
           const title = content.match(/^#\s+(.+)/m)?.[1]?.trim()
             ?? content.match(/^---\ntitle:\s*(.+)/m)?.[1]?.trim()
             ?? vr.id
-          items.push({ title, snippet: content.slice(0, 300).replace(/\n/g, " ") })
+          items.push({ title, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
           found = true
           break
         } catch {}
@@ -677,7 +678,7 @@ async function runVectorSearchForContext(
         const tryPath = `${pp}/wiki/${vr.id}.md`
         try {
           const content = await readFile(tryPath)
-          items.push({ title: vr.id, snippet: content.slice(0, 300).replace(/\n/g, " ") })
+          items.push({ title: vr.id, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
         } catch {}
       }
     }

@@ -369,6 +369,25 @@ function snapshotSourceFileName(chapterNumber: number): string {
   return `${String(chapterNumber).padStart(3, "0")}.snapshot.json`
 }
 
+function projectionSnapshotMeta(snapshot: ChapterSnapshot): {
+  snapshotId: string
+  sourceType: "chapter" | "outline"
+  sourceSequence: number
+  sourceRevision: number
+  isHistorical: boolean
+} {
+  const sourceType = snapshot.sourceType ?? (snapshot.chapterNumber < 0 ? "outline" : "chapter")
+  const sourceSequence = snapshot.sourceSequence ?? Math.abs(snapshot.chapterNumber)
+  const sourceRevision = snapshot.revision ?? 1
+  return {
+    snapshotId: snapshot.snapshotId ?? `${snapshot.chapterId}-r${sourceRevision}`,
+    sourceType,
+    sourceSequence,
+    sourceRevision,
+    isHistorical: snapshot.isHistorical ?? false,
+  }
+}
+
 function buildEntityPage(
   title: string,
   tag: string,
@@ -376,6 +395,7 @@ function buildEntityPage(
   sourceFile: string,
   date: string,
   relationLines: string[],
+  snapshotMeta: ReturnType<typeof projectionSnapshotMeta>,
   aliases: string[] = [],
 ): string {
   return [
@@ -387,6 +407,11 @@ function buildEntityPage(
     `tags: [${tag}]`,
     `aliases: [${aliases.map((alias) => `"${alias}"`).join(", ")}]`,
     `related: [${relatedSlugs.join(", ")}]`,
+    `snapshot_id: "${snapshotMeta.snapshotId}"`,
+    `source_type: "${snapshotMeta.sourceType}"`,
+    `source_sequence: ${snapshotMeta.sourceSequence}`,
+    `source_revision: ${snapshotMeta.sourceRevision}`,
+    `is_historical: ${snapshotMeta.isHistorical ? "true" : "false"}`,
     `sources: ["${sourceFile}"]`,
     "---",
     "",
@@ -394,6 +419,28 @@ function buildEntityPage(
     "",
     ...relationLines,
   ].join("\n") + "\n"
+}
+
+function replaceOrInsertFrontmatterLine(content: string, key: string, value: string): string {
+  const pattern = new RegExp(`^${key}:.*$`, "m")
+  if (pattern.test(content)) {
+    return content.replace(pattern, `${key}: ${value}`)
+  }
+  const closeIndex = content.indexOf("\n---\n")
+  if (closeIndex < 0) return content
+  return `${content.slice(0, closeIndex)}\n${key}: ${value}${content.slice(closeIndex)}`
+}
+
+function applyProjectionSnapshotMeta(
+  content: string,
+  snapshotMeta: ReturnType<typeof projectionSnapshotMeta>,
+): string {
+  let updated = replaceOrInsertFrontmatterLine(content, "snapshot_id", `"${snapshotMeta.snapshotId}"`)
+  updated = replaceOrInsertFrontmatterLine(updated, "source_type", `"${snapshotMeta.sourceType}"`)
+  updated = replaceOrInsertFrontmatterLine(updated, "source_sequence", String(snapshotMeta.sourceSequence))
+  updated = replaceOrInsertFrontmatterLine(updated, "source_revision", String(snapshotMeta.sourceRevision))
+  updated = replaceOrInsertFrontmatterLine(updated, "is_historical", snapshotMeta.isHistorical ? "true" : "false")
+  return updated
 }
 
 const WIKILINK_RE = /\[\[([^\]|]+?)(?:\|[^\]]+?)?\]\]/g
@@ -436,6 +483,7 @@ export async function writeSnapshotToWiki(
 ): Promise<string[]> {
   const pp = normalizePath(projectPath)
   const canonicalSnapshot = canonicalizeSnapshotCharacters(snapshot)
+  const snapshotMeta = projectionSnapshotMeta(canonicalSnapshot)
   const nodes = snapshotToGraphNodes(canonicalSnapshot).filter(shouldPersistSnapshotNode)
   const edges = snapshotToGraphEdges(canonicalSnapshot)
   const entitiesDir = `${pp}/wiki/entities`
@@ -487,13 +535,13 @@ export async function writeSnapshotToWiki(
         })
 
       const newContent = buildEntityPage(
-        node.label, tag, relatedSlugs, sourceFile, today, relationLines, aliases,
+        node.label, tag, relatedSlugs, sourceFile, today, relationLines, snapshotMeta, aliases,
       )
 
       let contentToWrite: string
       if (await fileExists(filePath)) {
         const existing = await readFile(filePath)
-        contentToWrite = mergeExistingPage(existing, newContent, today)
+        contentToWrite = applyProjectionSnapshotMeta(mergeExistingPage(existing, newContent, today), snapshotMeta)
       } else {
         contentToWrite = newContent
       }
