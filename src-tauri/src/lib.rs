@@ -85,12 +85,8 @@ pub fn run() {
             if let Ok(dir) = app.path().app_data_dir() {
                 let store_path = dir.join("app-state.json");
                 eprintln!("[proxy] reading from {}", store_path.display());
-                if let Some(cfg) = proxy::read_proxy_config_from_store(&store_path) {
-                    let summary = proxy::apply_proxy_env(&cfg);
-                    eprintln!("[proxy] {summary}");
-                } else {
-                    eprintln!("[proxy] no proxyConfig in store, requests go direct");
-                }
+                let summary = proxy::apply_proxy_env_from_store(&store_path);
+                eprintln!("[proxy] {summary}");
                 let clip_cfg = clip_server::read_clip_server_config_from_store(&store_path)
                     .unwrap_or_default();
                 if let Err(err) = clip_server::apply_clip_server_config(clip_cfg) {

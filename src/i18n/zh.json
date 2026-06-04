@@ -359,6 +359,7 @@
       "usageGuide": "软件使用说明",
       "maintenance": "维护",
       "feedback": "反馈",
+      "contactSupport": "联系与支持",
       "changelog": "更新日志",
       "about": "关于"
     },
@@ -378,6 +379,27 @@
         "title": "软件使用说明",
         "description": "常用教程和小说功能说明会在浏览器中打开，方便边看边配置。",
         "open": "打开"
+      },
+      "contactSupport": {
+        "title": "联系与支持",
+        "description": "如果需要反馈问题、交流使用方式，或愿意支持软件持续维护，可以通过下面方式联系。",
+        "contact": {
+          "title": "添加微信",
+          "description": "扫码添加作者微信，适合反馈问题、交流使用建议。",
+          "alt": "微信联系方式二维码"
+        },
+        "donation": {
+          "title": "打赏通道",
+          "description": "自愿打赏，用于支持软件维护与后续功能更新。",
+          "wechatPay": {
+            "title": "微信支付",
+            "alt": "微信支付打赏二维码"
+          },
+          "alipayPay": {
+            "title": "支付宝",
+            "alt": "支付宝打赏二维码"
+          }
+        }
       },
       "llm": {
         "title": "LLM 模型",

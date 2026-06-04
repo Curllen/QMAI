@@ -63,6 +63,8 @@ const REPEAT_CHECK_MIN_CHARS = 600
 const REPEAT_WINDOW_CHARS = 120
 const REPEAT_HIT_LIMIT = 3
 const USER_ABORT_MESSAGE = "已停止生成"
+const CHAPTER_LENGTH_LIMIT_MESSAGE =
+  `已达到本章字数上限。本次章节最多生成 ${DEEP_CHAPTER_HARD_MAX_CHARS} 字，达到上限后会自动暂停输出。建议按章节逐章生成，避免一次生成过多内容导致中断。`
 
 export function shouldUseDeepChapterGeneration(_route: TaskRouteResult | null, enabled: boolean): boolean {
   return enabled
@@ -325,8 +327,8 @@ async function collectModelText(
         }
         if (normalizedCharCount > DEEP_CHAPTER_HARD_MAX_CHARS) {
           content = trimToChapterCharLimit(content, DEEP_CHAPTER_HARD_MAX_CHARS)
-          onUpdate?.(`${content}\n\n（内容已达到安全上限，已自动停止继续输出。）`)
-          stopStream("内容已达到安全上限，已自动停止继续输出。")
+          onUpdate?.(`${content}\n\n（${CHAPTER_LENGTH_LIMIT_MESSAGE}）`)
+          stopStream(CHAPTER_LENGTH_LIMIT_MESSAGE)
           return
         }
         onUpdate?.(content)
@@ -344,7 +346,7 @@ async function collectModelText(
   )
 
   if (signal?.aborted) throw new Error(USER_ABORT_MESSAGE)
-  if (streamError) throw streamError
+  if (streamError && !(cutoffReason && isRequestCancelledError(streamError))) throw streamError
   if (cutoffReason) {
     onUpdate?.(`${content.trim()}\n\n（${cutoffReason}）`)
   }
@@ -357,6 +359,10 @@ function countChapterChars(content: string): number {
 
 function assertNotAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error(USER_ABORT_MESSAGE)
+}
+
+function isRequestCancelledError(error: Error): boolean {
+  return /request cancelled|request canceled|aborted|aborterror/i.test(error.message)
 }
 
 function combineAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {

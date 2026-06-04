@@ -6,10 +6,9 @@ import {
   Network,
   History,
   Wrench,
-  Clock,
-  FolderSync,
   HelpCircle,
   MessageCircle,
+  HeartHandshake,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -26,23 +25,21 @@ import { RerankSection } from "./sections/rerank-section"
 import { InterfaceSection } from "./sections/interface-section"
 import { NovelSection } from "./sections/novel-section"
 import { NetworkSection } from "./sections/network-section"
-import { ScheduledImportSection } from "./sections/scheduled-import-section"
-import { SourceWatchSection } from "./sections/source-watch-section"
 import { ChangelogSection } from "./sections/changelog-section"
 import { MaintenanceSection } from "./sections/maintenance-section"
 import { FeedbackSection } from "./sections/feedback-section"
 import { UsageGuideSection } from "./sections/usage-guide-section"
+import { ContactSupportSection } from "./sections/contact-support-section"
 
 type CategoryId =
   | "llm"
   | "network"
-  | "source-watch"
-  | "scheduled-import"
   | "interface"
   | "novel"
   | "usage-guide"
   | "maintenance"
   | "feedback"
+  | "contact-support"
   | "changelog"
 
 interface Category {
@@ -57,13 +54,12 @@ interface Category {
 const CATEGORIES: Category[] = [
   { id: "llm", labelKey: "settings.categories.llm", icon: Bot },
   { id: "network", labelKey: "settings.categories.network", icon: Network },
-  { id: "source-watch", labelKey: "settings.categories.sourceWatch", icon: FolderSync },
-  { id: "scheduled-import", labelKey: "settings.categories.scheduledImport", icon: Clock },
   { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
   { id: "novel", labelKey: "settings.categories.novel", icon: BookOpen },
   { id: "usage-guide", labelKey: "settings.categories.usageGuide", icon: HelpCircle },
   { id: "maintenance", labelKey: "settings.categories.maintenance", icon: Wrench },
   { id: "feedback", labelKey: "settings.categories.feedback", icon: MessageCircle },
+  { id: "contact-support", labelKey: "settings.categories.contactSupport", icon: HeartHandshake },
   { id: "changelog", labelKey: "settings.categories.changelog", icon: History },
 ]
 
@@ -454,10 +450,6 @@ export function SettingsView() {
         )
       case "network":
         return <NetworkSection draft={draft} setDraft={setDraft} />
-      case "source-watch":
-        return <SourceWatchSection draft={draft} setDraft={setDraft} projectReady={!!project} />
-      case "scheduled-import":
-        return <ScheduledImportSection draft={draft} setDraft={setDraft} />
       case "interface":
         return <InterfaceSection draft={draft} setDraft={setDraft} />
       case "novel":
@@ -468,6 +460,8 @@ export function SettingsView() {
         return <MaintenanceSection />
       case "feedback":
         return <FeedbackSection />
+      case "contact-support":
+        return <ContactSupportSection />
       case "changelog":
         return <ChangelogSection />
     }

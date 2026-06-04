@@ -26,6 +26,14 @@ import { flattenMdFiles, getNextChapterNumber } from "@/lib/novel/chapter-utils"
 import { Button } from "@/components/ui/button"
 import type { MemoryCenterData, MemoryCenterFilePreview } from "@/lib/novel/memory-center"
 import { OUTLINE_IMPORT_EXTENSIONS, importOutlineFiles, importOutlineFolder } from "@/lib/novel/outline-import"
+import {
+  CHAPTER_IMPORT_EXTENSIONS,
+  collectChapterImportCandidatesFromFolder,
+  importChapterFiles,
+  runImportedChapterMemoryExtraction,
+  type ImportedChapter,
+} from "@/lib/novel/chapter-import"
+import { resolveReviewModel } from "@/lib/novel/review-model"
 import { isTauri } from "@/lib/platform"
 import { makeChapterFileName, makeDefaultChapterTitle, makeSafeFileSlug } from "@/lib/wiki-filename"
 
@@ -79,6 +87,14 @@ interface PendingPageInfo {
   type: "chapter" | "outline"
   tags: string[]
   origin?: string
+}
+
+interface ChapterImportProgressState {
+  completed: number
+  total: number
+  currentTitle: string
+  cancelling: boolean
+  doneMessage?: string
 }
 
 const MEMORY_LABEL_KEYS: Record<string, string> = {
@@ -204,6 +220,11 @@ export function SidebarPanel() {
   const [outlineImporting, setOutlineImporting] = useState(false)
   const [outlineImportMenuOpen, setOutlineImportMenuOpen] = useState(false)
   const outlineImportMenuRef = useRef<HTMLDivElement | null>(null)
+  const [chapterImporting, setChapterImporting] = useState(false)
+  const [chapterImportMenuOpen, setChapterImportMenuOpen] = useState(false)
+  const [chapterImportProgress, setChapterImportProgress] = useState<ChapterImportProgressState | null>(null)
+  const chapterImportMenuRef = useRef<HTMLDivElement | null>(null)
+  const chapterImportAbortRef = useRef<AbortController | null>(null)
 
   const loadMemoryCenter = useCallback(async (projectPath: string) => {
     const { loadMemoryCenterData } = await import("@/lib/novel/memory-center")
@@ -274,6 +295,8 @@ export function SidebarPanel() {
   useEffect(() => {
     if (isChapter) {
       setOutlineImportMenuOpen(false)
+    } else {
+      setChapterImportMenuOpen(false)
     }
   }, [isChapter])
 
@@ -299,6 +322,28 @@ export function SidebarPanel() {
     }
   }, [outlineImportMenuOpen])
 
+  useEffect(() => {
+    if (!chapterImportMenuOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (chapterImportMenuRef.current?.contains(target)) return
+      setChapterImportMenuOpen(false)
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setChapterImportMenuOpen(false)
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    document.addEventListener("keydown", handleEscape)
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("keydown", handleEscape)
+    }
+  }, [chapterImportMenuOpen])
+
   const handleRemovePendingPage = (pagePath: string) => {
     setPendingPages((prev) => prev.filter((page) => page.path !== pagePath))
   }
@@ -309,6 +354,159 @@ export function SidebarPanel() {
     useWikiStore.getState().bumpDataVersion()
     setRefreshKey((current) => current + 1)
     if (selectedPath) setSelectedFile(selectedPath)
+  }
+
+  async function confirmChapterMemoryExtraction(count: number): Promise<boolean> {
+    const targetDescription = count > 0 ? `本次导入的 ${count} 个章节` : "本次导入的章节"
+    const message = `是否提取记忆？\n\n将为${targetDescription}逐章提取记忆并同步到记忆库。提取记忆会增加 token 消耗，速度较慢，请耐心等待。\n\n点击“提取记忆”开始提取记忆，点击“只导入”则只导入章节文件。`
+    if (isTauri()) {
+      const { confirm } = await import("@tauri-apps/plugin-dialog")
+      return confirm(message, {
+        title: "是否提取记忆",
+        kind: "info",
+        okLabel: "提取记忆",
+        cancelLabel: "只导入",
+      })
+    }
+    return window.confirm(message)
+  }
+
+  function handleCancelChapterMemoryExtraction() {
+    chapterImportAbortRef.current?.abort()
+    setChapterImportProgress((current) => current ? { ...current, cancelling: true } : current)
+  }
+
+  async function extractImportedChapterMemories(projectPath: string, importedChapters: ImportedChapter[]) {
+    const abortController = new AbortController()
+    chapterImportAbortRef.current = abortController
+    const titleByPath = new Map(importedChapters.map((chapter) => [chapter.path, chapter.title]))
+    setChapterImportProgress({
+      completed: 0,
+      total: importedChapters.length,
+      currentTitle: importedChapters[0]?.title ?? "",
+      cancelling: false,
+    })
+
+    const { ingestChapter } = await import("@/lib/novel/chapter-ingest")
+    const configuredExtractModel = useWikiStore.getState().novelConfig.extractModel?.trim()
+    const reviewModel = configuredExtractModel || resolveReviewModel()
+    const result = await runImportedChapterMemoryExtraction({
+      projectPath,
+      chapterPaths: importedChapters.map((chapter) => chapter.path),
+      signal: abortController.signal,
+      reviewModel,
+      ingestChapter,
+      onProgress: (progress) => {
+        setChapterImportProgress((current) => ({
+          completed: progress.completed,
+          total: progress.total,
+          currentTitle: progress.currentPath ? titleByPath.get(progress.currentPath) ?? progress.currentPath : "",
+          cancelling: current?.cancelling ?? false,
+        }))
+      },
+    })
+
+    const doneMessage = result.cancelled
+      ? `已取消记忆提取，已完成 ${result.completed}/${importedChapters.length} 个章节。`
+      : result.failed > 0
+        ? `记忆提取完成：成功 ${result.completed} 个，失败 ${result.failed} 个。`
+        : `记忆提取完成：成功 ${result.completed} 个章节。`
+    setChapterImportProgress({
+      completed: result.completed,
+      total: importedChapters.length,
+      currentTitle: "",
+      cancelling: result.cancelled,
+      doneMessage,
+    })
+    chapterImportAbortRef.current = null
+    await refreshTree(projectPath, importedChapters[0]?.path)
+  }
+
+  async function finishChapterImport(projectPath: string, importedChapters: ImportedChapter[], extractMemory: boolean) {
+    if (importedChapters.length === 0) {
+      window.alert("没有找到可导入的章节文档。")
+      return
+    }
+    await refreshTree(projectPath, importedChapters[0].path)
+    if (extractMemory) {
+      await extractImportedChapterMemories(projectPath, importedChapters)
+    }
+  }
+
+  async function handleImportChapterFiles() {
+    if (!project || chapterImporting) return
+    if (!isTauri()) {
+      window.alert("导入章节文档功能仅在桌面端可用。")
+      return
+    }
+
+    const { open } = await import("@tauri-apps/plugin-dialog")
+    const selected = await open({
+      multiple: true,
+      title: "导入章节文件",
+      filters: [{ name: "章节文档", extensions: [...CHAPTER_IMPORT_EXTENSIONS] }],
+    })
+    if (!selected || (Array.isArray(selected) && selected.length === 0)) return
+
+    const sourcePaths = Array.isArray(selected) ? selected : [selected]
+    const extractMemory = await confirmChapterMemoryExtraction(sourcePaths.length)
+    setChapterImporting(true)
+    setChapterImportProgress(null)
+    try {
+      const projectPath = normalizePath(project.path)
+      const importedChapters = await importChapterFiles(projectPath, sourcePaths, {
+        finalForMemoryExtraction: extractMemory,
+      })
+      await finishChapterImport(projectPath, importedChapters, extractMemory)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error("[SidebarPanel] chapter file import failed:", error)
+      window.alert(`导入失败：${message}`)
+    } finally {
+      setChapterImporting(false)
+      setChapterImportMenuOpen(false)
+    }
+  }
+
+  async function handleImportChapterFolder() {
+    if (!project || chapterImporting) return
+    if (!isTauri()) {
+      window.alert("导入章节文件夹功能仅在桌面端可用。")
+      return
+    }
+
+    const { open } = await import("@tauri-apps/plugin-dialog")
+    const selected = await open({
+      directory: true,
+      title: "导入章节文件夹",
+    })
+    const selectedFolder = Array.isArray(selected) ? selected[0] : selected
+    if (!selectedFolder || typeof selectedFolder !== "string") return
+
+    const candidates = await collectChapterImportCandidatesFromFolder(selectedFolder)
+    if (candidates.length === 0) {
+      window.alert("没有找到可导入的章节文档。")
+      setChapterImportMenuOpen(false)
+      return
+    }
+
+    const extractMemory = await confirmChapterMemoryExtraction(candidates.length)
+    setChapterImporting(true)
+    setChapterImportProgress(null)
+    try {
+      const projectPath = normalizePath(project.path)
+      const importedChapters = await importChapterFiles(projectPath, candidates.map((candidate) => candidate.path), {
+        finalForMemoryExtraction: extractMemory,
+      })
+      await finishChapterImport(projectPath, importedChapters, extractMemory)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error("[SidebarPanel] chapter folder import failed:", error)
+      window.alert(`导入失败：${message}`)
+    } finally {
+      setChapterImporting(false)
+      setChapterImportMenuOpen(false)
+    }
   }
 
   async function handleImportOutlineFiles() {
@@ -652,7 +850,39 @@ export function SidebarPanel() {
           ) : null}
         </div>
         <div className="flex items-center gap-1">
-          {!isChapter ? (
+          {isChapter ? (
+            <div ref={chapterImportMenuRef} className="relative">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                onClick={() => setChapterImportMenuOpen((prev) => !prev)}
+                disabled={chapterImporting}
+              >
+                {chapterImporting ? "导入中..." : "导入"}
+                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+              {chapterImportMenuOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1 w-28 rounded-md border bg-popover py-1 text-xs text-popover-foreground shadow-lg">
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left hover:bg-accent"
+                    onClick={() => void handleImportChapterFiles()}
+                  >
+                    导入文件
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-1.5 text-left hover:bg-accent"
+                    onClick={() => void handleImportChapterFolder()}
+                  >
+                    导入文件夹
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
             <div ref={outlineImportMenuRef} className="relative">
               <Button
                 type="button"
@@ -684,7 +914,7 @@ export function SidebarPanel() {
                 </div>
               ) : null}
             </div>
-          ) : null}
+          )}
           <button
             type="button"
             onClick={() => {
@@ -696,12 +926,48 @@ export function SidebarPanel() {
             }}
             className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             title={isChapter ? t("sidebar.newChapter") : t("sidebar.newOutline")}
-            disabled={creating || outlineImporting}
+            disabled={creating || outlineImporting || chapterImporting}
           >
             <Plus className="h-4 w-4" />
           </button>
         </div>
       </div>
+
+      {isChapter && chapterImportProgress ? (
+        <div className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          {chapterImportProgress.doneMessage ? (
+            <div className="font-medium text-foreground">{chapterImportProgress.doneMessage}</div>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {chapterImportProgress.cancelling
+                    ? "正在取消记忆提取，当前章节完成后停止..."
+                    : `正在提取记忆：${chapterImportProgress.completed}/${chapterImportProgress.total} ${chapterImportProgress.currentTitle}`}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 shrink-0 px-2 text-xs"
+                  onClick={handleCancelChapterMemoryExtraction}
+                  disabled={chapterImportProgress.cancelling}
+                >
+                  取消
+                </Button>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{
+                    width: `${chapterImportProgress.total > 0 ? Math.round((chapterImportProgress.completed / chapterImportProgress.total) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {pendingCreate && (
         <div className="flex items-center gap-1 border-b px-2 py-1">

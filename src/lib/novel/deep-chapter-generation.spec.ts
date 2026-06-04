@@ -244,6 +244,67 @@ describe("runDeepChapterGeneration", () => {
     expect(thinking.join("\n")).toContain("检测到模型重复输出")
   })
 
+  it("uses a plain chapter length limit message when the hard max is reached", async () => {
+    const longDraft = Array.from({ length: 4700 }, (_, index) => `句${index}`).join("")
+    const finalPolished = chapterText("最终去AI味正文", 3000)
+    const deps: DeepChapterGenerationDeps = {
+      buildContextPack: vi.fn(async () => contextPack),
+      contextPackToPrompt: vi.fn(() => "上下文包内容"),
+      reviewChapter: vi.fn(async () => []),
+      streamChat: vi.fn(async (_config: LlmConfig, messages: ChatMessage[], callbacks: StreamCallbacks) => {
+        const prompt = messages.map((message) => String(message.content)).join("\n")
+        const content = prompt.includes("简单审查") || prompt.includes("去AI味")
+          ? finalPolished
+          : prompt.includes("章节正文")
+            ? longDraft
+            : "写作任务书内容"
+        callbacks.onToken(content)
+        callbacks.onDone()
+      }),
+    }
+    const thinking: string[] = []
+
+    await runDeepChapterGeneration(
+      { projectPath: "E:/Novel", userRequest: "生成第3章", chapterNumber: 3, llmConfig },
+      { onThinking: (content) => thinking.push(content) },
+      deps,
+    )
+
+    expect(thinking.join("\n")).toContain("已达到本章字数上限。本次章节最多生成 4500 字，达到上限后会自动暂停输出。建议按章节逐章生成，避免一次生成过多内容导致中断。")
+    expect(thinking.join("\n")).not.toContain("内容已达到安全上限")
+  })
+
+  it("does not fail when the stream reports request cancelled after the chapter length limit stops output", async () => {
+    const longDraft = Array.from({ length: 4700 }, (_, index) => `句${index}`).join("")
+    const finalPolished = chapterText("最终去AI味正文", 3000)
+    const deps: DeepChapterGenerationDeps = {
+      buildContextPack: vi.fn(async () => contextPack),
+      contextPackToPrompt: vi.fn(() => "上下文包内容"),
+      reviewChapter: vi.fn(async () => []),
+      streamChat: vi.fn(async (_config: LlmConfig, messages: ChatMessage[], callbacks: StreamCallbacks) => {
+        const prompt = messages.map((message) => String(message.content)).join("\n")
+        if (prompt.includes("简单审查") || prompt.includes("去AI味")) {
+          callbacks.onToken(finalPolished)
+          callbacks.onDone()
+          return
+        }
+        if (prompt.includes("章节正文")) {
+          callbacks.onToken(longDraft)
+          callbacks.onError(new Error("Request cancelled"))
+          return
+        }
+        callbacks.onToken("写作任务书内容")
+        callbacks.onDone()
+      }),
+    }
+
+    await expect(runDeepChapterGeneration(
+      { projectPath: "E:/Novel", userRequest: "生成第3章", chapterNumber: 3, llmConfig },
+      {},
+      deps,
+    )).resolves.toMatchObject({ finalContent: expect.stringContaining("最终去AI味正文") })
+  })
+
   it("stops before review when the user cancels during draft streaming", async () => {
     const controller = new AbortController()
     const deps: DeepChapterGenerationDeps = {

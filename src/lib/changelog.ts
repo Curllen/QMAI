@@ -7,6 +7,152 @@ export interface ChangelogEntry {
   }
 }
 
+const TWO_POINT_FIVE_CHANGELOG: ChangelogEntry = {
+  version: "2.0.5",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Cleaned up the full mocked test suite so all mock-based tests pass again.",
+      "AI Chat now lazy-loads deep chapter generation only when deep chapter mode is used, keeping heavier novel review/context modules out of the normal chat startup path.",
+    ],
+    zh: [
+      "清理全量 mocks 测试中的陈旧断言，恢复 mock 测试套件全量通过。",
+      "AI 会话改为仅在启用深度章节模式时按需加载深度章节生成模块，避免普通聊天启动路径提前加载较重的小说审稿和上下文模块。",
+    ],
+  },
+}
+
+const TWO_POINT_SIX_CHANGELOG: ChangelogEntry = {
+  version: "2.0.6",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Chapter folder import now uses a desktop-native memory extraction confirmation dialog after folder selection.",
+      "Added chapter filename wildcard matching for patterns like book-volume-Chapter N title.docx, so volume labels such as 第一卷 are not mistaken for chapter numbers.",
+    ],
+    zh: [
+      "导入章节文件夹后改用桌面原生确认框提示是否提取记忆，解决选择文件夹后没有弹窗的问题。",
+      "新增章节文件名通配匹配规则，支持“书名-第一卷-第N章 标题.docx”等格式，不再把“第一卷”误识别成章节，并会自动生成干净章节标题。",
+    ],
+  },
+}
+
+const TWO_POINT_SEVEN_CHANGELOG: ChangelogEntry = {
+  version: "2.0.7",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Fixed the AI Chat and AI Outline input resize handle so dragging the height control works reliably in the desktop app.",
+    ],
+    zh: [
+      "修复 AI 会话和 AI 大纲输入框高度拖拽无效的问题，拖动输入框上方手柄时会稳定调整高度。",
+    ],
+  },
+}
+
+const TWO_POINT_EIGHT_CHANGELOG: ChangelogEntry = {
+  version: "2.0.8",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Fixed AI Chat input height resizing when the input is wrapped in the chat footer, matching the working AI Outline behavior.",
+    ],
+    zh: [
+      "继续修复 AI 会话输入框高度拖拽：在输入框被底部区域包裹时，也会按真实会话面板高度计算上限，和 AI 大纲保持一致。",
+    ],
+  },
+}
+
+const TWO_POINT_NINE_CHANGELOG: ChangelogEntry = {
+  version: "2.0.9",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Fixed AI Chat input resizing so a partially expanded footer no longer limits further dragging; the maximum now follows the real chat panel height.",
+    ],
+    zh: [
+      "继续修复 AI 会话输入框高度拖拽：输入框拉高后不会再被底部区域自身高度限制，可以继续拉到真实会话面板高度的一半。",
+    ],
+  },
+}
+
+const TWO_POINT_TEN_CHANGELOG: ChangelogEntry = {
+  version: "2.0.10",
+  date: "2026-06-05",
+  highlights: {
+    en: [
+      "Added a Contact & Support page in Settings with a WeChat contact QR code.",
+      "Added donation QR channels for WeChat Pay and Alipay, using bundled app assets instead of temporary local image paths.",
+    ],
+    zh: [
+      "设置中新增“联系与支持”页面，可直接展示微信联系方式二维码。",
+      "新增“打赏通道”，支持展示微信支付和支付宝打赏二维码，图片已内置到软件资源中，不依赖临时文件路径。",
+    ],
+  },
+}
+
+const TWO_POINT_ELEVEN_CHANGELOG: ChangelogEntry = {
+  version: "2.0.11",
+  date: "2026-06-05",
+  highlights: {
+    en: [
+      "Removed Source Watch and Scheduled Import from Settings because these options are no longer needed in the settings sidebar.",
+      "Fixed proxy startup behavior so missing or disabled proxy settings actively clear inherited HTTP_PROXY / HTTPS_PROXY / NO_PROXY environment variables.",
+    ],
+    zh: [
+      "设置中移除“资料文件夹监控”和“定时导入”入口，减少不再需要的设置项。",
+      "修复网络代理启动逻辑：当用户未启用代理或没有保存代理配置时，会主动清理继承来的 HTTP_PROXY、HTTPS_PROXY、NO_PROXY 环境变量，避免误走代理。",
+    ],
+  },
+}
+
+const TWO_POINT_TWELVE_CHANGELOG: ChangelogEntry = {
+  version: "2.0.12",
+  date: "2026-06-05",
+  highlights: {
+    en: [
+      "Clarified the deep chapter length limit message so users know each chapter can generate up to 4500 characters and should be generated one chapter at a time.",
+      "Fixed AI Review rewrite application so original fragments can still be located when line breaks or spacing differ between the model output and the chapter file.",
+    ],
+    zh: [
+      "优化深度章节字数上限提示，明确说明本章最多生成 4500 字，达到上限会自动暂停，建议按章节逐章生成。",
+      "修复 AI 审查改写应用时原文片段定位过严的问题，当模型输出的原文片段与章节文件只存在换行或空格差异时，也能正确定位并写入。",
+    ],
+  },
+}
+
+const TWO_POINT_FOUR_CHANGELOG: ChangelogEntry = {
+  version: "2.0.4",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "Fixed chapter folder import so the memory extraction confirmation appears after selecting a folder and uses the detected importable chapter count.",
+      "Folder import now pre-scans supported chapter documents before importing, and handles folder picker results consistently.",
+    ],
+    zh: [
+      "修复章节导入文件夹后没有弹出是否提取记忆确认框的问题，现在会在选择文件夹后先识别可导入章节数量，再显示确认提示。",
+      "导入文件夹会先预扫描 txt、md、docx、旧版 doc 等支持的章节文档，再按章节顺序导入，避免选择文件夹后无提示直接返回。",
+    ],
+  },
+}
+
+const TWO_POINT_THREE_CHANGELOG: ChangelogEntry = {
+  version: "2.0.3",
+  date: "2026-06-04",
+  highlights: {
+    en: [
+      "AI Chat and AI Outline input boxes can now be resized vertically, with the default height as the minimum and half of the current panel as the maximum.",
+      "The chapter sidebar now supports importing chapter files and folders, automatically sorting imported documents by chapter number before writing them into the chapter library.",
+      "Chapter import supports txt, markdown, docx, and legacy doc files, and can optionally extract chapter memory one by one with visible progress and cancellation.",
+    ],
+    zh: [
+      "AI 会话和 AI 大纲底部输入框支持上下拖拽调整高度，最低保持当前默认高度，最高不超过当前面板高度的一半。",
+      "章节侧栏新增导入文件和导入文件夹功能，导入时会按章节编号自动排序后写入章节库。",
+      "章节导入支持 txt、md、docx 和旧版 doc 文档，并可在确认后逐章提取记忆、显示提取进度，支持取消后续提取。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_CHANGELOG: ChangelogEntry = {
   version: "2.0.2",
   date: "2026-06-04",
@@ -674,6 +820,16 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWELVE_CHANGELOG.version) return [TWO_POINT_TWELVE_CHANGELOG]
+  if (version === TWO_POINT_ELEVEN_CHANGELOG.version) return [TWO_POINT_ELEVEN_CHANGELOG]
+  if (version === TWO_POINT_TEN_CHANGELOG.version) return [TWO_POINT_TEN_CHANGELOG]
+  if (version === TWO_POINT_NINE_CHANGELOG.version) return [TWO_POINT_NINE_CHANGELOG]
+  if (version === TWO_POINT_EIGHT_CHANGELOG.version) return [TWO_POINT_EIGHT_CHANGELOG]
+  if (version === TWO_POINT_SEVEN_CHANGELOG.version) return [TWO_POINT_SEVEN_CHANGELOG]
+  if (version === TWO_POINT_SIX_CHANGELOG.version) return [TWO_POINT_SIX_CHANGELOG]
+  if (version === TWO_POINT_FIVE_CHANGELOG.version) return [TWO_POINT_FIVE_CHANGELOG]
+  if (version === TWO_POINT_FOUR_CHANGELOG.version) return [TWO_POINT_FOUR_CHANGELOG]
+  if (version === TWO_POINT_THREE_CHANGELOG.version) return [TWO_POINT_THREE_CHANGELOG]
   if (version === TWO_POINT_TWO_CHANGELOG.version) return [TWO_POINT_TWO_CHANGELOG]
   if (version === TWO_POINT_ONE_CHANGELOG.version) return [TWO_POINT_ONE_CHANGELOG]
   if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
@@ -683,6 +839,16 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    TWO_POINT_TWELVE_CHANGELOG,
+    TWO_POINT_ELEVEN_CHANGELOG,
+    TWO_POINT_TEN_CHANGELOG,
+    TWO_POINT_NINE_CHANGELOG,
+    TWO_POINT_EIGHT_CHANGELOG,
+    TWO_POINT_SEVEN_CHANGELOG,
+    TWO_POINT_SIX_CHANGELOG,
+    TWO_POINT_FIVE_CHANGELOG,
+    TWO_POINT_FOUR_CHANGELOG,
+    TWO_POINT_THREE_CHANGELOG,
     TWO_POINT_TWO_CHANGELOG,
     TWO_POINT_ONE_CHANGELOG,
     TWO_POINT_ZERO_CHANGELOG,

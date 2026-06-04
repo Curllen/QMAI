@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, useMemo } from "react"
-import { Send, X, Save, Copy, RefreshCw, FileText, Square, Plus, Trash2 } from "lucide-react"
+import { X, Save, Copy, RefreshCw, FileText, Plus, Trash2 } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useOutlineChatStore, type OutlineChatMessage } from "@/stores/outline-chat-store"
 import { normalizePath } from "@/lib/path-utils"
@@ -15,6 +15,7 @@ import { prepareOutlineSaveDraft } from "@/lib/outline-save"
 import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
 import { runDeepOutlineGeneration } from "@/lib/novel/deep-outline-generation"
 import { createDeepThinkingStreamRenderer } from "@/lib/deep-thinking-stream"
+import { ChatInput } from "@/components/chat/chat-input"
 
 async function loadOutlineContext(projectPath: string): Promise<{ context: string; sources: string[] }> {
   const pp = normalizePath(projectPath)
@@ -215,7 +216,6 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const activeConv = conversations.find((c) => c.id === activeConversationId)
   const activeMessages = activeConv?.messages ?? []
 
-  const [input, setInput] = useState("")
   const [saveStatus, setSaveStatus] = useState("")
   const [copied, setCopied] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -249,8 +249,8 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
     return () => container.removeEventListener("scroll", handleScroll)
   }, [])
 
-  const handleSend = useCallback(async (overrideInput?: string) => {
-    const prompt = (overrideInput ?? input).trim()
+  const handleSend = useCallback(async (inputText: string) => {
+    const prompt = inputText.trim()
     if (!prompt || !project || isStreaming) return
     if (!hasUsableLlm(llmConfig)) return
 
@@ -261,7 +261,6 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
 
     const userMsg: OutlineChatMessage = { id: crypto.randomUUID(), role: "user", content: prompt }
     addMessage(convId, userMsg)
-    if (!overrideInput) setInput("")
     setIsStreaming(true)
     setStreamingContent("")
     userScrolledUpRef.current = false
@@ -368,7 +367,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [input, project, isStreaming, llmConfig, activeConversationId, createConversation, addMessage, replaceLastAssistant, removeLastMessage, setIsStreaming, setStreamingContent])
+  }, [project, isStreaming, llmConfig, activeConversationId, createConversation, addMessage, replaceLastAssistant, removeLastMessage, setIsStreaming, setStreamingContent])
 
   const handleGenerateSection = useCallback((title: string, requestHint: string) => {
     void handleSend(`请继续生成「${title}」。${requestHint} 请基于已有大纲、章节内容和项目记忆直接输出该分项内容，结构清晰，可保存为大纲。`)
@@ -581,36 +580,14 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <ChatDockControls />
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend() } }}
-            placeholder="输入关于大纲的问题..."
-            disabled={isStreaming}
-            className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-ring disabled:opacity-50"
-          />
-          {isStreaming ? (
-            <button
-              onClick={handleStop}
-              className="rounded-md bg-destructive px-3 py-1.5 text-sm text-destructive-foreground hover:bg-destructive/90"
-              title="停止生成"
-            >
-              <Square className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => void handleSend()}
-              disabled={!input.trim()}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          )}
-        </div>
       </div>
+      <ChatInput
+        onSend={(text) => void handleSend(text)}
+        onStop={handleStop}
+        isStreaming={isStreaming}
+        placeholder="输入关于大纲的问题..."
+        leadingControls={<ChatDockControls />}
+      />
     </div>
   )
 }

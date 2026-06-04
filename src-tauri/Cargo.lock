@@ -4460,14 +4460,16 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llm-wiki"
-version = "2.0.2"
+version = "2.0.12"
 dependencies = [
  "arrow-array",
  "arrow-schema",
  "base64 0.22.1",
  "calamine",
+ "cfb",
  "chrono",
  "docx-rs",
+ "encoding_rs",
  "futures",
  "image",
  "lancedb",

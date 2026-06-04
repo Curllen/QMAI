@@ -23,7 +23,6 @@ import { isGreeting } from "@/lib/greeting-detector"
 import { computeContextBudget } from "@/lib/context-budget"
 import { getConversationTabTitle, sortConversationsByUpdatedAt } from "@/lib/workspace-layout"
 import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
-import { runDeepChapterGeneration, shouldUseDeepChapterGeneration } from "@/lib/novel/deep-chapter-generation"
 import { createDeepThinkingStreamRenderer } from "@/lib/deep-thinking-stream"
 import {
   buildGoldenThreeChapterDirective,
@@ -289,7 +288,8 @@ export function ChatPanel() {
       const goldenThreeChapter = novelMode
         ? detectGoldenThreeChapterRequest(text, taskRoute?.chapterNumber)
         : undefined
-      if (novelMode && project && shouldUseDeepChapterGeneration(taskRoute, deepChapterEnabled)) {
+      if (novelMode && project && deepChapterEnabled) {
+        const { runDeepChapterGeneration } = await import("@/lib/novel/deep-chapter-generation")
         const controller = new AbortController()
         abortRef.current = controller
         const deepStream = createDeepThinkingStreamRenderer()

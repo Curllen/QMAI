@@ -182,18 +182,61 @@ function findUniqueExactReviewRewriteAnchor(markdown: string, originalText: stri
   const { body: markdownBody } = parseFrontmatter(markdown)
   const { body } = splitChapterHeading(markdownBody)
   const first = body.indexOf(needle)
+  if (first >= 0) {
+    const second = body.indexOf(needle, first + needle.length)
+    if (second >= 0) return null
+    return {
+      evidence: needle,
+      selection: {
+        start: first,
+        end: first + needle.length,
+        text: needle,
+        bodySnapshot: body,
+      },
+    }
+  }
+  return findUniqueWhitespaceInsensitiveReviewRewriteAnchor(body, needle)
+}
+
+function findUniqueWhitespaceInsensitiveReviewRewriteAnchor(body: string, needle: string): DashboardIssueAnchor | null {
+  const normalizedBody = compactTextWithSourceMap(body)
+  const normalizedNeedle = compactText(needle)
+  if (!normalizedNeedle) return null
+
+  const first = normalizedBody.text.indexOf(normalizedNeedle)
   if (first < 0) return null
-  const second = body.indexOf(needle, first + needle.length)
+  const second = normalizedBody.text.indexOf(normalizedNeedle, first + normalizedNeedle.length)
   if (second >= 0) return null
+
+  const start = normalizedBody.sourceIndexes[first]
+  const lastSourceIndex = normalizedBody.sourceIndexes[first + normalizedNeedle.length - 1]
+  if (start === undefined || lastSourceIndex === undefined) return null
+  const end = lastSourceIndex + 1
+
   return {
-    evidence: needle,
+    evidence: body.slice(start, end),
     selection: {
-      start: first,
-      end: first + needle.length,
-      text: needle,
+      start,
+      end,
+      text: body.slice(start, end),
       bodySnapshot: body,
     },
   }
+}
+
+function compactTextWithSourceMap(text: string): { text: string; sourceIndexes: number[] } {
+  let compact = ""
+  const sourceIndexes: number[] = []
+  for (let index = 0; index < text.length; index += 1) {
+    if (/\s/.test(text[index])) continue
+    compact += text[index]
+    sourceIndexes.push(index)
+  }
+  return { text: compact, sourceIndexes }
+}
+
+function compactText(text: string): string {
+  return text.replace(/\s+/g, "")
 }
 
 function replaceReviewRewriteAnchor(

@@ -91,6 +91,30 @@ describe("review rewrite plan", () => {
     expect(result.markdown).toBe(markdown)
   })
 
+  it("locates original text when line breaks or spacing differ between the model output and markdown", () => {
+    const markdown = [
+      "# 第1章",
+      "",
+      "杨栋把手机塞进口袋，",
+      "黑玉残镜没有解释它从何而来。",
+      "",
+      "孙小晴的病症显得异常。",
+    ].join("\r\n")
+
+    const result = applyReviewRewriteEditsToMarkdown(markdown, [
+      {
+        id: "a",
+        originalText: "杨栋把手机塞进口袋， 黑玉残镜没有解释它从何而来。",
+        replacementText: "杨栋把手机交给黑玉残镜，黑玉残镜低声说明它来自上一章的失踪现场。",
+      },
+    ])
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.markdown).toContain("杨栋把手机交给黑玉残镜")
+    expect(result.markdown).not.toContain("杨栋把手机塞进口袋")
+  })
+
   it("does not guess when the same original text appears more than once", () => {
     const markdown = "# 第1章\n\n杨栋瑞碗的手顿了顿。\n杨栋瑞碗的手顿了顿。"
 

@@ -61,6 +61,15 @@ pub fn read_proxy_config_from_store(store_path: &Path) -> Option<ProxyConfig> {
     serde_json::from_value(proxy.clone()).ok()
 }
 
+/// Read and apply the stored proxy config. Missing or unreadable
+/// config is treated exactly like a disabled proxy, so inherited
+/// HTTP_PROXY / HTTPS_PROXY / NO_PROXY values from the parent process
+/// cannot silently affect users who never enabled proxy in the app.
+pub fn apply_proxy_env_from_store(store_path: &Path) -> String {
+    let config = read_proxy_config_from_store(store_path).unwrap_or_default();
+    apply_proxy_env(&config)
+}
+
 /// Apply a proxy config by setting the env vars reqwest reads.
 /// Returns a short human-readable summary for logging.
 ///
@@ -420,6 +429,24 @@ mod tests {
         let dir = tempdir_for_test();
         let path = dir.join("missing.json");
         assert!(read_proxy_config_from_store(&path).is_none());
+    }
+
+    #[test]
+    fn missing_store_config_clears_inherited_proxy_env() {
+        isolated(|| {
+            let dir = tempdir_for_test();
+            let path = dir.join("missing.json");
+            std::env::set_var("HTTP_PROXY", "http://inherited:8080");
+            std::env::set_var("HTTPS_PROXY", "http://inherited:8080");
+            std::env::set_var("NO_PROXY", "localhost");
+
+            let summary = apply_proxy_env_from_store(&path);
+
+            assert!(summary.contains("disabled"));
+            assert!(std::env::var("HTTP_PROXY").is_err());
+            assert!(std::env::var("HTTPS_PROXY").is_err());
+            assert!(std::env::var("NO_PROXY").is_err());
+        });
     }
 
     #[test]

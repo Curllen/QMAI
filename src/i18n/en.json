@@ -653,6 +653,7 @@
       "usageGuide": "Usage Guide",
       "maintenance": "Maintenance",
       "feedback": "Feedback",
+      "contactSupport": "Contact & Support",
       "changelog": "Changelog",
       "about": "About"
     },
@@ -672,6 +673,27 @@
         "title": "Usage Guide",
         "description": "Open tutorials and novel-writing guides in your browser while configuring the app.",
         "open": "Open"
+      },
+      "contactSupport": {
+        "title": "Contact & Support",
+        "description": "Use these channels to send feedback, discuss usage, or support ongoing maintenance.",
+        "contact": {
+          "title": "Add WeChat",
+          "description": "Scan to add the author on WeChat for feedback and usage discussion.",
+          "alt": "WeChat contact QR code"
+        },
+        "donation": {
+          "title": "Donation Channels",
+          "description": "Optional donations help support maintenance and future updates.",
+          "wechatPay": {
+            "title": "WeChat Pay",
+            "alt": "WeChat Pay donation QR code"
+          },
+          "alipayPay": {
+            "title": "Alipay",
+            "alt": "Alipay donation QR code"
+          }
+        }
       },
       "llm": {
         "title": "LLM Model",
