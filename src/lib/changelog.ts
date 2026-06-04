@@ -7,180 +7,47 @@ export interface ChangelogEntry {
   }
 }
 
-const TWO_POINT_FIVE_CHANGELOG: ChangelogEntry = {
-  version: "2.0.5",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Cleaned up the full mocked test suite so all mock-based tests pass again.",
-      "AI Chat now lazy-loads deep chapter generation only when deep chapter mode is used, keeping heavier novel review/context modules out of the normal chat startup path.",
-    ],
-    zh: [
-      "清理全量 mocks 测试中的陈旧断言，恢复 mock 测试套件全量通过。",
-      "AI 会话改为仅在启用深度章节模式时按需加载深度章节生成模块，避免普通聊天启动路径提前加载较重的小说审稿和上下文模块。",
-    ],
-  },
-}
-
-const TWO_POINT_SIX_CHANGELOG: ChangelogEntry = {
-  version: "2.0.6",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Chapter folder import now uses a desktop-native memory extraction confirmation dialog after folder selection.",
-      "Added chapter filename wildcard matching for patterns like book-volume-Chapter N title.docx, so volume labels such as 第一卷 are not mistaken for chapter numbers.",
-    ],
-    zh: [
-      "导入章节文件夹后改用桌面原生确认框提示是否提取记忆，解决选择文件夹后没有弹窗的问题。",
-      "新增章节文件名通配匹配规则，支持“书名-第一卷-第N章 标题.docx”等格式，不再把“第一卷”误识别成章节，并会自动生成干净章节标题。",
-    ],
-  },
-}
-
-const TWO_POINT_SEVEN_CHANGELOG: ChangelogEntry = {
-  version: "2.0.7",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Fixed the AI Chat and AI Outline input resize handle so dragging the height control works reliably in the desktop app.",
-    ],
-    zh: [
-      "修复 AI 会话和 AI 大纲输入框高度拖拽无效的问题，拖动输入框上方手柄时会稳定调整高度。",
-    ],
-  },
-}
-
-const TWO_POINT_EIGHT_CHANGELOG: ChangelogEntry = {
-  version: "2.0.8",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Fixed AI Chat input height resizing when the input is wrapped in the chat footer, matching the working AI Outline behavior.",
-    ],
-    zh: [
-      "继续修复 AI 会话输入框高度拖拽：在输入框被底部区域包裹时，也会按真实会话面板高度计算上限，和 AI 大纲保持一致。",
-    ],
-  },
-}
-
-const TWO_POINT_NINE_CHANGELOG: ChangelogEntry = {
-  version: "2.0.9",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Fixed AI Chat input resizing so a partially expanded footer no longer limits further dragging; the maximum now follows the real chat panel height.",
-    ],
-    zh: [
-      "继续修复 AI 会话输入框高度拖拽：输入框拉高后不会再被底部区域自身高度限制，可以继续拉到真实会话面板高度的一半。",
-    ],
-  },
-}
-
-const TWO_POINT_TEN_CHANGELOG: ChangelogEntry = {
-  version: "2.0.10",
+const TWO_POINT_ONE_ZERO_CHANGELOG: ChangelogEntry = {
+  version: "2.1.0",
   date: "2026-06-05",
   highlights: {
     en: [
-      "Added a Contact & Support page in Settings with a WeChat contact QR code.",
-      "Added donation QR channels for WeChat Pay and Alipay, using bundled app assets instead of temporary local image paths.",
+      "Added independent Golden Three Chapters constraints for opening, first chapter, and first-three-chapter requests.",
+      "Applied Golden Three Chapters rules to both deep chapter generation and ordinary chapter generation.",
+      "Optimized Golden Three Chapters output: opening requests generate the first chapter plus directions for chapters two and three, while explicit chapter two or three requests generate only that chapter.",
+      "Improved AI Chat dock controls so only one target switch is shown at a time.",
+      "Added vertical resizing for AI Chat and AI Outline input boxes.",
+      "Fixed AI Chat input resizing limits so the input can expand up to half of the real panel height.",
+      "Added chapter file and folder import with automatic chapter-number sorting.",
+      "Improved chapter folder import with a pre-scan and memory extraction confirmation.",
+      "Added optional chapter memory extraction progress with cancellation during import.",
+      "Improved chapter filename wildcard matching for volume and chapter formats.",
+      "Lazy-loaded deep chapter generation only when deep mode is enabled.",
+      "Cleaned up stale mock assertions so the mocked test suite passes again.",
+      "Removed Source Watch and Scheduled Import entries from Settings.",
+      "Fixed proxy startup behavior so disabled proxy settings clear inherited proxy environment variables.",
+      "Clarified the deep chapter length limit message for the 4500-character chapter limit.",
+      "Fixed deep writing so internal request cancellation after a chapter length cutoff no longer appears as a generation failure.",
+      "Fixed AI Review rewrite application so original fragments can still be located when line breaks or spacing differ.",
     ],
     zh: [
-      "设置中新增“联系与支持”页面，可直接展示微信联系方式二维码。",
-      "新增“打赏通道”，支持展示微信支付和支付宝打赏二维码，图片已内置到软件资源中，不依赖临时文件路径。",
-    ],
-  },
-}
-
-const TWO_POINT_ELEVEN_CHANGELOG: ChangelogEntry = {
-  version: "2.0.11",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Removed Source Watch and Scheduled Import from Settings because these options are no longer needed in the settings sidebar.",
-      "Fixed proxy startup behavior so missing or disabled proxy settings actively clear inherited HTTP_PROXY / HTTPS_PROXY / NO_PROXY environment variables.",
-    ],
-    zh: [
-      "设置中移除“资料文件夹监控”和“定时导入”入口，减少不再需要的设置项。",
-      "修复网络代理启动逻辑：当用户未启用代理或没有保存代理配置时，会主动清理继承来的 HTTP_PROXY、HTTPS_PROXY、NO_PROXY 环境变量，避免误走代理。",
-    ],
-  },
-}
-
-const TWO_POINT_TWELVE_CHANGELOG: ChangelogEntry = {
-  version: "2.0.12",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Clarified the deep chapter length limit message so users know each chapter can generate up to 4500 characters and should be generated one chapter at a time.",
-      "Fixed AI Review rewrite application so original fragments can still be located when line breaks or spacing differ between the model output and the chapter file.",
-    ],
-    zh: [
-      "优化深度章节字数上限提示，明确说明本章最多生成 4500 字，达到上限会自动暂停，建议按章节逐章生成。",
-      "修复 AI 审查改写应用时原文片段定位过严的问题，当模型输出的原文片段与章节文件只存在换行或空格差异时，也能正确定位并写入。",
-    ],
-  },
-}
-
-const TWO_POINT_FOUR_CHANGELOG: ChangelogEntry = {
-  version: "2.0.4",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Fixed chapter folder import so the memory extraction confirmation appears after selecting a folder and uses the detected importable chapter count.",
-      "Folder import now pre-scans supported chapter documents before importing, and handles folder picker results consistently.",
-    ],
-    zh: [
-      "修复章节导入文件夹后没有弹出是否提取记忆确认框的问题，现在会在选择文件夹后先识别可导入章节数量，再显示确认提示。",
-      "导入文件夹会先预扫描 txt、md、docx、旧版 doc 等支持的章节文档，再按章节顺序导入，避免选择文件夹后无提示直接返回。",
-    ],
-  },
-}
-
-const TWO_POINT_THREE_CHANGELOG: ChangelogEntry = {
-  version: "2.0.3",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "AI Chat and AI Outline input boxes can now be resized vertically, with the default height as the minimum and half of the current panel as the maximum.",
-      "The chapter sidebar now supports importing chapter files and folders, automatically sorting imported documents by chapter number before writing them into the chapter library.",
-      "Chapter import supports txt, markdown, docx, and legacy doc files, and can optionally extract chapter memory one by one with visible progress and cancellation.",
-    ],
-    zh: [
-      "AI 会话和 AI 大纲底部输入框支持上下拖拽调整高度，最低保持当前默认高度，最高不超过当前面板高度的一半。",
-      "章节侧栏新增导入文件和导入文件夹功能，导入时会按章节编号自动排序后写入章节库。",
-      "章节导入支持 txt、md、docx 和旧版 doc 文档，并可在确认后逐章提取记忆、显示提取进度，支持取消后续提取。",
-    ],
-  },
-}
-
-const TWO_POINT_TWO_CHANGELOG: ChangelogEntry = {
-  version: "2.0.2",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Added an independent golden-three-chapters constraint for first chapter, opening, and first-three-chapter generation requests.",
-      "AI Chat now injects the golden-three-chapters constraint into both deep chapter generation and ordinary chapter generation when the request matches the opening boundary.",
-      "AI Chat dock controls now show only one switch target at a time: sidebar when currently docked at the bottom, and bottom when currently docked in the sidebar.",
-    ],
-    zh: [
-      "新增独立的黄金三章开篇生成约束，命中首章、第一章、开篇、开局、前三章等请求时自动约束开篇节奏。",
-      "AI 会话在深度章节生成和普通章节生成中都会按需注入黄金三章规则，要求第一章只生成正文并给第二、三章写作方向，第二章或第三章则只生成对应正文。",
-      "AI 会话停靠按钮调整为每次只显示一个切换选项：当前在底栏时只显示停靠在侧栏，当前在侧栏时只显示停靠在底栏。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_CHANGELOG: ChangelogEntry = {
-  version: "2.0.1",
-  date: "2026-06-04",
-  highlights: {
-    en: [
-      "Fixed GitHub Actions CI for macOS and Linux by preparing the required PDFium binaries before the Rust build step.",
-      "Aligned CI dependency preparation with the successful multi-platform release workflow so Windows, macOS, and Linux packaging checks are more consistent.",
-    ],
-    zh: [
-      "修复 GitHub Actions CI 在 macOS 和 Linux 上缺少 PDFium 动态库导致 Rust 构建失败的问题。",
-      "将 CI 的依赖准备流程与已成功运行的多平台打包流程对齐，提升 Windows、macOS、Linux 多平台打包检查的一致性。",
+      "新增独立“黄金三章”开篇生成约束。用户在 AI 会话中请求首章、第一章、开篇、开局、前三章等内容时，系统会自动套用黄金三章规则，要求开篇更快进入主体事件、危机、冲突或任务，减少无关背景、环境、心理和设定铺垫。",
+      "黄金三章规则已接入深度章节模式和普通章节生成流程。开启深度章节模式时，该规则会进入深度多步生成流程；未开启深度模式时，也会注入普通章节生成流程。",
+      "优化黄金三章输出策略。请求首章或前三章时，系统只生成第一章正文，并给出第二、三章写作方向；明确请求第二章或第三章时，则只生成对应章节正文。",
+      "优化 AI 会话停靠按钮显示逻辑。AI 会话停靠在底栏时，只显示“停靠在侧栏”；停靠在侧栏时，只显示“停靠在底栏”，避免同时出现两个停靠按钮造成误解。",
+      "AI 会话和 AI 大纲底部输入框新增高度拖拽能力。输入框支持上下调整高度，最低保持默认高度，最高不超过当前面板高度的一半。",
+      "持续修复 AI 会话输入框高度拖拽问题。解决输入框在底部区域包裹状态下拖拽受限、拉高后无法继续展开等情况，使其高度计算与 AI 大纲保持一致。",
+      "章节侧栏新增导入文件和导入文件夹功能。导入时会自动识别章节编号并排序，支持 txt、md、docx 和旧版 doc 文档。",
+      "优化章节文件夹导入流程。导入文件夹时会先预扫描可导入章节数量，再弹出确认提示，询问是否提取记忆。",
+      "新增导入章节时的记忆提取流程。用户确认后会逐章提取记忆，并在章节上方显示提取进度，支持中途取消；取消则只导入章节内容，不执行记忆提取。",
+      "增强章节文件名匹配规则。现在支持类似“书名 第几卷 第N章 标题.docx”的复杂命名格式，避免把卷号误识别为章节号，并自动生成更干净的章节标题。",
+      "优化 AI 会话加载逻辑。深度章节生成模块改为仅在启用深度章节模式时按需加载，避免普通聊天启动时提前加载较重的小说审查和上下文模块，提高普通 AI 会话的启动效率。",
+      "清理并修复全量 mock 测试中的陈旧断言，恢复 mock 测试套件全量通过，降低后续功能迭代时的回归风险。",
+      "设置页移除“资料文件夹监控”和“定时导入”入口，精简不再需要的设置项，让设置页面更聚焦当前实际使用功能。",
+      "修复网络代理启用逻辑。未启用代理或没有保存代理配置时，软件会主动清理继承来的 HTTP_PROXY、HTTPS_PROXY、NO_PROXY 环境变量，避免用户没有点击启用代理时仍然误走代理。",
+      "优化深度章节字数上限提示。达到章节内容上限时，会明确提示本章最多生成 4500 字，达到上限后会自动暂停，建议用户按章节逐章生成，避免一次生成过多内容导致中断。",
+      "修复深度写作在达到章节上限后可能误报 request cancelled 的问题。当系统因章节字数上限主动暂停输出时，后续底层请求取消不再被当作异常失败，减少深度章节生成中断后的误报。",
+      "修复 AI 审查改写时“原文片段没有定位到”的问题。现在应用 AI 改写时仍优先精确匹配原文；如果模型输出与章节原文只存在换行、空格或段落格式差异，系统会进行更宽容的唯一匹配，在确认只匹配到一处时正常写入。",
     ],
   },
 }
@@ -820,37 +687,16 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
-  if (version === TWO_POINT_TWELVE_CHANGELOG.version) return [TWO_POINT_TWELVE_CHANGELOG]
-  if (version === TWO_POINT_ELEVEN_CHANGELOG.version) return [TWO_POINT_ELEVEN_CHANGELOG]
-  if (version === TWO_POINT_TEN_CHANGELOG.version) return [TWO_POINT_TEN_CHANGELOG]
-  if (version === TWO_POINT_NINE_CHANGELOG.version) return [TWO_POINT_NINE_CHANGELOG]
-  if (version === TWO_POINT_EIGHT_CHANGELOG.version) return [TWO_POINT_EIGHT_CHANGELOG]
-  if (version === TWO_POINT_SEVEN_CHANGELOG.version) return [TWO_POINT_SEVEN_CHANGELOG]
-  if (version === TWO_POINT_SIX_CHANGELOG.version) return [TWO_POINT_SIX_CHANGELOG]
-  if (version === TWO_POINT_FIVE_CHANGELOG.version) return [TWO_POINT_FIVE_CHANGELOG]
-  if (version === TWO_POINT_FOUR_CHANGELOG.version) return [TWO_POINT_FOUR_CHANGELOG]
-  if (version === TWO_POINT_THREE_CHANGELOG.version) return [TWO_POINT_THREE_CHANGELOG]
-  if (version === TWO_POINT_TWO_CHANGELOG.version) return [TWO_POINT_TWO_CHANGELOG]
-  if (version === TWO_POINT_ONE_CHANGELOG.version) return [TWO_POINT_ONE_CHANGELOG]
+  if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version) return [TWO_POINT_ONE_ZERO_CHANGELOG]
   if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
+  if (/^2\.0\.(?:[1-9]|1[0-2])$/.test(version)) return []
   if (isMergedOnePointRelease(version)) return []
   return CHANGELOG.filter((entry) => entry.version === version)
 }
 
 export function allChangelog(): ChangelogEntry[] {
   return [
-    TWO_POINT_TWELVE_CHANGELOG,
-    TWO_POINT_ELEVEN_CHANGELOG,
-    TWO_POINT_TEN_CHANGELOG,
-    TWO_POINT_NINE_CHANGELOG,
-    TWO_POINT_EIGHT_CHANGELOG,
-    TWO_POINT_SEVEN_CHANGELOG,
-    TWO_POINT_SIX_CHANGELOG,
-    TWO_POINT_FIVE_CHANGELOG,
-    TWO_POINT_FOUR_CHANGELOG,
-    TWO_POINT_THREE_CHANGELOG,
-    TWO_POINT_TWO_CHANGELOG,
-    TWO_POINT_ONE_CHANGELOG,
+    TWO_POINT_ONE_ZERO_CHANGELOG,
     TWO_POINT_ZERO_CHANGELOG,
     ...CHANGELOG.filter((entry) => !isMergedOnePointRelease(entry.version)),
   ]
