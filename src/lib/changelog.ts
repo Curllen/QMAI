@@ -7,162 +7,41 @@ export interface ChangelogEntry {
   }
 }
 
-const TWO_POINT_ONE_TEN_CHANGELOG: ChangelogEntry = {
-  version: "2.1.10",
+const TWO_POINT_TWO_ZERO_CHANGELOG: ChangelogEntry = {
+  version: "2.2.0",
   date: "2026-06-05",
   highlights: {
     en: [
-      "Fixed Continue Next Chapter in AI Chat so next-chapter generation resolves a concrete target chapter number instead of reusing the previous generated chapter.",
-      "AI Chat now uses the resolved target chapter number for deep chapter prompts, context-pack retrieval, chapter goals, timeline positioning, and review calls.",
-      "When a chapter is selected, Continue Next Chapter advances from that selected chapter; when no chapter is selected, it uses the next available chapter number from the chapter library.",
+      "Consolidated the recent AI Chat, deep chapter generation, memory import, deletion cleanup, and network resilience fixes into the 2.2.0 release.",
+      "Fixed Continue Next Chapter so AI Chat resolves a concrete target chapter number for prompts, context retrieval, chapter goals, timeline positioning, and review calls.",
+      "Improved Character Soul matching by using chapter goals, outlines, character states, memory, and cognition context in addition to the latest user request.",
+      "Reworked deep chapter length control with a 6,000-character stage-3 safety cap, strict stage-4 optimization to 2,200-3,200 characters, and up to four retries when output remains over 4,000 characters.",
+      "Improved Continue Unfinished so failed deep chapter runs preserve and reuse the original request, recoverable stage context, and rebuilt novel context pack.",
+      "Extended shared LLM request retry windows and replaced raw request-send/network errors with clearer Chinese explanations.",
+      "Kept chapter and outline import memory extraction progress visible in the extraction panel, added cancel-import behavior, and improved source-related memory/entity cleanup after deletion.",
+      "Fixed AI Chat stop handling so stopping during thinking or streaming finalizes immediately and ignores late callbacks.",
     ],
     zh: [
-      "修复 AI 会话“继续生成下一章”反复生成同一章的问题。现在点击继续下一章时，会先解析出明确的目标章节号，不再沿用上一轮生成时的第7章。",
+      "修复 AI 会话“继续生成下一章”反复生成同一章的问题。现在点击继续下一章时，会先解析出明确的目标章节号，不再沿用上一轮生成时的章节编号。",
       "深度章节生成会把解析后的目标章节号统一用于思考过程、上下文包、章节目标、时间线定位和 AI 审稿，避免正文标题是上一章、但保存文件已经变成下一章的错位。",
       "如果当前选中了某个章节，“继续生成下一章”会按当前章节号 +1；如果没有选中章节，则按章节库中已有最大章节号 +1，确保连续生成时章节序号持续向后推进。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_NINE_CHANGELOG: ChangelogEntry = {
-  version: "2.1.9",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Improved bound Character Soul matching for AI Chat and deep chapter generation so character names can be matched from chapter goals, outlines, character states, memory, and cognition context, not only the latest user request.",
-      "Changed deep chapter length control so stage 3 drafts can stream up to 6,000 characters before the local safety stop.",
-      "Added a stricter stage 4 length optimization pass: overlong drafts are compressed against the stage 3 draft, kept within 2,200-3,200 characters, retried up to four times if still above 4,000 characters, and stopped with a clear message if the model cannot obey the limit.",
-    ],
-    zh: [
       "优化 AI 会话和深度章节对“绑定角色灵魂”的使用。现在不只看用户最后一句请求，也会结合章节目标、章纲、人物状态、记忆和认知上下文来匹配角色名，减少“生成第几章”时没有套用角色灵魂的问题。",
       "调整深度章节阶段3正文初稿的本地字数上限。初稿最多允许生成到 6000 字再触发安全暂停，降低正文还没写完整就被过早截断的概率。",
       "新增更严格的阶段4字数审核与正文优化。阶段3初稿过长时，会基于原草稿压缩内容，在不改变主线、人物行动、关键冲突和结尾钩子的前提下，把正文严格控制在 2200-3200 字；如果优化后仍超过 4000 字，会最多重试 4 次，仍失败则用中文明确提示用户降低目标字数或拆章生成。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_SEVEN_CHANGELOG: ChangelogEntry = {
-  version: "2.1.7",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Improved Continue Unfinished for deep chapter generation so failed messages preserve the original chapter request and recoverable stage context instead of treating Continue Unfinished as the request.",
-      "Continue Unfinished now rebuilds the novel context pack before continuing, so chapter outlines, memory, character state, and prior stage content are available to the model again.",
-    ],
-    zh: [
-      "优化深度章节“继续未完成”的恢复逻辑。失败消息会隐藏保存最初的章节生成请求和可恢复阶段内容，连续失败后再次点击也会追溯到原始任务，不再把“继续未完成”误当成章节需求。",
+      "强化深度章节字数约束。阶段3初稿会要求模型在接近上限时主动收束，阶段4会先处理超长正文，满足字数要求后再进入 AI 审稿，避免截断正文继续往后跑。",
+      "强化阶段6简单审查的字数检查。最终去AI味后不仅会检查字数过少，也会检查字数过长；不达标时会自动回到前置阶段补足或优化，再继续完成后续流程。",
+      "优化深度章节“继续未完成”的恢复逻辑。失败消息会保存最初的章节生成请求和可恢复阶段内容，连续失败后再次点击也会追溯到原始任务，不再把“继续未完成”误当成章节需求。",
       "继续未完成时会重新构建小说上下文包，把章纲、记忆、角色状态、章节目标和已完成阶段内容重新交给模型，减少模型不知道写什么、凭空生成通用章节的问题。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_EIGHT_CHANGELOG: ChangelogEntry = {
-  version: "2.1.8",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Tightened deep chapter length control so draft prompts now require the model to start wrapping up after 3,800 characters and stay under the 4,200-character review gate.",
-      "Deep chapter generation now checks overlong drafts before AI review and returns to stage 3 for a controlled rewrite instead of sending an oversized or truncated draft into later stages.",
-      "Stage 6 final review now checks both too-short and too-long output; overlong polished chapters return to stage 3 for a controlled rewrite before completion.",
-    ],
-    zh: [
-      "加强深度章节字数约束。阶段3初稿提示词会要求模型在 3800 字后主动收束，正文必须控制在 4200 字审查门槛以内，4500 字只保留为最终保险截断。",
-      "优化阶段3到阶段4的流程。初稿如果过长，会先在“阶段4：字数审核”中发现，并返回“阶段3：正文重写控字”重新生成，满足字数要求后再进入 AI 审稿，避免截断正文继续往后跑。",
-      "强化阶段6简单审查的字数检查。最终去AI味后不仅会检查字数过少，也会检查字数过长；过长时同样返回阶段3控字重写，再完成后续流程。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_SIX_CHANGELOG: ChangelogEntry = {
-  version: "2.1.6",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Fixed Continue Unfinished so if the continuation attempt also fails after producing thinking content, the failed message still shows Continue Unfinished again.",
-    ],
-    zh: [
       "修复“继续未完成”再次失败后按钮消失的问题。如果继续生成过程中已经产生了新的思考过程，但又因为网络或接口错误中断，失败消息下方仍会继续显示“继续未完成”，方便用户再次从未完成位置接着生成。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_FIVE_CHANGELOG: ChangelogEntry = {
-  version: "2.1.5",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Added a Continue Unfinished action for failed deep chapter generation so users can continue from the existing thinking stages instead of regenerating from the beginning.",
-      "Added an in-chat explanation that clarifies Continue Unfinished can save tokens, while Regenerate should be used when the earlier thinking direction is wrong.",
-    ],
-    zh: [
-      "深度章节生成在思考过程或阶段内容已经生成后如果中断，AI 会话现在会在失败消息下方显示“继续未完成”按钮。点击后会基于上方已有阶段继续往后生成，尽量避免从头重复思考并节省 token。",
-      "在“继续未完成”按钮旁增加说明提示，明确区分“继续未完成”和“重新生成”：前者适合沿用已有思考继续补完章节，后者适合前面思考方向已经不对、需要重新开始的情况。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_FOUR_CHANGELOG: ChangelogEntry = {
-  version: "2.1.4",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Extended request-send network retry waiting for shared LLM requests to about five minutes before reporting failure.",
-      "Improved the final request-send error message so it clearly explains in Chinese that the app cannot connect to the model API, often because of network, proxy, endpoint, or gateway connectivity issues.",
-    ],
-    zh: [
-      "延长共享 LLM 请求在 request-send 断联时的自动等待和重试时间。AI 会话、深度写作、AI 大纲、记忆提取和审查等模型请求遇到临时无法发送请求时，会最多自动等待并重试约 5 分钟，再决定是否提示失败。",
-      "优化 request-send 断联失败提示。连续重试后仍无法连接时，会用中文说明“无法连接到模型接口”，并提示常见原因可能是网络不稳定、代理不可用、接口地址无法访问、服务商网关暂时中断，或本机网络环境阻断访问。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_ONE_CHANGELOG: ChangelogEntry = {
-  version: "2.1.1",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Fixed AI Chat stop handling so stopping during thinking or streaming finalizes immediately and ignores late model callbacks.",
-      "Improved chapter and outline deletion so related extracted novel memory snapshots and derived memory pages are rebuilt or cleared together.",
-      "Improved deep chapter generation so the final lightweight review checks chapter length; if the polished result is too short, it returns to expansion before completing.",
-    ],
-    zh: [
-      "修复 AI 会话停止生成不够及时的问题。现在无论处于思考过程还是正文流式输出中，点击停止都会立即结束当前显示，并拦截后续迟到的模型回调，避免界面继续生成或重复写入。",
-      "优化章节和大纲删除后的关联记忆清理。删除章节、大纲或大纲文件夹时，会同步清理对应的小说记忆快照，并重建或清空结构化记忆，减少已删除内容继续影响后续写作的情况。",
-      "优化深度章节生成的最终字数检查。阶段6简单审查与去AI味后会检查章节字数，如果最终润色结果低于最低字数要求，会自动回到阶段3扩写补足，再重新进入阶段6后完成。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_THREE_CHANGELOG: ChangelogEntry = {
-  version: "2.1.3",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Renamed the bottom source panel to an extraction panel and kept chapter and outline memory extraction progress visible after switching views.",
-      "Added a three-choice memory extraction prompt for imports: extract memory, import only, or cancel import; closing the prompt now cancels the import.",
-      "Improved chapter and outline deletion so associated entity pages are removed or have deleted source references cleaned up.",
-    ],
-    zh: [
+      "深度章节生成在思考过程或阶段内容已经生成后如果中断，AI 会话会在失败消息下方显示“继续未完成”按钮，并在按钮旁说明它与“重新生成”的区别，帮助用户节省 token。",
+      "延长共享 LLM 请求在 request-send 断联时的自动等待和重试时间。AI 会话、深度写作、AI 大纲、记忆提取、审查和改写等模型请求遇到临时无法发送请求时，会先自动等待并重试，最长约 5 分钟后再提示失败。",
+      "优化 request-send 断联失败提示。连续重试后仍无法连接时，会用中文说明“无法连接到模型接口”，并提示可能原因，例如网络不稳定、代理不可用、接口地址无法访问、服务商网关中断或本机网络环境阻断访问。",
+      "延长提取记忆和小说审查等长任务的请求等待上限，减少模型仍在处理时被 2-3 分钟短超时提前中断的情况；类似 `error sending request for url` 的断联也会被识别为网络中断并显示中文提示。",
       "将底部“原始来源”区域改为“提取中”，章节和 AI 大纲导入后的记忆提取进度会持续显示，切换页面后再回来也不会丢失。",
       "优化导入记忆确认弹窗，新增“取消导入”。现在可以选择“提取记忆”“只导入”或“取消导入”，点击右上角关闭也会取消本次导入，不再继续写入内容。",
-      "完善删除章节和删除大纲后的关联清理。删除来源内容时，会同步清理 `wiki/entities` 中只来自该来源的实体页；多来源实体页会保留，但会移除已删除来源的引用。",
-    ],
-  },
-}
-
-const TWO_POINT_ONE_TWO_CHANGELOG: ChangelogEntry = {
-  version: "2.1.2",
-  date: "2026-06-05",
-  highlights: {
-    en: [
-      "Improved shared LLM request handling so temporary request-send network failures wait briefly and retry automatically before surfacing an error.",
-      "Recognized Tauri/reqwest request-send failures as network interruptions and replaced the raw error with a clearer Chinese message.",
-      "Extended long LLM task timeouts for memory extraction and novel review so slow chapter, outline, and memory workflows are less likely to be cut off early.",
-    ],
-    zh: [
-      "优化所有共享 LLM 请求的断联处理。AI 会话、AI 大纲、深度写作、提取记忆、审查和改写等功能遇到临时网络断开时，会先自动等待并重试，再决定是否提示失败。",
-      "修复 Tauri/reqwest 请求发送阶段报错时直接显示原始英文错误的问题。类似 error sending request for url 的断联会被识别为网络中断，并显示更清楚的中文提示。",
-      "延长提取记忆和小说审查等长任务的请求等待上限，减少模型仍在处理时被 2-3 分钟短超时提前中断的情况。",
+      "完善删除章节和删除大纲后的关联清理。删除来源内容时，会同步清理对应的小说记忆快照，并重建或清空结构化记忆，减少已删除内容继续影响后续写作的情况。",
+      "删除章节、大纲或大纲文件夹时，会进一步清理 `wiki/entities` 中只来自该来源的实体页；如果实体页来自多个来源，则会保留实体页，但移除已删除来源的引用。",
+      "修复 AI 会话停止生成不够及时的问题。现在无论处于思考过程还是正文流式输出中，点击停止都会立即结束当前显示，并拦截后续迟到的模型回调，避免界面继续生成或重复写入。",
     ],
   },
 }
@@ -849,18 +728,10 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
-  if (version === TWO_POINT_ONE_TEN_CHANGELOG.version) return [TWO_POINT_ONE_TEN_CHANGELOG]
-  if (version === TWO_POINT_ONE_NINE_CHANGELOG.version) return [TWO_POINT_ONE_NINE_CHANGELOG]
-  if (version === TWO_POINT_ONE_EIGHT_CHANGELOG.version) return [TWO_POINT_ONE_EIGHT_CHANGELOG]
-  if (version === TWO_POINT_ONE_SEVEN_CHANGELOG.version) return [TWO_POINT_ONE_SEVEN_CHANGELOG]
-  if (version === TWO_POINT_ONE_SIX_CHANGELOG.version) return [TWO_POINT_ONE_SIX_CHANGELOG]
-  if (version === TWO_POINT_ONE_FIVE_CHANGELOG.version) return [TWO_POINT_ONE_FIVE_CHANGELOG]
-  if (version === TWO_POINT_ONE_FOUR_CHANGELOG.version) return [TWO_POINT_ONE_FOUR_CHANGELOG]
-  if (version === TWO_POINT_ONE_THREE_CHANGELOG.version) return [TWO_POINT_ONE_THREE_CHANGELOG]
-  if (version === TWO_POINT_ONE_TWO_CHANGELOG.version) return [TWO_POINT_ONE_TWO_CHANGELOG]
-  if (version === TWO_POINT_ONE_ONE_CHANGELOG.version) return [TWO_POINT_ONE_ONE_CHANGELOG]
+  if (version === TWO_POINT_TWO_ZERO_CHANGELOG.version) return [TWO_POINT_TWO_ZERO_CHANGELOG]
   if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version) return [TWO_POINT_ONE_ZERO_CHANGELOG]
   if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
+  if (/^2\.1\.(?:[1-9]|10)$/.test(version)) return []
   if (/^2\.0\.(?:[1-9]|1[0-2])$/.test(version)) return []
   if (isMergedOnePointRelease(version)) return []
   return CHANGELOG.filter((entry) => entry.version === version)
@@ -868,16 +739,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
-    TWO_POINT_ONE_TEN_CHANGELOG,
-    TWO_POINT_ONE_NINE_CHANGELOG,
-    TWO_POINT_ONE_EIGHT_CHANGELOG,
-    TWO_POINT_ONE_SEVEN_CHANGELOG,
-    TWO_POINT_ONE_SIX_CHANGELOG,
-    TWO_POINT_ONE_FIVE_CHANGELOG,
-    TWO_POINT_ONE_FOUR_CHANGELOG,
-    TWO_POINT_ONE_THREE_CHANGELOG,
-    TWO_POINT_ONE_TWO_CHANGELOG,
-    TWO_POINT_ONE_ONE_CHANGELOG,
+    TWO_POINT_TWO_ZERO_CHANGELOG,
     TWO_POINT_ONE_ZERO_CHANGELOG,
     TWO_POINT_ZERO_CHANGELOG,
     ...CHANGELOG.filter((entry) => !isMergedOnePointRelease(entry.version)),

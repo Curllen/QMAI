@@ -9,12 +9,15 @@ describe("release notes for updater manifest", () => {
   it("uses the full Chinese changelog for the current package version", async () => {
     const notes = await buildCurrentReleaseNotes()
 
-    expect(notes).not.toBe("QMAI 2.1.10 发布版本")
+    expect(notes).not.toBe("QMAI 2.2.0 发布版本")
     expect(notes).toContain("1. ")
     expect(notes).toContain("继续生成下一章")
-    expect(notes).toContain("目标章节号")
-    expect(notes).toContain("时间线定位")
-    expect(notes.split("\n")).toHaveLength(3)
+    expect(notes).toContain("角色灵魂")
+    expect(notes).toContain("2200-3200")
+    expect(notes).toContain("提取中")
+    expect(notes).toContain("无法连接到模型接口")
+    expect(notes).not.toContain("联系方式")
+    expect(notes.split("\n")).toHaveLength(20)
   })
 
   it("can write release notes directly to a UTF-8 file for CI scripts", () => {
