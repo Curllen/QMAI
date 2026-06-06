@@ -235,16 +235,28 @@ export function DismantlingView() {
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_380px]">
-        {/* Column 1: 拆文作品列表（无导入按钮） */}
+        {/* Column 1: 拆文作品列表（含导入按钮） */}
         <aside className="min-h-0 border-r bg-muted/20 flex flex-col">
           <div className="border-b p-3">
-            <div className="text-sm font-medium">拆文作品</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">拆文作品</div>
+              <div className="flex gap-1.5">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFiles}>
+                  <FilePlus2 className="mr-1 h-3.5 w-3.5" />
+                  导入文件
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFolder}>
+                  <FolderPlus className="mr-1 h-3.5 w-3.5" />
+                  导入文件夹
+                </Button>
+              </div>
+            </div>
           </div>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
             {loading ? (
               <div className="text-sm text-muted-foreground">正在读取拆文库...</div>
             ) : library.projects.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">还没有拆文作品，请在右侧导入。</div>
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">还没有拆文作品，使用上方按钮导入。</div>
             ) : library.projects.map((item) => (
               <button
                 key={item.id}
@@ -262,25 +274,8 @@ export function DismantlingView() {
           </div>
         </aside>
 
-        {/* Column 2: 导入操作+章节详情 */}
+        {/* Column 2: 章节详情与拆文操作 */}
         <main className="min-h-0 flex flex-col overflow-hidden border-r">
-          {/* 导入按钮区域 - 始终显示在顶部 */}
-          <div className="border-b p-3 bg-muted/20">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">拆文作品</div>
-              <div className="flex gap-1.5">
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFiles}>
-                  <FilePlus2 className="mr-1 h-3.5 w-3.5" />
-                  导入文件
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFolder}>
-                  <FolderPlus className="mr-1 h-3.5 w-3.5" />
-                  导入文件夹
-                </Button>
-              </div>
-            </div>
-          </div>
-
           {!selectedProject ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">请从左侧选择拆文作品</div>
           ) : (
