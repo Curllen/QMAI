@@ -226,37 +226,31 @@ export function DismantlingView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="border-b px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-primary">
-              <BookOpenCheck className="h-4 w-4" />
-              <span>独立拆文记忆库</span>
-            </div>
-            <h1 className="mt-1 text-xl font-semibold">拆文库</h1>
-            <p className="mt-1 text-sm text-muted-foreground">拆文结果独立保存，不会写入小说记忆、章节记忆或大纲记忆。</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={handleImportFiles}>
-              <FilePlus2 className="mr-2 h-4 w-4" />
-              导入文件
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleImportFolder}>
-              <FolderPlus className="mr-2 h-4 w-4" />
-              导入文件夹
-            </Button>
-            <Button size="sm" onClick={handleRunDismantling} disabled={running || !selectedProject}>
-              {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-              开始拆文
-            </Button>
-          </div>
+      <header className="border-b px-5 py-3">
+        <div className="flex items-center gap-2 text-sm text-primary">
+          <BookOpenCheck className="h-4 w-4" />
+          <span>独立拆文记忆库</span>
+          <span className="text-muted-foreground">— 拆文结果独立保存，不会写入小说记忆、章节记忆或大纲记忆。</span>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_420px]">
-        <aside className="min-h-0 border-r bg-muted/20">
-          <div className="border-b p-3 text-sm font-medium">拆文作品</div>
-          <div className="min-h-0 space-y-2 overflow-y-auto p-3">
+      <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_380px]">
+        {/* Column 1: 拆文作品列表 */}
+        <aside className="min-h-0 border-r bg-muted/20 flex flex-col">
+          <div className="border-b p-3">
+            <div className="text-sm font-medium">拆文作品</div>
+            <div className="mt-2 flex gap-1.5">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFiles}>
+                <FilePlus2 className="mr-1 h-3.5 w-3.5" />
+                导入文件
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleImportFolder}>
+                <FolderPlus className="mr-1 h-3.5 w-3.5" />
+                导入文件夹
+              </Button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
             {loading ? (
               <div className="text-sm text-muted-foreground">正在读取拆文库...</div>
             ) : library.projects.length === 0 ? (
@@ -271,40 +265,31 @@ export function DismantlingView() {
                 }}
                 className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${selectedProject?.id === item.id ? "border-primary bg-primary/10" : "bg-background hover:bg-muted"}`}
               >
-                <div className="font-medium">{item.title}</div>
+                <div className="font-medium truncate">{item.title}</div>
                 <div className="mt-1 text-xs text-muted-foreground">{item.chapters.length} 章 · {item.structureMemory.length} 条结构记忆</div>
               </button>
             ))}
           </div>
         </aside>
 
-        <main className="min-h-0 flex flex-col overflow-hidden">
+        {/* Column 2: 选中作品的章节详情与拆文操作 */}
+        <main className="min-h-0 flex flex-col overflow-hidden border-r">
           {!selectedProject ? (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">请从左侧选择拆文作品</div>
           ) : (
             <>
               <div className="border-b px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold">{selectedProject.title}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{selectedProject.chapters.length} 章 · {selectedProject.structureMemory.length} 条结构记忆</p>
+                    <h2 className="text-base font-semibold">{selectedProject.title}</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{selectedProject.chapters.length} 章 · {selectedProject.structureMemory.length} 条结构记忆</p>
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <span>每批章节数</span>
-                    <select
-                      value={batchSize}
-                      onChange={(event) => setBatchSize(Number(event.target.value))}
-                      className="rounded-md border bg-background px-2 py-1"
-                    >
-                      {[1, 3, 5, 10].map((size) => <option key={size} value={size}>{size}</option>)}
-                    </select>
-                  </label>
                 </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
-                <section className="rounded-xl border bg-card p-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <section className="rounded-lg border bg-card p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
                     使用拆文结构
                   </div>
@@ -316,70 +301,97 @@ export function DismantlingView() {
                     />
                     <span>在 AI 会话写作时参考当前拆文作品的结构记忆。</span>
                   </label>
-                  <p className="mt-3 text-xs leading-6 text-muted-foreground">只学习节奏、冲突推进、爽点安排和章节钩子；不得复用原作人物、设定、剧情和具体表达。</p>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">只学习节奏、冲突推进、爽点安排和章节钩子；不得复用原作人物、设定、剧情和具体表达。</p>
                 </section>
 
-                <section className="rounded-xl border bg-card">
-                  <div className="flex items-center justify-between border-b px-4 py-3">
+                <section className="rounded-lg border bg-card">
+                  <div className="flex items-center justify-between border-b px-4 py-2.5">
                     <div className="text-sm font-medium">章节列表</div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedChapterIds(selectedProject.chapters.map((chapter) => chapter.id))}>全选</Button>
-                      <Button variant="ghost" size="sm" onClick={() => setSelectedChapterIds([])}>清空</Button>
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedChapterIds(selectedProject.chapters.map((chapter) => chapter.id))}>全选</Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedChapterIds([])}>清空</Button>
+                      </div>
+                      <label className="flex items-center gap-1.5 text-xs">
+                        <span className="text-muted-foreground">每批</span>
+                        <select
+                          value={batchSize}
+                          onChange={(event) => setBatchSize(Number(event.target.value))}
+                          className="rounded border bg-background px-1.5 py-0.5 text-xs"
+                        >
+                          {[1, 3, 5, 10].map((size) => <option key={size} value={size}>{size}章</option>)}
+                        </select>
+                      </label>
                     </div>
                   </div>
-                  <div className="divide-y max-h-80 overflow-y-auto">
+                  <div className="divide-y max-h-[calc(100vh-420px)] min-h-[120px] overflow-y-auto">
                     {selectedProject.chapters.map((chapter) => (
-                      <label key={chapter.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm hover:bg-muted/40">
+                      <label key={chapter.id} className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40">
                         <input
                           type="checkbox"
                           checked={selectedChapterIds.includes(chapter.id)}
                           onChange={(event) => toggleChapter(chapter.id, event.target.checked)}
                         />
-                        <span className="w-16 text-muted-foreground">第{chapter.chapterNumber}章</span>
+                        <span className="w-14 shrink-0 text-muted-foreground">第{chapter.chapterNumber}章</span>
                         <span className="min-w-0 flex-1 truncate">{chapter.title}</span>
                         <StatusBadge status={chapter.status} />
                       </label>
                     ))}
                   </div>
-                </section>
-
-                <section className="rounded-xl border bg-card p-4">
-                  <div className="mb-3 text-sm font-medium">结构记忆</div>
-                  {selectedProject.structureMemory.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">拆文完成后，这里会显示可供 AI 引用的结构记忆。</div>
-                  ) : (
-                    <ul className="space-y-2 text-sm leading-6">
-                      {selectedProject.structureMemory.slice(0, 20).map((item) => <li key={item}>- {item}</li>)}
-                    </ul>
-                  )}
-                </section>
-
-                <section className="rounded-xl border bg-card p-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                    <RefreshCw className="h-4 w-4" />
-                    最近拆文结果
+                  <div className="border-t px-4 py-3">
+                    <Button size="sm" className="w-full" onClick={handleRunDismantling} disabled={running || !selectedProject || selectedChapterIds.length === 0}>
+                      {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                      {running ? "拆文中..." : selectedChapterIds.length === 0 ? "请先选择章节" : `开始拆文（${selectedChapterIds.length} 章）`}
+                    </Button>
                   </div>
-                  {selectedProject.analyses.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">还没有拆文结果。</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedProject.analyses.slice(0, 3).map((analysis) => (
-                        <article key={analysis.id} className="rounded-lg border bg-background p-3">
-                          <div className="mb-2 text-sm font-medium">{analysis.title}</div>
-                          <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-6 text-muted-foreground">{analysis.markdown}</pre>
-                        </article>
-                      ))}
-                    </div>
-                  )}
                 </section>
-
-                {status && (
-                  <div className="rounded-xl border bg-card p-4 text-sm leading-6 text-muted-foreground">{status}</div>
-                )}
               </div>
             </>
           )}
         </main>
+
+        {/* Column 3: 拆文结果 */}
+        <aside className="min-h-0 overflow-y-auto bg-muted/20 p-4">
+          {!selectedProject ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择作品后，拆文结果将显示在此处。</div>
+          ) : (
+            <div className="space-y-4">
+              <section className="rounded-lg border bg-card p-3">
+                <div className="mb-2 text-sm font-medium">结构记忆</div>
+                {selectedProject.structureMemory.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">拆文完成后，这里会显示可供 AI 引用的结构记忆。</div>
+                ) : (
+                  <ul className="space-y-1.5 text-xs leading-5">
+                    {selectedProject.structureMemory.slice(0, 30).map((item) => <li key={item}>- {item}</li>)}
+                  </ul>
+                )}
+              </section>
+
+              <section className="rounded-lg border bg-card p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <RefreshCw className="h-4 w-4" />
+                  最近拆文结果
+                </div>
+                {selectedProject.analyses.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">还没有拆文结果。</div>
+                ) : (
+                  <div className="space-y-3">
+                    {selectedProject.analyses.slice(0, 5).map((analysis) => (
+                      <article key={analysis.id} className="rounded-lg border bg-background p-3">
+                        <div className="mb-2 text-sm font-medium">{analysis.title}</div>
+                        <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-6 text-muted-foreground">{analysis.markdown}</pre>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {status && (
+                <div className="rounded-lg border bg-card p-3 text-xs leading-5 text-muted-foreground">{status}</div>
+              )}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   )

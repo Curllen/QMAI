@@ -23,7 +23,7 @@ describe("dismantling library view", () => {
     expect(viewSource).toContain("拆文库")
     expect(viewSource).toContain("独立拆文记忆库")
     expect(viewSource).toContain("不会写入小说记忆")
-    expect(viewSource).toContain("每批章节数")
+    expect(viewSource).toContain("每批")
     expect(viewSource).toContain("使用拆文结构")
   })
 })
