@@ -7,6 +7,7 @@ import {
   shouldUseDeepChapterGeneration,
   runDeepChapterGeneration,
   type DeepChapterGenerationDeps,
+  type DeepChapterGenerationResumeCheckpoint,
 } from "./deep-chapter-generation"
 import {
   buildDeepChapterBriefPrompt,
@@ -443,6 +444,52 @@ describe("runDeepChapterGeneration", () => {
     expect(thinking.join("\n")).toContain("阶段6：字数检查与正文优化")
     expect(thinking.join("\n")).toContain("2200-3200")
     expect(thinking.join("\n")).toContain("第 1 次优化完成")
+  })
+
+  it("resumes from a saved review checkpoint instead of regenerating earlier stages", async () => {
+    const finalPolished = chapterText("恢复后的最终正文", 3000)
+    const checkpoint: DeepChapterGenerationResumeCheckpoint = {
+      version: 1,
+      originalRequest: "生成第3章",
+      chapterNumber: 3,
+      stage: "after_review",
+      taskBrief: "写作任务书内容",
+      draftContent: chapterText("阶段4完成后的正文草稿", 3000),
+      reviewResults: [],
+    }
+    const deps: DeepChapterGenerationDeps = {
+      buildContextPack: vi.fn(async () => contextPack),
+      contextPackToPrompt: vi.fn(() => "上下文包内容"),
+      reviewChapter: vi.fn(async () => {
+        throw new Error("resume should not rerun review")
+      }),
+      streamChat: vi.fn(async (_config: LlmConfig, _messages: ChatMessage[], callbacks: StreamCallbacks) => {
+        callbacks.onToken(finalPolished)
+        callbacks.onDone()
+      }),
+    }
+    const thinking: string[] = []
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        resumeCheckpoint: checkpoint,
+      },
+      { onThinking: (content) => thinking.push(content) },
+      deps,
+    )
+
+    expect(result.finalContent).toBe(finalPolished)
+    expect(result.revised).toBe(false)
+    expect(deps.streamChat).toHaveBeenCalledTimes(1)
+    expect(deps.reviewChapter).not.toHaveBeenCalled()
+    expect(thinking.join("\n")).not.toContain("阶段1：上下文分析")
+    expect(thinking.join("\n")).not.toContain("阶段2：写作任务书")
+    expect(thinking.join("\n")).toContain("阶段5：无需自动返修")
+    expect(thinking.join("\n")).toContain("阶段7：完成")
   })
 
   it("does not fail when the stream reports request cancelled after the chapter length limit stops output", async () => {

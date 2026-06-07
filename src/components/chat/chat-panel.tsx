@@ -29,10 +29,6 @@ import {
   buildGoldenThreeChapterDirective,
   detectGoldenThreeChapterRequest,
 } from "@/lib/novel/golden-three-chapters"
-import {
-  buildDismantlingReferenceDirective,
-  loadDismantlingLibrary,
-} from "@/lib/novel/dismantling"
 import { createStreamSessionGuard } from "./stream-session"
 import {
   appendContinueUnfinishedDeepChapterContext,
@@ -60,17 +56,13 @@ export function getDeepChapterToggleButtonClass(enabled: boolean): string {
 function findPreviousUserRequest(messages: DisplayMessage[], assistantMessageId: string): string | undefined {
   const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId)
   const searchRange = assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages
-  return [...searchRange].reverse().find((message) => message.role === "user")?.content
+  const userMessages = [...searchRange].reverse().filter((message) => message.role === "user")
+  return userMessages.find((message) => message.content.trim() !== "继续未完成")?.content ?? userMessages[0]?.content
 }
 
 async function loadEnabledDismantlingDirective(projectPath: string): Promise<string> {
-  const library = await loadDismantlingLibrary(projectPath)
-  const enabledProject = library.projects.find((item) => item.useInChat && item.structureMemory.length > 0)
-  if (!enabledProject) return ""
-  return buildDismantlingReferenceDirective({
-    title: enabledProject.title,
-    structureMemory: enabledProject.structureMemory,
-  })
+  void projectPath
+  return ""
 }
 
 function ConversationTabs() {
@@ -350,6 +342,7 @@ export function ChatPanel() {
         abortRef.current = controller
         const deepStream = createDeepThinkingStreamRenderer()
         let accumulated = ""
+        let latestCheckpoint: import("@/lib/novel/deep-chapter-generation").DeepChapterGenerationResumeCheckpoint | undefined
         const appendThinkingBlock = (content: string) => {
           if (!streamSessionGuardRef.current.isActive(sessionId)) return
           accumulated = deepStream.updateThinking(content)
@@ -372,6 +365,9 @@ export function ChatPanel() {
                 if (!streamSessionGuardRef.current.isActive(sessionId)) return
                 accumulated = deepStream.appendFinal(content)
                 setStreamingContent(accumulated)
+              },
+              onCheckpoint: (checkpoint) => {
+                latestCheckpoint = checkpoint
               },
             },
             undefined,
@@ -396,6 +392,8 @@ export function ChatPanel() {
                 appendContinueUnfinishedDeepChapterContext(visibleFailure, {
                   originalRequest: text,
                   resumeContext: visibleFailure,
+                  rootResumeContext: visibleFailure,
+                  checkpoint: latestCheckpoint,
                 }),
                 undefined,
               )
@@ -832,11 +830,13 @@ export function ChatPanel() {
       persistedResume?.originalRequest ||
       findPreviousUserRequest(active, assistantMessage.id)
     const resumeContext = persistedResume?.resumeContext || visibleAssistantContent
+    const rootResumeContext = persistedResume?.rootResumeContext || resumeContext
     const prompt = buildContinueUnfinishedDeepChapterPrompt({
       originalRequest,
       persistedOriginalRequest: persistedResume?.originalRequest,
       failedAssistantContent: visibleAssistantContent,
       resumeContext,
+      rootResumeContext,
     })
 
     addMessage("user", "继续未完成")
@@ -850,11 +850,58 @@ export function ChatPanel() {
     const deepStream = createDeepThinkingStreamRenderer()
     let accumulated = deepStream.updateThinking("## 继续未完成\n正在基于上一轮已完成阶段继续生成，避免从头重新思考。")
     let resumeThinking = ""
+    let latestCheckpoint = persistedResume?.checkpoint
     setStreamingContent(accumulated)
 
     try {
       const novelConfig = useWikiStore.getState().novelConfig
       const writingConfig = resolveNovelModel(llmConfig, novelConfig, "writing")
+
+      if (project && originalRequest?.trim() && persistedResume?.checkpoint) {
+        const pp = normalizePath(project.path)
+        const resumeRoute = routeTask(originalRequest)
+        const goldenResume = detectGoldenThreeChapterRequest(originalRequest, resumeRoute?.chapterNumber)
+        const dismantlingDirective = await loadEnabledDismantlingDirective(pp).catch(() => "")
+        const { runDeepChapterGeneration } = await import("@/lib/novel/deep-chapter-generation")
+
+        await runDeepChapterGeneration(
+          {
+            projectPath: pp,
+            userRequest: originalRequest,
+            chapterNumber: resumeRoute?.chapterNumber,
+            goldenThreeChapter: goldenResume?.enabled ? goldenResume : undefined,
+            dismantlingReferenceDirective: dismantlingDirective,
+            llmConfig,
+            resumeCheckpoint: persistedResume.checkpoint,
+          },
+          {
+            onThinking: (content) => {
+              if (!streamSessionGuardRef.current.isActive(sessionId)) return
+              accumulated = deepStream.updateThinking(content)
+              setStreamingContent(accumulated)
+            },
+            onFinalContent: (content) => {
+              if (!streamSessionGuardRef.current.isActive(sessionId)) return
+              accumulated = deepStream.appendFinal(content)
+              setStreamingContent(accumulated)
+            },
+            onCheckpoint: (checkpoint) => {
+              latestCheckpoint = checkpoint
+            },
+          },
+          undefined,
+          controller.signal,
+        )
+
+        if (!streamSessionGuardRef.current.isActive(sessionId)) return
+        streamSessionGuardRef.current.finish(sessionId, () => {
+          finalizeStream(accumulated || "继续未完成失败：模型没有返回内容。", [])
+          activeStreamSessionRef.current = null
+          abortRef.current = null
+        })
+        return
+      }
+
       let continuationSystemPrompt = [
         "你是专业小说写作助手。用户正在继续一次已中断的深度章节生成，请严格基于已有思考和阶段内容往后完成，不要从头重跑已完成阶段。",
         "如果上方恢复上下文里没有正文草稿，就从正文生成阶段继续；如果已经有正文草稿，就继续审查、返修、简单审查、去AI味或补全正文。",
@@ -937,7 +984,7 @@ export function ChatPanel() {
       streamSessionGuardRef.current.finish(sessionId, () => {
         const visibleFailure = `${accumulated ? `${accumulated}\n\n` : ""}出错：继续未完成失败：${message}`
         const inheritedResumeContext = [
-          resumeContext,
+          rootResumeContext,
           "",
           "## 最近一次继续未完成失败时的输出",
           stripContinueUnfinishedDeepChapterContext(visibleFailure),
@@ -946,6 +993,8 @@ export function ChatPanel() {
           appendContinueUnfinishedDeepChapterContext(visibleFailure, {
             originalRequest,
             resumeContext: inheritedResumeContext,
+            rootResumeContext,
+            checkpoint: latestCheckpoint,
           }),
           undefined,
         )

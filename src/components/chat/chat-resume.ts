@@ -1,3 +1,5 @@
+import type { DeepChapterGenerationResumeCheckpoint } from "@/lib/novel/deep-chapter-generation"
+
 const DEEP_CHAPTER_FAILURE_RE = /深度生成章节失败|继续未完成失败|deep chapter generation failed|continue unfinished failed/i
 const THINK_BLOCK_RE = /<think(?:ing)?>[\s\S]*?(?:<\/think(?:ing)?>|$)/i
 const MAX_RESUME_CONTEXT_CHARS = 60_000
@@ -6,6 +8,8 @@ const RESUME_CONTEXT_COMMENT_RE = /<!--\s*qmai-continue-unfinished-context:([\s\
 export interface ContinueUnfinishedDeepChapterContext {
   originalRequest?: string
   resumeContext: string
+  rootResumeContext?: string
+  checkpoint?: DeepChapterGenerationResumeCheckpoint
 }
 
 export function canContinueUnfinishedDeepChapter(content: string): boolean {
@@ -52,6 +56,8 @@ export function extractContinueUnfinishedDeepChapterContext(
     return {
       originalRequest: typeof parsed.originalRequest === "string" ? parsed.originalRequest : undefined,
       resumeContext: parsed.resumeContext,
+      rootResumeContext: typeof parsed.rootResumeContext === "string" ? parsed.rootResumeContext : undefined,
+      checkpoint: parsed.checkpoint && typeof parsed.checkpoint === "object" ? parsed.checkpoint : undefined,
     }
   } catch {
     return null
@@ -63,12 +69,19 @@ export function buildContinueUnfinishedDeepChapterPrompt(input: {
   failedAssistantContent: string
   persistedOriginalRequest?: string
   resumeContext?: string
+  rootResumeContext?: string
 }): string {
   const originalRequest =
     input.persistedOriginalRequest?.trim() ||
     input.originalRequest?.trim() ||
     "未找到上一条用户原始请求，请根据已有思考过程继续完成本章。"
-  const resumeContext = compactResumeContext(input.resumeContext ?? input.failedAssistantContent)
+  const rootResumeContext = compactResumeContext(
+    input.rootResumeContext?.trim() || (input.resumeContext ?? input.failedAssistantContent),
+  )
+  const latestResumeContext = compactResumeContext(input.resumeContext ?? input.failedAssistantContent)
+  const hasSeparateLatestContext =
+    latestResumeContext.trim().length > 0 &&
+    latestResumeContext.trim() !== rootResumeContext.trim()
 
   return [
     "继续未完成的深度章节生成。",
@@ -77,13 +90,21 @@ export function buildContinueUnfinishedDeepChapterPrompt(input: {
     originalRequest,
     "",
     "上一次已经生成出来的思考过程和阶段内容如下。请把它当作已完成上下文，不要从头重复生成这些阶段：",
-    resumeContext,
+    rootResumeContext,
+    ...(hasSeparateLatestContext
+      ? [
+          "",
+          "最近一次“继续未完成”失败时的输出如下。它只作为补充参考，不能覆盖上面的原始阶段链：",
+          latestResumeContext,
+        ]
+      : []),
     "",
     "续写要求：",
-    "1. 先判断上方内容最后停在哪个阶段，从最后未完成的位置继续。",
+    "1. 先判断原始阶段链最后停在哪个阶段，从第一次未完成的那个缺口继续。",
     "2. 不要重复阶段1上下文分析、阶段2任务书等已经完成的大段内容。",
     "3. 如果上方已有正文草稿，就继续后续审查、返修、简单审查、去AI味或补全正文；如果还没有正文草稿，就从正文生成阶段继续。",
-    "4. 这次重点是节省 token：不要复述已有思考，不要解释为什么继续，直接把未完成的章节内容补完整。",
-    "5. 最终输出必须是可直接保存到章节库的完整章节正文；如果需要少量承接说明，请放在思考中，不要混入正文。",
+    "4. 最近一次失败输出如果和原始阶段链冲突，以原始阶段链为准。",
+    "5. 这次重点是节省 token：不要复述已有思考，不要解释为什么继续，直接把未完成的章节内容补完整。",
+    "6. 最终输出必须是可直接保存到章节库的完整章节正文；如果需要少量承接说明，请放在思考中，不要混入正文。",
   ].join("\n")
 }

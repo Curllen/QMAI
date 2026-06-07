@@ -11,9 +11,11 @@ describe("release notes for updater manifest", () => {
 
     expect(notes).not.toBe("QMAI 2.2.1 发布版本")
     expect(notes).toContain("1. ")
-    expect(notes).toContain("拆文库")
-    expect(notes).toContain("拆文结构")
-    expect(notes).toContain("章节节奏")
+    expect(notes).toContain("拆文库做隐藏处理")
+    expect(notes).toContain("2.2.6 到 2.2.1 的更新日志展示")
+    expect(notes).toContain("继续未完成")
+    expect(notes).toContain("阶段快照")
+    expect(notes).toContain("切换了模型")
     expect(notes).not.toContain("联系方式")
   })
 

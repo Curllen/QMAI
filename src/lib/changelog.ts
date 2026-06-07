@@ -7,6 +7,124 @@ export interface ChangelogEntry {
   }
 }
 
+const TWO_POINT_TWO_SEVEN_CHANGELOG: ChangelogEntry = {
+  version: "2.2.7",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Hidden the Dismantling Library UI for 2.2.7 and disabled dismantling-structure injection in AI Chat so the feature is fully out of the visible writing flow for now.",
+      "Removed the 2.2.6 to 2.2.1 release notes from the in-app changelog list, leaving 2.2.7 as the latest visible 2.2.x entry before 2.2.0.",
+      "Fixed AI Chat Continue Unfinished so deep chapter recovery now resumes from a saved stage checkpoint instead of asking the model to guess where to continue.",
+      "Deep chapter failures now persist the first interrupted chain, the latest recoverable checkpoint, and the original request, so repeated Continue Unfinished clicks stay anchored to the same task even after later retries fail.",
+      "Switching models during Continue Unfinished now still reloads the original interrupted request and resume snapshot before continuing the remaining deep chapter stages.",
+    ],
+    zh: [
+      "先将 2.2.7 版本中的拆文库做隐藏处理，并同时停用 AI 会话里的拆文结构注入。当前版本里用户不会再看到拆文库入口，写作时也不会继续偷偷读取拆文结构。",
+      "删除软件内 2.2.6 到 2.2.1 的更新日志展示，2.2.x 版本列表里仅保留当前 2.2.7 和更早的 2.2.0。",
+      "修复 AI 会话“继续未完成”偏离原始深度章节任务的问题。现在点击后会优先按本地保存的阶段快照继续执行深度章节流程，不再把失败消息重新当作一段普通提示词交给模型猜测该接哪里。",
+      "深度章节失败时会同时保存第一次中断时的原始阶段链、最新可恢复阶段快照和原始用户请求。后面即使连续多次点击“继续未完成”又再次失败，也会始终锚定同一条原始任务链继续补完，而不是被后一次失败内容带偏。",
+      "继续未完成时即使切换了模型，也会重新读取原始章节请求和恢复快照，再从未完成的阶段继续往后跑，减少重新思考前面阶段和直接跳成正文的情况。",
+    ],
+  },
+}
+
+const TWO_POINT_TWO_FIVE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.5",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Kept the Dismantling Library release notes complete for the current version, including isolated dismantling memory, reusable dismantling structure, chapter rhythm, conflict escalation, hooks, and writing-pattern references.",
+      "Added a separate Dismantling Memory Library section inside Memory Center.",
+      "The new section shows dismantled works, chapter counts, analysis counts, structure-memory counts, AI reference enablement status, and structure-memory previews.",
+      "Clarified in the Memory Center UI that dismantling memory only provides reusable writing-structure references and is not written into the current novel memory.",
+    ],
+    zh: [
+      "延续拆文库完整功能说明。拆文结果会保存在独立拆文记忆库中，不混入当前小说记忆；AI 可引用用户启用的拆文结构，用来参考章节节奏、冲突推进、爽点安排、结尾钩子和可复用写法模板。",
+      "记忆中心新增独立“拆文记忆库”分区，用户可以在记忆中心直接查看拆文作品相关记忆。",
+      "拆文记忆库会展示拆文作品、章节数量、拆文结果数量、结构记忆数量、是否启用给 AI 参考，以及结构记忆预览。",
+      "界面中明确说明拆文记忆仅用于参考写作结构，不会写入当前小说记忆，也不会把原作人物、设定和剧情当成当前小说事实。",
+    ],
+  },
+}
+
+const TWO_POINT_TWO_SIX_CHANGELOG: ChangelogEntry = {
+  version: "2.2.6",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Added a shared controlled web research layer for web search, specified URL reading, webpage text extraction, and bounded AI context injection.",
+      "AI Outline Chat now uses web research when the user explicitly asks to search online, analyze web pages, or reference hot trends, and shows web sources under the answer.",
+      "Added web hot-topic analysis to the Dismantling Library. Users can enter a trend query, platform ranking topic, or webpage URL; results are saved only into the isolated dismantling memory library.",
+      "Kept web research separate from current novel facts so outside webpages can inform outline and writing-structure analysis without polluting novel memory.",
+    ],
+    zh: [
+      "新增受控联网研究能力。软件可以根据用户明确要求执行网页搜索、读取指定网页、提取网页正文，并把整理后的资料按长度上限注入给 AI。第一版由软件受控执行，不让模型随意打开网页。",
+      "AI 大纲对话接入联网研究。当用户明确要求联网搜索、分析网页、参考热门趋势或粘贴网址时，会先读取网页资料，再用于生成大纲，并在回答下方显示网页来源。普通大纲对话不会自动联网。",
+      "拆文库新增“网页热门分析”。用户可以输入榜单关键词、题材方向或网页地址，AI 会生成热门趋势、开篇结构、章节节奏、冲突爽点和可复用结构记忆。结果只写入独立拆文记忆库。",
+      "联网资料与当前小说记忆保持隔离。外部网页只作为大纲和拆文结构参考，不会被当成当前小说已经发生的事实，也不会混入章节记忆或大纲记忆。",
+    ],
+  },
+}
+
+const TWO_POINT_TWO_FOUR_CHANGELOG: ChangelogEntry = {
+  version: "2.2.4",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Kept the Dismantling Library release notes complete for the current version, including isolated dismantling memory, reusable dismantling structure, chapter rhythm, conflict escalation, hooks, and writing-pattern references.",
+      "Added deletion for Dismantling Library works from the project sidebar.",
+      "Deleting a dismantling work now asks for confirmation, removes its imported chapters, dismantling results, and structure memory from the isolated dismantling library, then saves the updated library.",
+      "After deleting the selected dismantling work, the sidebar automatically selects the next available work or clears the selection when none remain.",
+    ],
+    zh: [
+      "延续拆文库完整功能说明。拆文结果会保存在独立拆文记忆库中，不混入当前小说记忆；AI 可引用用户启用的拆文结构，用来参考章节节奏、冲突推进、爽点安排、结尾钩子和可复用写法模板。",
+      "新增删除拆文作品功能。现在可以在拆文作品列表中直接删除不需要的拆文作品。",
+      "删除前会弹出中文确认提示；确认后会从独立拆文库中移除该作品的章节、拆文结果和结构记忆，并保存更新后的拆文库。",
+      "删除当前选中的拆文作品后，会自动选中下一个可用作品；如果没有剩余作品，则清空当前选择。",
+    ],
+  },
+}
+
+const TWO_POINT_TWO_THREE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.3",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Kept the Dismantling Library release notes complete for the current version, including isolated dismantling memory, reusable dismantling structure, chapter rhythm, conflict escalation, hooks, and writing-pattern references.",
+      "Fixed full-novel Dismantling Library imports so a single TXT or document book is analyzed into its full chapter catalog instead of being kept as one chapter.",
+      "Separated volume headings from real chapter headings, preventing entries such as 第一卷 from swallowing the following 第0001章 title.",
+      "Improved desktop TXT/MD reading for dismantling imports by returning the real book text during preprocessing and supporting GBK/ANSI Chinese novel files.",
+      "Kept the import progress message visible as 正在提取章节 while the book catalog is being analyzed.",
+    ],
+    zh: [
+      "延续拆文库完整功能说明。拆文结果会保存在独立拆文记忆库中，不混入当前小说记忆；AI 可引用用户启用的拆文结构，用来参考章节节奏、冲突推进、爽点安排、结尾钩子和可复用写法模板。",
+      "修复拆文库整本小说导入后只显示 1 章的问题。现在导入一本 TXT 或文档小说时，会像阅读器一样自动分析书内所有章节，生成完整章节目录。",
+      "优化章节识别规则，明确区分“第一卷”等分卷标题和“第0001章”等正文章节，避免卷名吞掉真正的第一章标题。",
+      "优化桌面端 TXT/MD 文本读取。导入拆文作品时会读取真实原文内容，并兼容常见 GBK/ANSI 中文小说文件，减少章节标题乱码导致无法拆章的问题。",
+      "导入分析期间继续显示“正在提取章节”，让用户知道系统正在提取整本书目录。",
+    ],
+  },
+}
+
+const TWO_POINT_TWO_TWO_CHANGELOG: ChangelogEntry = {
+  version: "2.2.2",
+  date: "2026-06-06",
+  highlights: {
+    en: [
+      "Kept the Dismantling Library release notes complete for the current version, including isolated dismantling memory, reusable dismantling structure, chapter rhythm, conflict escalation, hooks, and writing-pattern references.",
+      "Improved Dismantling Library chapter extraction for full-novel imports, including headings embedded inside extracted paragraphs.",
+      "Added visible chapter-extraction progress while importing dismantling works.",
+      "Prevented duplicate display of dismantling works with the same normalized title.",
+    ],
+    zh: [
+      "延续拆文库完整功能说明。拆文结果会保存在独立拆文记忆库中，不混入当前小说记忆；AI 可引用用户启用的拆文结构，用来参考章节节奏、冲突推进、爽点安排、结尾钩子和可复用写法模板。",
+      "优化拆文库整本小说导入后的章节提取。现在能识别章节标题与正文挤在同一段里的情况，导入后会尽量拆出第1章、第2章等章节清单和章节名称。",
+      "导入拆文作品时增加“正在提取章节”状态提示，用户可以看到系统正在分析章节结构。",
+      "新增同名拆文作品去重机制。再次导入相同作品时会自动选中已有作品，不再重复显示多个同名条目。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_ONE_CHANGELOG: ChangelogEntry = {
   version: "2.2.1",
   date: "2026-06-06",
@@ -25,6 +143,17 @@ const TWO_POINT_TWO_ONE_CHANGELOG: ChangelogEntry = {
     ],
   },
 }
+
+// Hidden from the visible changelog list in 2.2.7, but kept in source for archival reference.
+const REMOVED_TWO_POINT_TWO_CHANGELOGS = [
+  TWO_POINT_TWO_SIX_CHANGELOG,
+  TWO_POINT_TWO_FIVE_CHANGELOG,
+  TWO_POINT_TWO_FOUR_CHANGELOG,
+  TWO_POINT_TWO_THREE_CHANGELOG,
+  TWO_POINT_TWO_TWO_CHANGELOG,
+  TWO_POINT_TWO_ONE_CHANGELOG,
+] as const
+void REMOVED_TWO_POINT_TWO_CHANGELOGS
 
 const TWO_POINT_TWO_ZERO_CHANGELOG: ChangelogEntry = {
   version: "2.2.0",
@@ -747,7 +876,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
-  if (version === TWO_POINT_TWO_ONE_CHANGELOG.version) return [TWO_POINT_TWO_ONE_CHANGELOG]
+  if (version === TWO_POINT_TWO_SEVEN_CHANGELOG.version) return [TWO_POINT_TWO_SEVEN_CHANGELOG]
   if (version === TWO_POINT_TWO_ZERO_CHANGELOG.version) return [TWO_POINT_TWO_ZERO_CHANGELOG]
   if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version) return [TWO_POINT_ONE_ZERO_CHANGELOG]
   if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
@@ -759,7 +888,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
-    TWO_POINT_TWO_ONE_CHANGELOG,
+    TWO_POINT_TWO_SEVEN_CHANGELOG,
     TWO_POINT_TWO_ZERO_CHANGELOG,
     TWO_POINT_ONE_ZERO_CHANGELOG,
     TWO_POINT_ZERO_CHANGELOG,

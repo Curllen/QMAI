@@ -4,26 +4,33 @@ import { describe, expect, it } from "vitest"
 
 const root = resolve(__dirname, "../../..")
 
-describe("dismantling library view", () => {
-  it("adds an isolated dismantling library navigation entry", () => {
+describe("dismantling library visibility", () => {
+  it("hides the dismantling library navigation entry in version 2.2.7", () => {
     const storeSource = readFileSync(resolve(root, "src/stores/wiki-store.ts"), "utf8")
     const sidebarSource = readFileSync(resolve(root, "src/components/layout/icon-sidebar.tsx"), "utf8")
     const contentSource = readFileSync(resolve(root, "src/components/layout/content-area.tsx"), "utf8")
 
     expect(storeSource).toContain('"dismantling"')
-    expect(sidebarSource).toContain('view: "dismantling"')
-    expect(sidebarSource).toContain("novel.nav.dismantling")
-    expect(contentSource).toContain("DismantlingView")
-    expect(contentSource).toContain("@/components/novel/dismantling-view")
+    expect(sidebarSource).not.toContain('view: "dismantling"')
+    expect(sidebarSource).not.toContain("novel.nav.dismantling")
+    expect(contentSource).not.toContain("DismantlingView")
+    expect(contentSource).not.toContain("@/components/novel/dismantling-view")
   })
 
-  it("keeps dismantling memory separate from novel memory in the page copy", () => {
+  it("keeps the hidden dismantling sidebar disconnected from the visible workspace", () => {
     const viewSource = readFileSync(resolve(root, "src/components/novel/dismantling-view.tsx"), "utf8")
+    const sidebarSource = readFileSync(resolve(root, "src/components/layout/sidebar-panel.tsx"), "utf8")
 
-    expect(viewSource).toContain("拆文库")
-    expect(viewSource).toContain("独立拆文记忆库")
-    expect(viewSource).toContain("不会写入小说记忆")
-    expect(viewSource).toContain("每批")
-    expect(viewSource).toContain("使用拆文结构")
+    expect(sidebarSource).not.toContain('activeView === "dismantling"')
+    expect(sidebarSource).toContain("DismantlingSidebarPanel")
+    expect(viewSource).toContain("拆文结果")
+  })
+
+  it("keeps the underlying dismantling implementation intact for later re-enable", () => {
+    const sidebarSource = readFileSync(resolve(root, "src/components/layout/sidebar-panel.tsx"), "utf8")
+
+    expect(sidebarSource).toContain("正在提取章节")
+    expect(sidebarSource).toContain("已存在相同拆文作品")
+    expect(sidebarSource).toContain("normalizeDismantlingProjectTitle")
   })
 })

@@ -38,11 +38,6 @@ const SoulView = lazy(async () => {
   return { default: mod.SoulView }
 })
 
-const DismantlingView = lazy(async () => {
-  const mod = await import("@/components/novel/dismantling-view")
-  return { default: mod.DismantlingView }
-})
-
 const ReviewCenterView = lazy(async () => {
   const mod = await import("@/components/review/review-center-view")
   return { default: mod.ReviewCenterView }
@@ -87,13 +82,6 @@ export function ContentArea() {
         content = (
           <Suspense fallback={<LoadingView />}>
             <SoulView />
-          </Suspense>
-        )
-        break
-      case "dismantling":
-        content = (
-          <Suspense fallback={<LoadingView />}>
-            <DismantlingView />
           </Suspense>
         )
         break

@@ -412,6 +412,7 @@ interface WikiState {
   selectedSoulSection: "builtIn" | "custom"
   selectedReviewDimension: string | null
   selectedReviewFilePath: string
+  selectedDismantlingProjectId: string | null
   graphMode: string
   graphDisplayMode: string
   graphColorMode: string
@@ -467,6 +468,7 @@ interface WikiState {
   setSelectedSoulSection: (section: "builtIn" | "custom") => void
   setSelectedReviewDimension: (dimension: string | null) => void
   setSelectedReviewFilePath: (path: string) => void
+  setSelectedDismantlingProjectId: (id: string | null) => void
   setGraphMode: (mode: string) => void
   setGraphDisplayMode: (mode: string) => void
   setGraphColorMode: (mode: string) => void
@@ -525,6 +527,7 @@ export const useWikiStore = create<WikiState>((set) => ({
   selectedSoulSection: "builtIn",
   selectedReviewDimension: null,
   selectedReviewFilePath: "",
+  selectedDismantlingProjectId: null,
   graphMode: "overview",
   graphDisplayMode: "graph",
   graphColorMode: "type",
@@ -567,13 +570,14 @@ export const useWikiStore = create<WikiState>((set) => ({
     set({ chatDockPosition })
   },
   setSearchPanelOpen: (searchPanelOpen) => set({ searchPanelOpen }),
-  setActiveView: (activeView) => set({ activeView }),
+  setActiveView: (activeView) => set({ activeView: activeView === "dismantling" ? "wiki" : activeView }),
   setActiveSettingsCategory: (activeSettingsCategory) => set({ activeSettingsCategory }),
   setSelectedSoulId: (selectedSoulId) => set({ selectedSoulId }),
   setSelectedSoulTab: (selectedSoulTab) => set({ selectedSoulTab }),
   setSelectedSoulSection: (selectedSoulSection) => set({ selectedSoulSection }),
   setSelectedReviewDimension: (selectedReviewDimension) => set({ selectedReviewDimension }),
   setSelectedReviewFilePath: (selectedReviewFilePath) => set({ selectedReviewFilePath }),
+  setSelectedDismantlingProjectId: (selectedDismantlingProjectId) => set({ selectedDismantlingProjectId }),
   setGraphMode: (graphMode) => set({ graphMode }),
   setGraphDisplayMode: (graphDisplayMode) => set({ graphDisplayMode }),
   setGraphColorMode: (graphColorMode) => set({ graphColorMode }),

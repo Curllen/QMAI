@@ -30,11 +30,13 @@ export interface DeepChapterGenerationInput {
   goldenThreeChapter?: GoldenThreeChapterRequest
   dismantlingReferenceDirective?: string
   llmConfig: LlmConfig
+  resumeCheckpoint?: DeepChapterGenerationResumeCheckpoint
 }
 
 export interface DeepChapterGenerationCallbacks {
   onThinking?: (content: string) => void
   onFinalContent?: (content: string) => void
+  onCheckpoint?: (checkpoint: DeepChapterGenerationResumeCheckpoint) => void
 }
 
 export interface DeepChapterGenerationResult {
@@ -43,6 +45,24 @@ export interface DeepChapterGenerationResult {
   draftContent: string
   reviewResults: NovelReviewResult[]
   revised: boolean
+}
+
+export type DeepChapterGenerationResumeStage =
+  | "after_context"
+  | "after_task_brief"
+  | "after_draft"
+  | "after_review"
+  | "after_revision"
+
+export interface DeepChapterGenerationResumeCheckpoint {
+  version: 1
+  originalRequest: string
+  chapterNumber?: number
+  stage: DeepChapterGenerationResumeStage
+  taskBrief?: string
+  draftContent?: string
+  reviewResults?: NovelReviewResult[]
+  currentContent?: string
 }
 
 export interface DeepChapterGenerationDeps {
@@ -76,6 +96,60 @@ export function shouldUseDeepChapterGeneration(_route: TaskRouteResult | null, e
   return enabled
 }
 
+function createResumeCheckpoint(
+  input: DeepChapterGenerationInput,
+  stage: DeepChapterGenerationResumeStage,
+  data: Partial<DeepChapterGenerationResumeCheckpoint> = {},
+): DeepChapterGenerationResumeCheckpoint {
+  const originalRequest = input.resumeCheckpoint?.originalRequest?.trim() || input.userRequest.trim()
+  return {
+    version: 1,
+    originalRequest,
+    chapterNumber: input.resumeCheckpoint?.chapterNumber ?? input.chapterNumber,
+    stage,
+    ...data,
+  }
+}
+
+function checkpointStageAtLeast(
+  checkpoint: DeepChapterGenerationResumeCheckpoint | null | undefined,
+  target: DeepChapterGenerationResumeStage,
+): boolean {
+  if (!checkpoint) return false
+  const order: DeepChapterGenerationResumeStage[] = [
+    "after_context",
+    "after_task_brief",
+    "after_draft",
+    "after_review",
+    "after_revision",
+  ]
+  return order.indexOf(checkpoint.stage) >= order.indexOf(target)
+}
+
+function hasCheckpointTaskBrief(
+  checkpoint?: DeepChapterGenerationResumeCheckpoint | null,
+): checkpoint is DeepChapterGenerationResumeCheckpoint & { taskBrief: string } {
+  return Boolean(checkpoint?.taskBrief?.trim()) && checkpointStageAtLeast(checkpoint, "after_task_brief")
+}
+
+function hasCheckpointDraft(
+  checkpoint?: DeepChapterGenerationResumeCheckpoint | null,
+): checkpoint is DeepChapterGenerationResumeCheckpoint & { taskBrief: string, draftContent: string } {
+  return hasCheckpointTaskBrief(checkpoint) && Boolean(checkpoint.draftContent?.trim()) && checkpointStageAtLeast(checkpoint, "after_draft")
+}
+
+function hasCheckpointReview(
+  checkpoint?: DeepChapterGenerationResumeCheckpoint | null,
+): checkpoint is DeepChapterGenerationResumeCheckpoint & { taskBrief: string, draftContent: string, reviewResults: NovelReviewResult[] } {
+  return hasCheckpointDraft(checkpoint) && Array.isArray(checkpoint.reviewResults) && checkpointStageAtLeast(checkpoint, "after_review")
+}
+
+function hasCheckpointRevision(
+  checkpoint?: DeepChapterGenerationResumeCheckpoint | null,
+): checkpoint is DeepChapterGenerationResumeCheckpoint & { taskBrief: string, draftContent: string, reviewResults: NovelReviewResult[], currentContent: string } {
+  return hasCheckpointReview(checkpoint) && Boolean(checkpoint.currentContent?.trim()) && checkpointStageAtLeast(checkpoint, "after_revision")
+}
+
 export async function runDeepChapterGeneration(
   input: DeepChapterGenerationInput,
   callbacks: DeepChapterGenerationCallbacks = {},
@@ -83,6 +157,7 @@ export async function runDeepChapterGeneration(
   signal?: AbortSignal,
 ): Promise<DeepChapterGenerationResult> {
   assertNotAborted(signal)
+  const resumeCheckpoint = input.resumeCheckpoint
   const writingConfig = resolveWritingConfig(input.llmConfig)
   const contextPack = await deps.buildContextPack(input.projectPath, input.userRequest, input.chapterNumber)
   assertNotAborted(signal)
@@ -91,54 +166,20 @@ export async function runDeepChapterGeneration(
     input.dismantlingReferenceDirective,
   ].filter(Boolean).join("\n\n")
 
-  callbacks.onThinking?.(formatContextThinking(input, contextPack))
+  if (!resumeCheckpoint) {
+    callbacks.onThinking?.(formatContextThinking(input, contextPack))
+    callbacks.onCheckpoint?.(createResumeCheckpoint(input, "after_context"))
+  }
   assertNotAborted(signal)
 
-  const taskBrief = await collectModelText(
-    writingConfig,
-    [{
-      role: "user",
-      content: buildDeepChapterBriefPrompt(
-        contextPrompt,
-        input.userRequest,
-        input.chapterNumber,
-        input.goldenThreeChapter,
-      ),
-    }],
-    deps,
-    signal,
-    (partial) => callbacks.onThinking?.(formatStageThinking("阶段2：写作任务书", partial)),
-  )
-  assertNotAborted(signal)
-  callbacks.onThinking?.(formatStageThinking("阶段2：写作任务书", taskBrief))
-
-  let draftContent = await collectModelText(
-    writingConfig,
-    [{
-      role: "user",
-      content: buildDeepChapterDraftPrompt(
-        contextPrompt,
-        taskBrief,
-        input.userRequest,
-        input.chapterNumber,
-        input.goldenThreeChapter,
-      ),
-    }],
-    deps,
-    signal,
-    (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文初稿", partial)),
-    { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
-  )
-  assertNotAborted(signal)
-  if (countChapterChars(draftContent) < DEEP_CHAPTER_MIN_CHARS) {
-    draftContent = await collectModelText(
+  let taskBrief = hasCheckpointTaskBrief(resumeCheckpoint) ? resumeCheckpoint.taskBrief.trim() : ""
+  if (!taskBrief) {
+    taskBrief = await collectModelText(
       writingConfig,
       [{
         role: "user",
-        content: buildDeepChapterExpansionPrompt(
+        content: buildDeepChapterBriefPrompt(
           contextPrompt,
-          taskBrief,
-          draftContent,
           input.userRequest,
           input.chapterNumber,
           input.goldenThreeChapter,
@@ -146,92 +187,107 @@ export async function runDeepChapterGeneration(
       }],
       deps,
       signal,
-      (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文扩写补足", partial)),
+      (partial) => callbacks.onThinking?.(formatStageThinking("阶段2：写作任务书", partial)),
+    )
+    assertNotAborted(signal)
+    callbacks.onThinking?.(formatStageThinking("阶段2：写作任务书", taskBrief))
+    callbacks.onCheckpoint?.(createResumeCheckpoint(input, "after_task_brief", { taskBrief }))
+  }
+
+  let draftContent = hasCheckpointDraft(resumeCheckpoint) ? resumeCheckpoint.draftContent.trim() : ""
+  if (!draftContent) {
+    draftContent = await collectModelText(
+      writingConfig,
+      [{
+        role: "user",
+        content: buildDeepChapterDraftPrompt(
+          contextPrompt,
+          taskBrief,
+          input.userRequest,
+          input.chapterNumber,
+          input.goldenThreeChapter,
+        ),
+      }],
+      deps,
+      signal,
+      (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文初稿", partial)),
       { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
     )
     assertNotAborted(signal)
-  }
-  draftContent = await optimizeChapterLengthIfNeeded(
-    "阶段4：字数审核与正文优化",
-    draftContent,
-    writingConfig,
-    contextPrompt,
-    taskBrief,
-    input,
-    callbacks,
-    deps,
-    signal,
-  )
-  callbacks.onThinking?.(formatStageThinking("阶段3：正文初稿", [
-    draftContent,
-    "",
-    `初稿生成完成，约 ${countChapterChars(draftContent)} 字。`,
-  ].join("\n")))
-
-  callbacks.onThinking?.(formatStageThinking(
-    "阶段4：AI审稿",
-    "正在检查正文完整性、剧情连续性、是否被截断以及是否存在阻断问题。",
-  ))
-  const reviewResults = await deps.reviewChapter(input.projectPath, draftContent, input.chapterNumber)
-  assertNotAborted(signal)
-  callbacks.onThinking?.(formatReviewThinking(reviewResults))
-
-  const blockingIssues = reviewResults.filter((item) => item.severity === "error")
-  if (blockingIssues.length === 0) {
-    callbacks.onThinking?.(formatStageThinking(
-      "阶段5：无需自动返修",
-      "AI审稿未发现阻断问题，跳过自动返修，进入阶段6简单审查与字数检查。",
-    ))
-    const finalContent = await finalPolishChapterWithLengthGate(
+    if (countChapterChars(draftContent) < DEEP_CHAPTER_MIN_CHARS) {
+      draftContent = await collectModelText(
+        writingConfig,
+        [{
+          role: "user",
+          content: buildDeepChapterExpansionPrompt(
+            contextPrompt,
+            taskBrief,
+            draftContent,
+            input.userRequest,
+            input.chapterNumber,
+            input.goldenThreeChapter,
+          ),
+        }],
+        deps,
+        signal,
+        (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文扩写补足", partial)),
+        { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+      )
+      assertNotAborted(signal)
+    }
+    draftContent = await optimizeChapterLengthIfNeeded(
+      "阶段4：字数审核与正文优化",
+      draftContent,
       writingConfig,
       contextPrompt,
       taskBrief,
-      draftContent,
       input,
       callbacks,
       deps,
       signal,
     )
-    callbacks.onThinking?.(formatStageThinking("阶段7：完成", "未发现阻断问题，已完成最后一遍简单审查与去AI味。"))
-    callbacks.onFinalContent?.(finalContent)
-    return {
-      finalContent,
-      taskBrief,
+    callbacks.onThinking?.(formatStageThinking("阶段3：正文初稿", [
       draftContent,
-      reviewResults,
-      revised: false,
-    }
+      "",
+      `初稿生成完成，约 ${countChapterChars(draftContent)} 字。`,
+    ].join("\n")))
+    callbacks.onCheckpoint?.(createResumeCheckpoint(input, "after_draft", { taskBrief, draftContent }))
   }
 
-  let revisedContent = await collectModelText(
-    writingConfig,
-    [{
-      role: "user",
-      content: buildDeepChapterRevisionPrompt(
-        contextPrompt,
-        taskBrief,
-        draftContent,
-        blockingIssues,
-        input.userRequest,
-        input.chapterNumber,
-        input.goldenThreeChapter,
-      ),
-    }],
-    deps,
-    signal,
-    (partial) => callbacks.onThinking?.(formatStageThinking("阶段5：自动返修", partial)),
-    { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
-  )
-  assertNotAborted(signal)
-  if (countChapterChars(revisedContent) < DEEP_CHAPTER_MIN_CHARS) {
-    revisedContent = await collectModelText(
+  let reviewResults = hasCheckpointReview(resumeCheckpoint) ? resumeCheckpoint.reviewResults : []
+  if (!hasCheckpointReview(resumeCheckpoint)) {
+    callbacks.onThinking?.(formatStageThinking(
+      "阶段4：AI审稿",
+      "正在检查正文完整性、剧情连续性、是否被截断以及是否存在阻断问题。",
+    ))
+    reviewResults = await deps.reviewChapter(input.projectPath, draftContent, input.chapterNumber)
+    assertNotAborted(signal)
+    callbacks.onThinking?.(formatReviewThinking(reviewResults))
+    callbacks.onCheckpoint?.(createResumeCheckpoint(input, "after_review", { taskBrief, draftContent, reviewResults }))
+  }
+
+  const blockingIssues = reviewResults.filter((item) => item.severity === "error")
+  let currentContent = draftContent
+  let revised = false
+
+  if (hasCheckpointRevision(resumeCheckpoint)) {
+    currentContent = resumeCheckpoint.currentContent.trim()
+    revised = true
+  } else if (blockingIssues.length === 0) {
+    callbacks.onThinking?.(formatStageThinking(
+      "阶段5：无需自动返修",
+      "AI审稿未发现阻断问题，跳过自动返修，进入阶段6简单审查与字数检查。",
+    ))
+  } else {
+    let revisedContent = await collectModelText(
       writingConfig,
       [{
         role: "user",
-        content: buildDeepChapterExpansionPrompt(
+        content: buildDeepChapterRevisionPrompt(
           contextPrompt,
           taskBrief,
-          revisedContent,
+          draftContent,
+          blockingIssues,
           input.userRequest,
           input.chapterNumber,
           input.goldenThreeChapter,
@@ -239,39 +295,74 @@ export async function runDeepChapterGeneration(
       }],
       deps,
       signal,
-      (partial) => callbacks.onThinking?.(formatStageThinking("阶段5：返修扩写补足", partial)),
+      (partial) => callbacks.onThinking?.(formatStageThinking("阶段5：自动返修", partial)),
       { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
     )
     assertNotAborted(signal)
+    if (countChapterChars(revisedContent) < DEEP_CHAPTER_MIN_CHARS) {
+      revisedContent = await collectModelText(
+        writingConfig,
+        [{
+          role: "user",
+          content: buildDeepChapterExpansionPrompt(
+            contextPrompt,
+            taskBrief,
+            revisedContent,
+            input.userRequest,
+            input.chapterNumber,
+            input.goldenThreeChapter,
+          ),
+        }],
+        deps,
+        signal,
+        (partial) => callbacks.onThinking?.(formatStageThinking("阶段5：返修扩写补足", partial)),
+        { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+      )
+      assertNotAborted(signal)
+    }
+    callbacks.onThinking?.(formatStageThinking(
+      "阶段5：自动返修",
+      [
+        `检测到 ${blockingIssues.length} 个阻断问题，已自动返修一次。`,
+        "",
+        formatReviewIssueList(blockingIssues),
+        "",
+        `返修后正文约 ${countChapterChars(revisedContent)} 字。`,
+      ].join("\n"),
+    ))
+    currentContent = revisedContent
+    revised = true
+    callbacks.onCheckpoint?.(createResumeCheckpoint(input, "after_revision", {
+      taskBrief,
+      draftContent,
+      reviewResults,
+      currentContent: revisedContent,
+    }))
   }
-  callbacks.onThinking?.(formatStageThinking(
-    "阶段5：自动返修",
-    [
-      `检测到 ${blockingIssues.length} 个阻断问题，已自动返修一次。`,
-      "",
-      formatReviewIssueList(blockingIssues),
-      "",
-      `返修后正文约 ${revisedContent.length} 字。`,
-    ].join("\n"),
-  ))
+
   const finalContent = await finalPolishChapterWithLengthGate(
     writingConfig,
     contextPrompt,
     taskBrief,
-    revisedContent,
+    currentContent,
     input,
     callbacks,
     deps,
     signal,
   )
-  callbacks.onThinking?.(formatStageThinking("阶段7：完成", "采用返修并完成简单审查、去AI味后的正文作为最终正文。"))
+  callbacks.onThinking?.(formatStageThinking(
+    "阶段7：完成",
+    revised
+      ? "采用返修并完成简单审查、去AI味后的正文作为最终正文。"
+      : "未发现阻断问题，已完成最后一遍简单审查与去AI味。",
+  ))
   callbacks.onFinalContent?.(finalContent)
   return {
     finalContent,
     taskBrief,
     draftContent,
     reviewResults,
-    revised: true,
+    revised,
   }
 }
 
