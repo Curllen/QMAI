@@ -59,6 +59,7 @@ describe("changelog", () => {
     expect(en).toContain("Removed the 2.2.6 to 2.2.1 release notes")
     expect(en).toContain("saved stage checkpoint")
     expect(en).toContain("Switching models")
+    expect(en).toContain("newly inserted paragraph")
     expect(zh).toContain("拆文库做隐藏处理")
     expect(zh).toContain("删除软件内 2.2.6 到 2.2.1 的更新日志展示")
     expect(zh).toContain("阶段快照")

@@ -326,23 +326,23 @@ export function PreviewPanel() {
   const handleSave = useCallback(
     (markdown: string) => {
       if (!selectedFile) return
-      const normalized = isChapterPath(selectedFile)
+      const persistedMarkdown = isChapterPath(selectedFile)
         ? normalizeChapterWriting(markdown)
         : markdown
-      setFileContent(normalized)
-      fileContentRef.current = normalized
+      setFileContent(markdown)
+      fileContentRef.current = markdown
       // Ignore no-op saves from the editor's initial re-emit. Only write
       // when the user has actually changed the content relative to the
       // last disk read.
-      if (normalized === lastLoadedRef.current) return
+      if (persistedMarkdown === lastLoadedRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        writeFile(selectedFile, normalized)
+        writeFile(selectedFile, persistedMarkdown)
           .then(() => {
             // Our own write becomes the new "last loaded" — subsequent
             // re-emits from Milkdown that match this content must not
             // trigger another save.
-            lastLoadedRef.current = normalized
+            lastLoadedRef.current = persistedMarkdown
             bumpDataVersion()
           })
           .catch((err) => console.error("保存失败:", err))

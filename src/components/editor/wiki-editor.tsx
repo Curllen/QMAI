@@ -10,10 +10,12 @@ import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react"
 import "@milkdown/theme-nord/style.css"
 import "katex/dist/katex.min.css"
 import { Pencil, Eye } from "lucide-react"
+import { formatChapterWriting } from "@/lib/chapter-formatting"
 import { parseFrontmatter } from "@/lib/frontmatter"
 import { FrontmatterPanel } from "@/components/editor/frontmatter-panel"
 import { WikiReader } from "@/components/editor/wiki-reader"
 import {
+  rebuildChapterBody,
   splitChapterHeading,
   type ChapterBodySelection,
   type ChapterSelectionAction,
@@ -57,6 +59,13 @@ function WritingTextarea({
 
   useEffect(() => {
     const { heading: h, body: b } = splitChapterHeading(content)
+    if (document.activeElement === textareaRef.current) {
+      const normalizedDraft = splitChapterHeading(formatChapterWriting(rebuildChapterBody(heading, value)))
+      if (normalizedDraft.heading === h && normalizedDraft.body === b && (heading !== h || value !== b)) {
+        previousBodyRef.current = value
+        return
+      }
+    }
     const previousBody = previousBodyRef.current
     previousBodyRef.current = b
     setHeading(h)

@@ -29,9 +29,7 @@ import { getFileName, getFileStem, normalizePath } from "@/lib/path-utils"
 import {
   loadDismantlingLibrary,
   normalizeDismantlingLibrary,
-  normalizeDismantlingProjectTitle,
   saveDismantlingLibrary,
-  shouldReadDismantlingOriginalFile,
   splitDismantlingTextIntoChapters,
   type DismantlingChapter,
   type DismantlingLibrary,
@@ -60,6 +58,21 @@ import { resolveReviewModel } from "@/lib/novel/review-model"
 import { isTauri } from "@/lib/platform"
 import { makeChapterFileName, makeDefaultChapterTitle, makeSafeFileSlug } from "@/lib/wiki-filename"
 import { useImportProgressStore } from "@/stores/import-progress-store"
+
+const DISMANTLING_NO_PREPROCESSING_NEEDED = "no preprocessing needed"
+
+function normalizeDismantlingProjectTitle(title: string): string {
+  return title
+    .normalize("NFKC")
+    .trim()
+    .replace(/\.(txt|md|mdx|doc|docx)$/i, "")
+    .replace(/\s+/g, "")
+    .toLowerCase()
+}
+
+function shouldReadDismantlingOriginalFile(preprocessedText: string): boolean {
+  return preprocessedText.trim().toLowerCase() === DISMANTLING_NO_PREPROCESSING_NEEDED
+}
 
 function SearchHistoryPanel() {
   const { t } = useTranslation()

@@ -17,8 +17,10 @@ const TWO_POINT_TWO_SEVEN_CHANGELOG: ChangelogEntry = {
       "Fixed AI Chat Continue Unfinished so deep chapter recovery now resumes from a saved stage checkpoint instead of asking the model to guess where to continue.",
       "Deep chapter failures now persist the first interrupted chain, the latest recoverable checkpoint, and the original request, so repeated Continue Unfinished clicks stay anchored to the same task even after later retries fail.",
       "Switching models during Continue Unfinished now still reloads the original interrupted request and resume snapshot before continuing the remaining deep chapter stages.",
+      "Fixed immersive chapter editing so typing into a newly inserted paragraph no longer collapses back onto the first line while auto-format saving runs in the background.",
     ],
     zh: [
+      "修复章节沉浸式写作输入时的跳行问题。现在进入新段落手动输入内容时，自动排版不会把正在输入的空行折回第一行。",
       "先将 2.2.7 版本中的拆文库做隐藏处理，并同时停用 AI 会话里的拆文结构注入。当前版本里用户不会再看到拆文库入口，写作时也不会继续偷偷读取拆文结构。",
       "删除软件内 2.2.6 到 2.2.1 的更新日志展示，2.2.x 版本列表里仅保留当前 2.2.7 和更早的 2.2.0。",
       "修复 AI 会话“继续未完成”偏离原始深度章节任务的问题。现在点击后会优先按本地保存的阶段快照继续执行深度章节流程，不再把失败消息重新当作一段普通提示词交给模型猜测该接哪里。",

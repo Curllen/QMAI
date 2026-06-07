@@ -16,7 +16,6 @@ import { parseFrontmatter } from "@/lib/frontmatter"
 import { useWikiStore } from "@/stores/wiki-store"
 import {
   loadMemoryCenterData,
-  type MemoryCenterDismantlingProjectPreview,
   type MemoryCenterSnapshotCard,
 } from "@/lib/novel/memory-center"
 
@@ -51,13 +50,6 @@ type MemoryCenterDetailView =
       rawBlock: string
       editable: boolean
       deleteChapterNumber?: number
-      parentView: MemoryCenterDetailView | null
-    }
-  | {
-      kind: "dismantlingLibrary"
-      title: string
-      description: string
-      projects: MemoryCenterDismantlingProjectPreview[]
       parentView: MemoryCenterDetailView | null
     }
 
@@ -244,17 +236,6 @@ export function MemoryCenterView() {
     setDetailView(null)
     try {
       const memoryData = await loadMemoryCenterData(project.path)
-
-      if (selectedMemoryCenterEntry === "dismantling-library") {
-        setDetailView({
-          kind: "dismantlingLibrary",
-          title: "拆文记忆库",
-          description: "独立保存拆文结构，不会写入当前小说记忆。",
-          projects: memoryData.dismantlingProjects,
-          parentView: null,
-        })
-        return
-      }
 
       if (selectedMemoryCenterEntry === "snapshots") {
         setDetailView({
@@ -555,10 +536,6 @@ function MemoryCenterDetailPanel({
     )
   }
 
-  if (detailView.kind === "dismantlingLibrary") {
-    return <DismantlingMemoryLibraryPanel projects={detailView.projects} />
-  }
-
   return (
     <EditableMarkdownMemory
       detailView={detailView}
@@ -566,64 +543,6 @@ function MemoryCenterDetailPanel({
       onDelete={onDeleteMarkdown}
       t={t}
     />
-  )
-}
-
-function DismantlingMemoryLibraryPanel({
-  projects,
-}: {
-  projects: MemoryCenterDismantlingProjectPreview[]
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm leading-6 text-muted-foreground">
-        <div className="font-medium text-foreground">拆文记忆库仅用于参考写作结构</div>
-        <div className="mt-1">
-          这里展示拆文作品提取出的章节节奏、冲突推进、爽点安排、结尾钩子和可复用写法模板，不会写入当前小说记忆，也不会把原作人物、设定和剧情当成当前小说事实。
-        </div>
-      </div>
-
-      {projects.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          还没有拆文记忆。请先在“拆文库”中导入作品并开始拆文。
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {projects.map((project) => (
-            <div key={project.id} className="rounded-lg border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-foreground">{project.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {project.chapterCount} 章 · {project.analysisCount} 个拆文结果 · {project.structureMemoryCount} 条结构记忆
-                  </div>
-                </div>
-                <span className={`rounded-full px-2 py-1 text-xs ${project.useInChat ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
-                  {project.useInChat ? "已启用给 AI 参考" : "未启用"}
-                </span>
-              </div>
-
-              {project.structureMemory.length > 0 ? (
-                <div className="mt-3">
-                  <div className="text-xs font-medium text-muted-foreground">结构记忆</div>
-                  <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground">
-                    {project.structureMemory.map((item) => (
-                      <li key={`${project.id}-${item}`} className="rounded-md bg-muted/40 px-3 py-2">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                  暂无结构记忆，请先对该作品章节执行拆文。
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
