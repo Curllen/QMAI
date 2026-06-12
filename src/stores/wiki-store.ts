@@ -250,6 +250,8 @@ export interface NovelConfig {
   contextTokenBudget: number
   recentSummaryWindow: number
   searchTopK: number
+  /** 单章目标字数（按去除空白后的字符数计），章节生成提示词和扩写阈值都按它推算。 */
+  chapterTargetChars: number
   autoIngestOnSave: boolean
   autoExtractOnImport: boolean
   reviewBeforeSave: boolean
@@ -263,6 +265,7 @@ export const DEFAULT_NOVEL_CONFIG: NovelConfig = {
   contextTokenBudget: 0,
   recentSummaryWindow: 8,
   searchTopK: 5,
+  chapterTargetChars: 3000,
   autoIngestOnSave: true,
   autoExtractOnImport: true,
   reviewBeforeSave: false,

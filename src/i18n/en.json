@@ -1088,6 +1088,8 @@
       "contextTokenBudget": "Context Token Budget",
       "contextTokenBudgetHint": "0 means unlimited",
       "contextTokenBudgetHelp": "Limits the number of context tokens injected into one novel writing or extraction call. Use 0 for no extra limit.",
+      "chapterTargetChars": "Target Characters per Chapter",
+      "chapterTargetCharsHint": "Controls the target character count (whitespace excluded) for one generated chapter. Chapter drafting, expansion thresholds, and the continue-next-chapter prompt all derive from this target. Default is 3000.",
       "autoIngestOnSave": "Auto-ingest memory when saving canon chapters",
       "autoIngestOnSaveHint": "When enabled, saving a canon chapter automatically extracts characters, locations, events, relationships, and canon facts into the novel memory library for later search and continuation.",
       "reviewBeforeSave": "Auto-review before save",

@@ -275,7 +275,7 @@ describe("runDeepChapterGeneration", () => {
 
     expect(result.finalContent).toBe(finalPolished)
     expect(deps.streamChat).toHaveBeenCalledTimes(4)
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", expandedDraft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", expandedDraft, 3, expect.objectContaining({}))
     expect(thinking.join("\n")).toContain("阶段3：正文扩写补足")
     expect(thinking.join("\n")).toContain("阶段6：简单审查与去AI味")
   })
@@ -344,7 +344,7 @@ describe("runDeepChapterGeneration", () => {
 
     expect(result.draftContent).toBe(optimizedDraft)
     expect(result.finalContent).toBe(finalPolished)
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", optimizedDraft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", optimizedDraft, 3, expect.objectContaining({}))
     expect(thinking.join("\n")).toContain("检测到模型重复输出")
   })
 
@@ -374,7 +374,7 @@ describe("runDeepChapterGeneration", () => {
     )
 
     expect(result.draftContent).toBe(longDraft)
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", longDraft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", longDraft, 3, expect.objectContaining({}))
     expect(thinking.join("\n")).not.toContain("已达到本章字数上限")
     expect(thinking.join("\n")).not.toContain("内容已达到安全上限")
   })
@@ -404,7 +404,7 @@ describe("runDeepChapterGeneration", () => {
       deps,
     )
 
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", overlongDraft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", overlongDraft, 3, expect.objectContaining({}))
     expect(deps.streamChat).toHaveBeenCalledTimes(3)
     expect(thinking.join("\n")).not.toContain("2200-3200")
     expect(thinking.join("\n")).not.toContain("字数优化")
@@ -435,7 +435,7 @@ describe("runDeepChapterGeneration", () => {
       deps,
     )
 
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", draft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", draft, 3, expect.objectContaining({}))
     expect(deps.streamChat).toHaveBeenCalledTimes(3)
     expect(thinking.join("\n")).not.toContain("2200-3200")
   })
@@ -466,7 +466,7 @@ describe("runDeepChapterGeneration", () => {
     )
 
     expect(result.finalContent).toBe(finalPolished)
-    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", draft, 3)
+    expect(deps.reviewChapter).toHaveBeenCalledWith("E:/Novel", draft, 3, expect.objectContaining({}))
     expect(deps.streamChat).toHaveBeenCalledTimes(3)
     expect(thinking.join("\n")).not.toContain("2200-3200")
     expect(thinking.join("\n")).not.toContain("连续尝试")
@@ -614,7 +614,7 @@ describe("runDeepChapterGeneration", () => {
       "E:/Novel",
       expect.any(String),
       3,
-      undefined,
+      expect.objectContaining({}),
       controller.signal,
     )
   })

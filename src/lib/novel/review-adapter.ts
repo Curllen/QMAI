@@ -280,8 +280,15 @@ async function runReviewStage(
 function combineSignals(signalA: AbortSignal, signalB: AbortSignal): AbortSignal {
   const controller = new AbortController()
   const abort = () => controller.abort()
-  signalA.addEventListener("abort", abort, { once: true })
-  signalB.addEventListener("abort", abort, { once: true })
+  for (const signal of [signalA, signalB]) {
+    // 信号在组合前就已经中止时（例如用户在审稿开始前点了停止），
+    // addEventListener 不会再触发，必须立即同步中止组合信号。
+    if (signal.aborted) {
+      controller.abort()
+      return controller.signal
+    }
+    signal.addEventListener("abort", abort, { once: true })
+  }
   return controller.signal
 }
 

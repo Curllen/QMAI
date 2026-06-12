@@ -8,8 +8,8 @@ import { reviewChapter, type NovelReviewResult } from "./review-adapter"
 import type { TaskRouteResult } from "./task-router"
 import type { GoldenThreeChapterRequest } from "./golden-three-chapters"
 import {
-  DEEP_CHAPTER_MAX_OUTPUT_TOKENS,
-  DEEP_CHAPTER_MIN_CHARS,
+  resolveChapterLengthSpec,
+  type ChapterLengthSpec,
   buildDeepChapterBriefPrompt,
   buildDeepChapterDraftPrompt,
   buildDeepChapterExpansionPrompt,
@@ -151,6 +151,7 @@ export async function runDeepChapterGeneration(
   assertNotAborted(signal)
   const resumeCheckpoint = input.resumeCheckpoint
   const writingConfig = resolveWritingConfig(input.llmConfig)
+  const lengthSpec = resolveCurrentChapterLengthSpec()
   const { loadCustomDeAiSkill } = await import("./de-ai-adapter")
   const customDeAiSkill = await loadCustomDeAiSkill(input.projectPath)
 
@@ -208,6 +209,7 @@ export async function runDeepChapterGeneration(
           input.userRequest,
           input.chapterNumber,
           input.goldenThreeChapter,
+          lengthSpec,
         ),
       }],
       deps,
@@ -231,15 +233,16 @@ export async function runDeepChapterGeneration(
           input.userRequest,
           input.chapterNumber,
           input.goldenThreeChapter,
+          lengthSpec,
         ),
       }],
       deps,
       signal,
       (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文初稿", partial)),
-      { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+      { max_tokens: lengthSpec.maxOutputTokens },
     )
     assertNotAborted(signal)
-    if (countChapterChars(draftContent) < DEEP_CHAPTER_MIN_CHARS) {
+    if (countChapterChars(draftContent) < lengthSpec.minChars) {
       draftContent = await collectModelText(
         writingConfig,
         [{
@@ -251,12 +254,13 @@ export async function runDeepChapterGeneration(
             input.userRequest,
             input.chapterNumber,
             input.goldenThreeChapter,
+            lengthSpec,
           ),
         }],
         deps,
         signal,
         (partial) => callbacks.onThinking?.(formatStageThinking("阶段3：正文扩写补足", partial)),
-        { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+        { max_tokens: lengthSpec.maxOutputTokens },
       )
       assertNotAborted(signal)
     }
@@ -318,7 +322,7 @@ export async function runDeepChapterGeneration(
       deps,
       signal,
       (partial) => callbacks.onThinking?.(formatStageThinking("阶段5：自动返修", partial)),
-      { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+      { max_tokens: lengthSpec.maxOutputTokens },
     )
     assertNotAborted(signal)
     callbacks.onThinking?.(formatStageThinking(
@@ -351,6 +355,7 @@ export async function runDeepChapterGeneration(
     deps,
     signal,
     customDeAiSkill || undefined,
+    lengthSpec,
   )
   callbacks.onThinking?.(formatStageThinking(
     "阶段7：完成",
@@ -378,6 +383,7 @@ async function finalPolishChapter(
   deps: DeepChapterGenerationDeps,
   signal?: AbortSignal,
   customDeAiSkill?: string,
+  lengthSpec: ChapterLengthSpec = resolveChapterLengthSpec(),
 ): Promise<string> {
   assertNotAborted(signal)
   callbacks.onThinking?.(formatStageThinking("阶段6：简单审查与去AI味", "正在进行最后一遍简单审查，去除复读、机械套话和 AI 味。"))
@@ -398,10 +404,15 @@ async function finalPolishChapter(
     deps,
     signal,
     (partial) => callbacks.onThinking?.(formatStageThinking("阶段6：简单审查与去AI味", partial)),
-    { max_tokens: DEEP_CHAPTER_MAX_OUTPUT_TOKENS },
+    { max_tokens: lengthSpec.maxOutputTokens },
   )
   assertNotAborted(signal)
   return polished.trim() ? polished : currentContent
+}
+
+function resolveCurrentChapterLengthSpec(): ChapterLengthSpec {
+  const novelConfig = useWikiStore.getState().novelConfig
+  return resolveChapterLengthSpec(novelConfig?.chapterTargetChars)
 }
 
 function resolveWritingConfig(llmConfig: LlmConfig): LlmConfig {

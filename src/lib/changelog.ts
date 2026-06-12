@@ -20,6 +20,35 @@ const TWO_POINT_TWO_TEN_CHANGELOG: ChangelogEntry = {
   },
 }
 
+const TWO_POINT_TWO_TWELVE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.12",
+  date: "2026-06-11",
+  highlights: {
+    en: [
+      "Fixed continue-next-chapter regenerating chapter 1: incidental 开篇/第一章 wording inside prompts no longer hijacks the target chapter.",
+      "Continue-next-chapter now remembers the chapter just generated in this conversation, so an empty chapter library no longer resets the target back to chapter 1.",
+      "Fixed AI chapter editing failing with \"missing frontmatter, write-back stopped\": the original chapter frontmatter is reattached automatically, and fenced output or missing headings are tolerated.",
+      "Added a per-chapter target character setting: chapter drafting, expansion thresholds, and the continue-next-chapter prompt all follow the configured target.",
+      "Fixed the review stage being unstoppable when the stop signal fired before the review started.",
+      "Fixed contradictory outline refinement checks by uniformly testing whether the target directory already contains .md files.",
+      "Fixed stage-4 AI review interruptions: timeout extended from 2 to 5 minutes with automatic retries.",
+      "Fixed stale thinking content showing up when creating or switching conversations.",
+      "Redesigned the AI chat footer: deep thinking and normal mode are mutually exclusive, and normal mode supports plain conversation plus chapter editing.",
+    ],
+    zh: [
+      "修复“继续生成下一章”会重复生成第一章的问题：提示词中顺带出现的“开篇/第一章”字样不再把目标章节劫持为第1章。",
+      "继续生成下一章会记住本会话刚生成、尚未保存的章节号，章节库为空时也能正确推进到下一章。",
+      "修复 AI 修改章节时“返回内容缺少 frontmatter，已停止写回”的问题：自动沿用原章节 frontmatter，并容错代码围栏与缺失标题。",
+      "新增“单章目标字数”设置：章节生成、扩写阈值和“继续生成下一章”提示词都按设置目标执行。",
+      "修复点击停止后审稿阶段可能无法停止的问题：停止信号在审稿开始前已生效时也会立即中止。",
+      "修复大纲细化生成逻辑矛盾，统一按目录是否已有 .md 文件判断。",
+      "修复 AI 审稿阶段4易中断问题：超时从 2 分钟延长到 5 分钟，并增加失败自动重试。",
+      "修复新建/切换会话时显示旧思考内容的问题。",
+      "AI 会话界面重做：深度思考与普通模式互斥切换，普通模式支持正常对话与编辑章节。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.11",
   date: "2026-06-10",
@@ -313,6 +342,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWO_TWELVE_CHANGELOG.version) return [TWO_POINT_TWO_TWELVE_CHANGELOG]
   if (version === TWO_POINT_TWO_ELEVEN_CHANGELOG.version) return [TWO_POINT_TWO_ELEVEN_CHANGELOG]
   if (version === TWO_POINT_TWO_TEN_CHANGELOG.version) return [TWO_POINT_TWO_TEN_CHANGELOG]
   if (version === TWO_POINT_TWO_NINE_CHANGELOG.version) return [TWO_POINT_TWO_NINE_CHANGELOG]
@@ -321,7 +351,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
   if (version === TWO_POINT_TWO_ZERO_CHANGELOG.version) return [TWO_POINT_TWO_ZERO_CHANGELOG]
   if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version) return [TWO_POINT_ONE_ZERO_CHANGELOG]
   if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
-  if (/^2\.2\.(?:[1-6]|11|12|13)$/.test(version)) return []
+  if (/^2\.2\.(?:[1-6]|13)$/.test(version)) return []
   if (/^2\.1\.(?:[1-9]|10)$/.test(version)) return []
   if (/^2\.0\.(?:[1-9]|1[0-2])$/.test(version)) return []
   if (isMergedOnePointRelease(version)) return []
@@ -331,6 +361,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 export function allChangelog(): ChangelogEntry[] {
   return [
     TWO_POINT_TWO_THIRTEEN_CHANGELOG,
+    TWO_POINT_TWO_TWELVE_CHANGELOG,
     TWO_POINT_TWO_ELEVEN_CHANGELOG,
     TWO_POINT_TWO_TEN_CHANGELOG,
     TWO_POINT_TWO_NINE_CHANGELOG,

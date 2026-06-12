@@ -616,6 +616,7 @@ function normalizeNovelConfig(
     contextTokenBudget: Math.max(0, config.contextTokenBudget ?? DEFAULT_NOVEL_CONFIG.contextTokenBudget),
     recentSummaryWindow: Math.max(1, Math.min(30, config.recentSummaryWindow ?? DEFAULT_NOVEL_CONFIG.recentSummaryWindow)),
     searchTopK: Math.max(1, Math.min(20, config.searchTopK ?? DEFAULT_NOVEL_CONFIG.searchTopK)),
+    chapterTargetChars: Math.max(500, Math.min(20000, config.chapterTargetChars ?? DEFAULT_NOVEL_CONFIG.chapterTargetChars)),
     autoIngestOnSave: config.autoIngestOnSave ?? DEFAULT_NOVEL_CONFIG.autoIngestOnSave,
     autoExtractOnImport: config.autoExtractOnImport ?? DEFAULT_NOVEL_CONFIG.autoExtractOnImport,
     reviewBeforeSave: config.reviewBeforeSave ?? DEFAULT_NOVEL_CONFIG.reviewBeforeSave,

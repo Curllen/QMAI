@@ -97,6 +97,12 @@ export interface ResolveTargetChapterNumberForChatInput {
   routeIntent?: NovelTaskIntent
   routeChapterNumber?: number
   selectedFile?: string | null
+  /**
+   * 当前会话里上一次已生成章节的章节号（可能还没保存到章节库）。
+   * 修复 issue #6：第1章生成成功但尚未保存时，点击“继续生成下一章”
+   * 不应因为章节库为空而再次生成第1章。
+   */
+  lastGeneratedChapterNumber?: number | null
 }
 
 export async function resolveTargetChapterNumberForChat(input: ResolveTargetChapterNumberForChatInput): Promise<number | undefined> {
@@ -108,12 +114,43 @@ export async function resolveTargetChapterNumberForChat(input: ResolveTargetChap
     return undefined
   }
 
+  const lastGenerated = input.lastGeneratedChapterNumber ?? 0
+  const minimumNextChapter = lastGenerated > 0 ? lastGenerated + 1 : 0
+
   const selectedChapterNumber = await readSelectedChapterNumber(input.selectedFile)
   if (selectedChapterNumber && selectedChapterNumber > 0) {
-    return selectedChapterNumber + 1
+    return Math.max(selectedChapterNumber + 1, minimumNextChapter)
   }
 
-  return getNextChapterNumber(input.projectPath)
+  return Math.max(await getNextChapterNumber(input.projectPath), minimumNextChapter)
+}
+
+const GENERATED_CHAPTER_PATTERNS = [
+  // 深度生成思考过程中的目标章节标记
+  /目标章节：第(\d+)章/,
+  /按黄金三章规则生成第(\d+)章正文/,
+  // 章节正文标题行
+  /^#\s*第\s*(\d+)\s*章/m,
+]
+
+/**
+ * 从会话的 AI 回复内容里识别上一次生成的章节号。
+ * 只匹配章节生成特有的强标记（思考过程目标章节、正文标题行），
+ * 避免普通问答里顺带提到“第N章”造成误判。
+ */
+export function detectLastGeneratedChapterNumber(assistantContents: string[]): number | undefined {
+  for (let index = assistantContents.length - 1; index >= 0; index -= 1) {
+    const content = assistantContents[index]
+    if (!content) continue
+    for (const pattern of GENERATED_CHAPTER_PATTERNS) {
+      const match = content.match(pattern)
+      if (match?.[1]) {
+        const chapterNumber = Number.parseInt(match[1], 10)
+        if (Number.isFinite(chapterNumber) && chapterNumber > 0) return chapterNumber
+      }
+    }
+  }
+  return undefined
 }
 
 function shouldResolveNextChapter(userRequest: string, routeIntent?: NovelTaskIntent): boolean {

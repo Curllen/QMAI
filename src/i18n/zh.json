@@ -951,6 +951,8 @@
       "contextTokenBudget": "上下文 Token 预算",
       "contextTokenBudgetHint": "0 表示无限制",
       "contextTokenBudgetHelp": "限制一次小说写作或资料提取时可注入的上下文 Token 数量，避免提示词过长。设置为 0 时不做额外限制。",
+      "chapterTargetChars": "单章目标字数",
+      "chapterTargetCharsHint": "控制 AI 生成单章正文的目标字数（按去除空白后的字符数计）。章节生成、扩写补足和“继续生成下一章”的提示词都会按这个目标推算，默认 3000 字。",
       "autoIngestOnSave": "保存正式章节时自动提取记忆",
       "autoIngestOnSaveHint": "开启后，章节保存为正式章节时会自动从正文中提取人物、地点、事件、关系和设定，写入小说记忆库，方便后续检索和续写。",
       "reviewBeforeSave": "保存前自动审稿",

@@ -47,6 +47,7 @@ describe("settings model list", () => {
       method: "GET",
       headers: {
         Authorization: "Bearer sk-test",
+        Origin: "",
       },
     })
     expect(result.models).toEqual(["gpt-test"])

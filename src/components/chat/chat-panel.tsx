@@ -10,12 +10,13 @@ import { setLastQueryPages, useSourceFiles } from "./chat-shared"
 import { ChatInput } from "./chat-input"
 import { useChatStore, chatMessagesToLLM, type DisplayMessage } from "@/stores/chat-store"
 import { useWikiStore } from "@/stores/wiki-store"
+import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
 import { streamChat, type ChatMessage as LLMMessage } from "@/lib/llm-client"
 import { executeIngestWrites } from "@/lib/ingest"
 import { routeTask, buildTaskDirective } from "@/lib/novel/task-router"
 import { listDirectory, readFile, writeFile, createDirectory, deleteFile } from "@/commands/fs"
 import { searchWiki, tokenizeQuery } from "@/lib/search"
-import { findChapterFileByNumber, getNextChapterNumber, readSelectedChapterNumberForFile, resolveTargetChapterNumberForChat } from "@/lib/novel/chapter-utils"
+import { detectLastGeneratedChapterNumber, findChapterFileByNumber, getNextChapterNumber, readSelectedChapterNumberForFile, resolveTargetChapterNumberForChat } from "@/lib/novel/chapter-utils"
 import { buildQmQuaiSystemPrompt, injectDeAiDirective } from "@/lib/novel/de-ai-adapter"
 import { cleanGeneratedChapterContentForSave } from "@/lib/novel/chapter-content-cleanup"
 import { normalizePath, getFileName, getRelativePath } from "@/lib/path-utils"
@@ -353,6 +354,14 @@ export function ChatPanel() {
       let langReminder: string | undefined
       const taskRoute = novelMode ? routeTask(text) : null
       const pp = project ? normalizePath(project.path) : ""
+      // 会话内上次生成的章节号：未保存到章节库时也能正确推进“下一章”
+      const lastGeneratedChapterNumber = novelMode && project
+        ? detectLastGeneratedChapterNumber(
+          useChatStore.getState().getActiveMessages()
+            .filter((m) => m.role === "assistant" && !m.discarded)
+            .map((m) => m.content),
+        )
+        : undefined
       const targetChapterNumber = novelMode && project && taskRoute
         ? await resolveTargetChapterNumberForChat({
           projectPath: pp,
@@ -360,6 +369,7 @@ export function ChatPanel() {
           routeIntent: taskRoute.intent,
           routeChapterNumber: taskRoute.chapterNumber,
           selectedFile,
+          lastGeneratedChapterNumber,
         })
         : undefined
       const effectiveTaskRoute = taskRoute && targetChapterNumber
@@ -495,6 +505,7 @@ export function ChatPanel() {
           const normalizedResult = normalizeChapterEditFile({
             targetChapterNumber: chapter.chapterNumber,
             content: rawResult,
+            originalContent: chapter.content,
           })
           if (!normalizedResult.ok) {
             finalizeStream(normalizedResult.message, [])
@@ -1024,7 +1035,10 @@ export function ChatPanel() {
 
   const handleContinueNextChapter = useCallback(() => {
     if (isStreaming) return
-    handleSend("请根据当前小说上下文、记忆库、最新章节结尾、下一章推进建议和章纲，继续生成下一章正文。只输出可直接保存到章节库的小说正文，不要解释，不要列提纲。正文必须是完整章节，目标约 3000 字，建议 2800-3300 字，低于 2600 字视为未完成。")
+    // 按设置中的单章目标字数生成提示词（issue #8）
+    const lengthSpec = resolveChapterLengthSpec(useWikiStore.getState().novelConfig?.chapterTargetChars)
+    const target = lengthSpec.targetChars
+    handleSend(`请根据当前小说上下文、记忆库、最新章节结尾、下一章推进建议和章纲，继续生成下一章正文。只输出可直接保存到章节库的小说正文，不要解释，不要列提纲。正文必须是完整章节，目标约 ${target} 字，建议 ${target - 200}-${target + 300} 字，低于 ${target - 400} 字视为未完成。`)
   }, [handleSend, isStreaming])
 
   const handleContinueUnfinished = useCallback(async (assistantMessage: DisplayMessage) => {
