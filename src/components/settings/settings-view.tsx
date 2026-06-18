@@ -11,6 +11,7 @@ import {
   HelpCircle,
   MessageCircle,
   HeartHandshake,
+  Archive,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -32,6 +33,7 @@ import { MaintenanceSection } from "./sections/maintenance-section"
 import { FeedbackSection } from "./sections/feedback-section"
 import { UsageGuideSection } from "./sections/usage-guide-section"
 import { ContactSupportSection } from "./sections/contact-support-section"
+import { DataManagementSection } from "./sections/data-management-section"
 
 type CategoryId =
   | "llm"
@@ -42,6 +44,7 @@ type CategoryId =
   | "novel"
   | "usage-guide"
   | "maintenance"
+  | "data-management"
   | "feedback"
   | "contact-support"
   | "changelog"
@@ -64,6 +67,7 @@ const CATEGORIES: Category[] = [
   { id: "novel", labelKey: "settings.categories.novel", icon: BookOpen },
   { id: "usage-guide", labelKey: "settings.categories.usageGuide", icon: HelpCircle },
   { id: "maintenance", labelKey: "settings.categories.maintenance", icon: Wrench },
+  { id: "data-management", labelKey: "settings.categories.dataManagement", icon: Archive },
   { id: "feedback", labelKey: "settings.categories.feedback", icon: MessageCircle },
   { id: "contact-support", labelKey: "settings.categories.contactSupport", icon: HeartHandshake },
   { id: "changelog", labelKey: "settings.categories.changelog", icon: History },
@@ -482,6 +486,8 @@ export function SettingsView() {
         return <UsageGuideSection />
       case "maintenance":
         return <MaintenanceSection />
+      case "data-management":
+        return <DataManagementSection />
       case "feedback":
         return <FeedbackSection />
       case "contact-support":

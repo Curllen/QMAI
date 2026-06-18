@@ -383,6 +383,7 @@
       "feedback": "反馈",
       "contactSupport": "联系与支持",
       "changelog": "更新日志",
+      "dataManagement": "数据管理",
       "about": "关于"
     },
     "sections": {
@@ -745,6 +746,24 @@
           "merged": "已合并",
           "skipped": "已标记为不重复"
         }
+      },
+      "dataManagement": {
+        "title": "数据管理",
+        "description": "备份和恢复你的所有数据，包括模型配置、AI对话、小说内容、大纲、记忆库、拆书结果等。",
+        "exportTitle": "导出备份",
+        "exportDescription": "将所有数据打包为一个 zip 文件，用于重装系统前备份。包含：全局配置、所有项目数据、UI偏好。",
+        "exportButton": "导出备份",
+        "exporting": "导出中...",
+        "exportSuccess": "导出成功",
+        "fileCount": "共 {{count}} 个文件，{{size}}",
+        "importTitle": "导入备份",
+        "importDescription": "从 zip 备份文件恢复数据。导入后需要重启软件以使配置生效。",
+        "importStrategy": "导入方式",
+        "importButton": "导入备份",
+        "importing": "导入中...",
+        "importSuccess": "导入成功，请重启软件以使配置生效",
+        "restoredProjects": "已恢复 {{count}} 个项目",
+        "securityWarning": "备份文件包含 API 密钥等敏感信息，请妥善保管，不要分享给他人。"
       },
       "changelog": {
         "title": "版本更新",
