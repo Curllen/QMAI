@@ -23,6 +23,7 @@ export type SettingsCategoryId =
   | "novel"
   | "usage-guide"
   | "maintenance"
+  | "data-management"
   | "feedback"
   | "contact-support"
   | "changelog"
