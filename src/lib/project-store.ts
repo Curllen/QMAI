@@ -39,6 +39,7 @@ export async function addToRecentProjects(
 
 const LLM_CONFIG_KEY = "llmConfig"
 const AI_CHAT_MODEL_KEY = "aiChatModel"
+const DEFAULT_LLM_MODEL_KEY = "defaultLlmModel"
 const PROVIDER_CONFIGS_KEY = "providerConfigs"
 const ACTIVE_PRESET_KEY = "activePresetId"
 
@@ -60,6 +61,16 @@ export async function saveAiChatModel(model: string): Promise<void> {
 export async function loadAiChatModel(): Promise<string | null> {
   const store = await getStore()
   return (await store.get<string>(AI_CHAT_MODEL_KEY)) ?? null
+}
+
+export async function saveDefaultLlmModel(model: string): Promise<void> {
+  const store = await getStore()
+  await store.set(DEFAULT_LLM_MODEL_KEY, model)
+}
+
+export async function loadDefaultLlmModel(): Promise<string | null> {
+  const store = await getStore()
+  return (await store.get<string>(DEFAULT_LLM_MODEL_KEY)) ?? null
 }
 
 export async function saveProviderConfigs(configs: ProviderConfigs): Promise<void> {

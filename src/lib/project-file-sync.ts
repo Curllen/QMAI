@@ -11,6 +11,7 @@ import {
 import { useFileSyncStore } from "@/stores/file-sync-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { getFileStem, normalizePath } from "@/lib/path-utils"
+import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import type { WikiProject } from "@/types/wiki"
 import type { SourceWatchConfig } from "@/stores/wiki-store"
 import type { FileChangeTask } from "@/commands/file-sync"
@@ -200,7 +201,7 @@ async function enqueueRawSourceChanges(project: WikiProject, tasks: FileChangeTa
   if (paths.length === 0) return
 
   try {
-    await enqueueSourceIngest(project, paths, useWikiStore.getState().llmConfig)
+    await enqueueSourceIngest(project, paths, resolveDefaultModel(useWikiStore.getState().llmConfig))
   } catch (err) {
     console.error("[file-sync] failed to enqueue raw source ingest:", err)
   }

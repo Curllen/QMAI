@@ -1,6 +1,7 @@
 import { createDirectory, listDirectory, readFile, writeFileAtomic } from "@/commands/fs"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
 import { streamChat, type ChatMessage } from "@/lib/llm-client"
+import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import { normalizePath } from "@/lib/path-utils"
 import { joinPath } from "@/lib/path-utils"
 import { parseFrontmatter, type FrontmatterValue } from "@/lib/frontmatter"
@@ -947,7 +948,7 @@ async function buildAuraResearchStage(
   input: CustomCharacterAuraGenerationInput,
   previousResearchFiles: Partial<Record<CharacterAuraResearchFileName, string>>,
 ): Promise<string> {
-  const llmConfig = useWikiStore.getState().llmConfig
+  const llmConfig = resolveDefaultModel(useWikiStore.getState().llmConfig)
   if (hasUsableLlm(llmConfig)) {
     try {
       const raw = await runAuraModelPrompt(
@@ -966,7 +967,7 @@ async function synthesizeCustomAuraFields(
   input: CustomCharacterAuraGenerationInput,
   researchFiles: Partial<Record<CharacterAuraResearchFileName, string>>,
 ): Promise<CustomAuraGeneratedFields> {
-  const llmConfig = useWikiStore.getState().llmConfig
+  const llmConfig = resolveDefaultModel(useWikiStore.getState().llmConfig)
   if (hasUsableLlm(llmConfig)) {
     try {
       const raw = await runAuraModelPrompt(
@@ -982,7 +983,7 @@ async function synthesizeCustomAuraFields(
 }
 
 async function runAuraModelPrompt(systemPrompt: string, userPrompt: string): Promise<string> {
-  const llmConfig = useWikiStore.getState().llmConfig
+  const llmConfig = resolveDefaultModel(useWikiStore.getState().llmConfig)
   let result = ""
   let streamError: Error | null = null
   const messages: ChatMessage[] = [

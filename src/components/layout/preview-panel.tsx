@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useCallback, useRef, useMemo, useState, useL
 import { useTranslation } from "react-i18next"
 import { Check, MoreHorizontal, X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
+import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import type { FinalChapterSavePhase } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { deleteFile, fileExists, readFile, writeFile, listDirectory } from "@/commands/fs"
@@ -712,7 +713,7 @@ export function PreviewPanel() {
   const handleDeAiProcess = useCallback(async () => {
     if (!fileContent.trim()) return
     setDeAiProcessing(true)
-    const llmConfig = useWikiStore.getState().llmConfig
+    const llmConfig = resolveDefaultModel(useWikiStore.getState().llmConfig)
     if (!hasUsableLlm(llmConfig)) {
       setDeAiProcessing(false)
       return
@@ -776,7 +777,7 @@ export function PreviewPanel() {
 
   const handleSelectionAction = useCallback(async (action: ChapterSelectionAction, selection: ChapterBodySelection) => {
     if (!selection.text.trim()) return
-    const llmConfig = useWikiStore.getState().llmConfig
+    const llmConfig = resolveDefaultModel(useWikiStore.getState().llmConfig)
     if (!hasUsableLlm(llmConfig)) {
       setSaveStatus("未配置可用的 AI 模型，无法处理选中文本")
       return

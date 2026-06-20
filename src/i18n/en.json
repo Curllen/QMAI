@@ -732,6 +732,8 @@
         "apiKeyPlaceholderCustom": "Leave blank if no key is required (local model)",
         "apiKeyPlaceholder": "Enter API Key",
         "fetchModels": "Fetch Models",
+        "defaultLlmModel": "Default Model",
+        "defaultLlmModelHint": "The default model used by background tasks such as memory extraction and character extraction. If empty, the current AI chat model will be used.",
         "loadingModels": "Fetching...",
         "savedBadge": "Saved",
         "configuredBadge": "Configured",

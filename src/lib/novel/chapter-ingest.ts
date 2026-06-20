@@ -1369,7 +1369,10 @@ export async function ingestOutline(
 ): Promise<ChapterSnapshot | null> {
   const pp = normalizePath(projectPath)
   const llmConfig = useWikiStore.getState().llmConfig
-  if (!hasUsableLlm(llmConfig)) return null
+  const novelConfig = useWikiStore.getState().novelConfig
+  // 使用 resolveNovelModel 正确解析提取模型（含供应商配置切换），与 ingestChapter 保持一致
+  const runtimeLlmConfig = resolveNovelModel(llmConfig, novelConfig, "extract")
+  if (!hasUsableLlm(runtimeLlmConfig)) return null
 
   const content = await readFile(outlinePath)
   const body = content.length > 8000 ? content.slice(0, 8000) : content
@@ -1433,7 +1436,7 @@ ${body}
       onError: (error: Error) => { streamError = error },
     }
 
-    await streamChat(llmConfig, messages, callbacks, AbortSignal.timeout(DEFAULT_LLM_REQUEST_TIMEOUT_MS))
+    await streamChat(runtimeLlmConfig, messages, callbacks, AbortSignal.timeout(DEFAULT_LLM_REQUEST_TIMEOUT_MS))
     if (streamError) throw streamError
 
     const jsonMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.match(/\{[\s\S]*\}/) ?? result.match(/\{[\s\S]*\}/)
