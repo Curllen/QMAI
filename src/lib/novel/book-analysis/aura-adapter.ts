@@ -1,5 +1,6 @@
 import type { CharacterAura, GeneratedCharacterAuraSkillInput } from "@/lib/novel/character-aura"
-import { createCustomCharacterAuraFromGeneratedSkill } from "@/lib/novel/character-aura"
+import { createCustomCharacterAuraFromGeneratedSkill, loadCharacterAuraStore } from "@/lib/novel/character-aura"
+import { bookAnalysisAuraKey, isSameBookAnalysisCharacterAura } from "./aura-match"
 import type { BookAnalysisMetadata, CharacterSkill, ExtractedCharacter, PersonalityProfile } from "./types"
 
 export interface ImportedBookAnalysisAura {
@@ -181,6 +182,14 @@ export async function importBookAnalysisSkillsAsAuras(
   const characterByName = new Map(characters.map((character) => [character.name, character]))
   const selected = skills.filter((skill) => selectedSkillIds.includes(skill.id))
   const imported: ImportedBookAnalysisAura[] = []
+  const auraStore = await loadCharacterAuraStore(projectPath)
+  const existingAuraKeys = new Set(
+    auraStore.customAuras
+      .filter((aura) => characters.some((character) =>
+        isSameBookAnalysisCharacterAura(aura, metadata.title, character.name),
+      ))
+      .map((aura) => bookAnalysisAuraKey(metadata.title, aura.name)),
+  )
 
   for (const skill of selected) {
     // 先按 characterId 精确匹配，再按 characterName 回退匹配
@@ -189,10 +198,15 @@ export async function importBookAnalysisSkillsAsAuras(
       console.warn(`[加入灵魂库] 跳过 Skill「${skill.characterName}」：找不到对应角色（characterId=${skill.characterId}）`)
       continue
     }
+    const auraKey = bookAnalysisAuraKey(metadata.title, character.name)
+    if (existingAuraKeys.has(auraKey)) {
+      continue
+    }
     const aura: CharacterAura = await createCustomCharacterAuraFromGeneratedSkill(
       projectPath,
       buildGeneratedAuraInputFromBookCharacter(character, skill, metadata),
     )
+    existingAuraKeys.add(auraKey)
     imported.push({
       skillId: skill.id,
       characterId: character.id,

@@ -263,20 +263,20 @@ export function BookAnalysisView() {
     if (!chapterSelectionData?.bookPath) return false
     const bookId = chapterSelectionData.bookPath.split(/[/\\]/).pop() ?? ""
     const book = libraryState.books.find((b) => b.id === bookId || b.path === chapterSelectionData.bookPath)
-    return !!book && book.characters.length > 0
+    return !!book && (book.recognizedCharacters.length > 0 || book.characters.length > 0)
   }, [chapterSelectionData?.bookPath, libraryState.books])
 
   // 加载已提取的角色（从磁盘读取，避免重复消耗 token）
-  const handleLoadExtractedCharacters = async () => {
+  const handleLoadExtractedCharacters = async (selectedChapterIds: string[]) => {
     if (!chapterSelectionData?.bookPath) return
     const bookId = chapterSelectionData.bookPath.split(/[/\\]/).pop() ?? ""
     const book = libraryState.books.find((b) => b.id === bookId || b.path === chapterSelectionData.bookPath)
-    if (!book || book.characters.length === 0) {
+    if (!book || (book.recognizedCharacters.length === 0 && book.characters.length === 0)) {
       toast.info("没有已提取的角色")
       return
     }
 
-    const existingCharacters: RecognizedCharacter[] = book.characters.map((c) => ({
+    const fallbackCharacters: RecognizedCharacter[] = book.characters.map((c) => ({
       id: c.id,
       name: c.name,
       aliases: c.aliases ?? [],
@@ -292,6 +292,15 @@ export function BookAnalysisView() {
       sourceBook: chapterSelectionData.bookPath,
     }))
 
+    const existingCharacters = book.recognizedCharacters.length > 0
+      ? book.recognizedCharacters
+      : fallbackCharacters
+
+    setChapterSelectionData({
+      ...chapterSelectionData,
+      selectedChapterIds,
+      depth: "standard" as AnalysisDepth,
+    })
     setRecognizedCharacters(existingCharacters)
     setSelectedCharacterIds(
       existingCharacters

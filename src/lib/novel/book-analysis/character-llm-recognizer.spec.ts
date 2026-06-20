@@ -35,6 +35,24 @@ describe("llmRecognizeCharacters", () => {
     expect(result.find((c) => c.name === "韩立")?.appearances).toBe(1)
   })
 
+  it("accepts Chinese field names returned by some models", async () => {
+    const raw = JSON.stringify([
+      { "角色名": "韩立", "重要度": 90, "类别": "主角", "章节索引": [0, 1], "别名": ["二愣子"] },
+      { "角色名": "厉飞雨", "重要度": 55, "类别": "配角", "章节索引": [1] },
+    ])
+
+    const result = await llmRecognizeCharacters({
+      chapters,
+      llmConfig,
+      sourceBook: "凡人",
+      _llmCall: async () => raw,
+    })
+
+    expect(result.map((c) => c.name)).toEqual(["韩立", "厉飞雨"])
+    expect(result[0].aliases).toEqual(["二愣子"])
+    expect(result[0].chapterIndices).toEqual([0, 1])
+  })
+
   it("parses fenced JSON and sorts by importance score", async () => {
     const raw = "```json\n" + JSON.stringify([
       { name: "甲", importanceScore: 30, category: "次要", chapterIndices: [0] },

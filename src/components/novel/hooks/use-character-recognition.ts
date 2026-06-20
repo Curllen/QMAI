@@ -4,6 +4,7 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { joinPath } from "@/lib/path-utils"
 import { toast } from "@/lib/toast"
+import { saveRecognizedCharacters } from "@/lib/novel/book-analysis/recognized-character-store"
 import type { RecognizedCharacter } from "@/lib/novel/book-analysis/types"
 import type { ChapterSelectionData } from "./use-character-extraction"
 
@@ -107,6 +108,7 @@ export function useCharacterRecognition({
         recognizedCharactersCount: recognized.length,
         stageLabel: `识别出 ${recognized.length} 个角色（AI 识别）`,
       })
+      await saveRecognizedCharacters(bookPath, recognized)
       setRecognizedCharacters(recognized)
       setRecognitionStatus("done")
     } catch (err) {

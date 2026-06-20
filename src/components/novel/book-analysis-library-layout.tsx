@@ -17,7 +17,7 @@ interface BookAnalysisLibraryLayoutProps {
   onImportNovel: () => void
   onExtractStyle: () => void
   onToggleStyle: () => void
-  onAddSelectedSkillsToSoul: () => void
+  onAddSelectedSkillsToSoul: (skillId: string) => void
   onBindCharacter: (characterId: string) => void
   onReextractCharacters: () => void
   onDeleteBook: (bookId: string) => void

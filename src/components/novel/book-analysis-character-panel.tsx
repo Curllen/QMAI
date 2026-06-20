@@ -7,7 +7,7 @@ interface BookAnalysisCharacterPanelProps {
   selectedCharacterId: string | null
   addingToSoul: boolean
   onSelectCharacter: (characterId: string) => void
-  onAddSelectedSkillsToSoul: () => void
+  onAddSelectedSkillsToSoul: (skillId: string) => void
   onBindCharacter: (characterId: string) => void
 }
 
@@ -27,10 +27,17 @@ export function BookAnalysisCharacterPanel({
   onBindCharacter,
 }: BookAnalysisCharacterPanelProps) {
   const selectedCharacter = book.characters.find((character) => character.id === selectedCharacterId) ?? book.characters[0] ?? null
-  const selectedHasSkill = selectedCharacter ? book.skills.some((skill) => skill.characterId === selectedCharacter.id) : false
-  const selectedSkill = selectedCharacter ? book.skills.find((skill) => skill.characterId === selectedCharacter.id) : null
+  const selectedSkill = selectedCharacter
+    ? book.skills.find((skill) => skill.characterId === selectedCharacter.id || skill.characterName === selectedCharacter.name) ?? null
+    : null
+  const selectedHasSkill = Boolean(selectedSkill)
+  const selectedAuraAdded = selectedCharacter ? book.addedAuraCharacterIds.includes(selectedCharacter.id) : false
+  const addButtonLabel = addingToSoul
+    ? "加入中..."
+    : selectedAuraAdded
+      ? "已加入自定义灵魂库"
+      : "加入自定义灵魂库"
 
-  // 优先使用 personalityProfile 的完整数据
   const profile = selectedCharacter?.personalityProfile
 
   return (
@@ -38,11 +45,16 @@ export function BookAnalysisCharacterPanel({
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div>
           <h3 className="text-sm font-semibold">角色 Skill</h3>
-          <p className="mt-1 text-xs text-muted-foreground">可多选加入灵魂库，也可绑定到当前小说人物。</p>
+          <p className="mt-1 text-xs text-muted-foreground">选择角色 Skill 加入自定义灵魂库，也可绑定到当前小说人物。</p>
         </div>
-        <Button size="sm" variant="outline" onClick={onAddSelectedSkillsToSoul} disabled={addingToSoul || book.skills.length === 0}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => selectedSkill && !selectedAuraAdded && onAddSelectedSkillsToSoul(selectedSkill.id)}
+          disabled={addingToSoul || !selectedSkill || selectedAuraAdded}
+        >
           <Plus className="mr-2 h-4 w-4" />
-          {addingToSoul ? "加入中..." : "加入自定义灵魂库"}
+          {addButtonLabel}
         </Button>
       </div>
       <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: "minmax(220px, 320px) 1fr" }}>
@@ -52,7 +64,7 @@ export function BookAnalysisCharacterPanel({
           ) : (
             book.characters.map((character) => {
               const active = selectedCharacter?.id === character.id
-              const hasSkill = book.skills.some((skill) => skill.characterId === character.id)
+              const hasSkill = book.skills.some((skill) => skill.characterId === character.id || skill.characterName === character.name)
               return (
                 <button
                   key={character.id}

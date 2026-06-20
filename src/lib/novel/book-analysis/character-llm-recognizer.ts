@@ -100,22 +100,28 @@ export async function llmRecognizeCharacters(
   // 4. 转换为 RecognizedCharacter 格式 + 应用识别规则
   const results: RecognizedCharacter[] = []
   for (const p of parsed) {
-    if (!p.name || typeof p.name !== "string") continue
-    const trimmed = p.name.trim()
+    const item = p as Record<string, unknown>
+    const name = firstString(item, ["name", "characterName", "角色名", "姓名"])
+    if (!name) continue
+    const trimmed = name.trim()
     if (!trimmed) continue
-    const chapterIndices = Array.isArray(p.chapterIndices)
-      ? p.chapterIndices.filter((i) => Number.isInteger(i) && i >= 0 && i < chapters.length)
+    const rawChapterIndices = firstArray(item, ["chapterIndices", "chapters", "章节索引", "出现章节"])
+    const chapterIndices = rawChapterIndices
+      ? rawChapterIndices.filter((i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0 && i < chapters.length)
       : []
+    const rawAliases = firstArray(item, ["aliases", "alias", "别名", "称谓"])
+    const importanceScore = firstNumber(item, ["importanceScore", "importance", "score", "重要度", "重要性", "分数"])
+    const category = firstValue(item, ["category", "类别", "分类"])
     // 不因缺少 chapterIndices 就丢弃角色：部分模型不会稳定回传章节索引，
     // 但只要给出了角色名就应保留（否则会出现“识别成功却 0 个角色、弹窗不出现”）。
     results.push({
       id: stableCharacterId(trimmed, sourceBook),
       name: trimmed,
-      aliases: Array.isArray(p.aliases) ? p.aliases.filter((a) => typeof a === "string") : [],
+      aliases: rawAliases ? rawAliases.filter((a): a is string => typeof a === "string") : [],
       appearances: chapterIndices.length > 0 ? chapterIndices.length : 1,
       chapterIndices: chapterIndices.sort((a, b) => a - b),
-      importanceScore: clampScore(p.importanceScore),
-      category: normalizeCategory(p.category, p.importanceScore),
+      importanceScore: clampScore(importanceScore),
+      category: normalizeCategory(category, typeof importanceScore === "number" ? importanceScore : 50),
       sourceBook,
     })
   }
@@ -192,6 +198,33 @@ function parseRecognitionResponse(raw: string): Array<{
 function clampScore(score: unknown): number {
   if (typeof score !== "number" || !Number.isFinite(score)) return 50
   return Math.max(0, Math.min(100, Math.round(score)))
+}
+
+function firstValue(item: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (item[key] !== undefined) return item[key]
+  }
+  return undefined
+}
+
+function firstString(item: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = firstValue(item, keys)
+  return typeof value === "string" ? value : undefined
+}
+
+function firstNumber(item: Record<string, unknown>, keys: string[]): number | undefined {
+  const value = firstValue(item, keys)
+  if (typeof value === "number") return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function firstArray(item: Record<string, unknown>, keys: string[]): unknown[] | undefined {
+  const value = firstValue(item, keys)
+  return Array.isArray(value) ? value : undefined
 }
 
 function normalizeCategory(

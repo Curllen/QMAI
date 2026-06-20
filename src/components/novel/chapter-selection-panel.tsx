@@ -52,7 +52,7 @@ interface ChapterSelectionPanelProps {
     error?: string
   }
   // 已提取角色
-  onLoadExtractedCharacters?: () => void
+  onLoadExtractedCharacters?: (selectedChapterIds: string[]) => void
   hasExtractedCharacters?: boolean
 }
 
@@ -341,7 +341,7 @@ export function ChapterSelectionPanel({
                   <Button
                     variant="outline"
                     size="default"
-                    onClick={onLoadExtractedCharacters}
+                    onClick={() => onLoadExtractedCharacters(Array.from(selectedChapters))}
                   >
                     <Users className="h-4 w-4 mr-2" />
                     已提取角色

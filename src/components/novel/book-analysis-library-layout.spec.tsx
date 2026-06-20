@@ -59,6 +59,8 @@ const state: BookAnalysisLibraryState = {
         samples: [],
       },
       boundAurasCount: 1,
+      addedAuraCharacterIds: [],
+      recognizedCharacters: [],
       characters: [{
         id: "char-hanli",
         name: "韩立",

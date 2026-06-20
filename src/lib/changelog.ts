@@ -78,6 +78,23 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   },
 }
 
+const TWO_POINT_TWO_NINETEEN_CHANGELOG: ChangelogEntry = {
+  version: "2.2.19",
+  date: "2026-06-20",
+  highlights: {
+    en: [
+      "Fixed the Dismantling Library character picker not appearing after chapter analysis when some models return Chinese field names.",
+      "Character recognition now accepts Chinese keys such as 角色名, 重要度, 类别, 章节索引, and 别名 while keeping the existing English JSON format.",
+      "Added regression coverage for Chinese-key character recognition responses.",
+    ],
+    zh: [
+      "修复拆书库选择分析章节后，部分模型返回中文字段名导致角色列表为空、角色人物选择弹窗不弹出的问题。",
+      "角色识别结果现在兼容“角色名、重要度、类别、章节索引、别名”等中文字段，并保留原有英文 JSON 字段兼容。",
+      "新增角色识别回归测试，覆盖中文字段返回格式，防止同类问题再次出现。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_EIGHTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.18",
   date: "2026-06-19",
@@ -422,6 +439,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWO_NINETEEN_CHANGELOG.version) return [TWO_POINT_TWO_NINETEEN_CHANGELOG]
   if (version === TWO_POINT_TWO_EIGHTEEN_CHANGELOG.version) return [TWO_POINT_TWO_EIGHTEEN_CHANGELOG]
   if (version === TWO_POINT_TWO_SEVENTEEN_CHANGELOG.version) return [TWO_POINT_TWO_SEVENTEEN_CHANGELOG]
   if (version === TWO_POINT_TWO_SIXTEEN_CHANGELOG.version) return [TWO_POINT_TWO_SIXTEEN_CHANGELOG]
@@ -445,6 +463,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    TWO_POINT_TWO_NINETEEN_CHANGELOG,
     TWO_POINT_TWO_EIGHTEEN_CHANGELOG,
     TWO_POINT_TWO_SEVENTEEN_CHANGELOG,
     TWO_POINT_TWO_SIXTEEN_CHANGELOG,

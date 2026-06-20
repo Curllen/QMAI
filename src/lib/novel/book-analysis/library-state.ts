@@ -2,12 +2,15 @@ import { listDirectory, readFile } from "@/commands/fs"
 import { loadCharacterAuraStore } from "@/lib/novel/character-aura"
 import { loadWritingStyleStore, type WritingStylePreset } from "@/lib/novel/writing-style-store"
 import { joinPath, normalizePath } from "@/lib/path-utils"
+import { isSameBookAnalysisCharacterAura } from "./aura-match"
+import { loadRecognizedCharacters } from "./recognized-character-store"
 import type {
   BookAnalysisMetadata,
   BookAnalysisResult,
   BookStyleProfile,
   CharacterSkill,
   ExtractedCharacter,
+  RecognizedCharacter,
 } from "./types"
 
 export type BookStyleStatus = "missing" | "available" | "enabled"
@@ -16,11 +19,13 @@ export interface BookAnalysisLibraryBook {
   id: string
   path: string
   metadata: BookAnalysisMetadata
+  recognizedCharacters: RecognizedCharacter[]
   characters: ExtractedCharacter[]
   skills: CharacterSkill[]
   styleProfile?: BookStyleProfile
   styleStatus: BookStyleStatus
   boundAurasCount: number
+  addedAuraCharacterIds: string[]
 }
 
 export interface BookAnalysisAuraBindingSummary {
@@ -106,6 +111,39 @@ function getBoundAurasCount(
   return bindings.filter((binding) => auraById.get(binding.auraId)?.sourceNote.includes(`《${title}》`)).length
 }
 
+function getAddedAuraCharacterIds(
+  title: string,
+  characters: ExtractedCharacter[],
+  customAuras: Awaited<ReturnType<typeof loadCharacterAuraStore>>["customAuras"],
+): string[] {
+  return characters
+    .filter((character) =>
+      customAuras.some((aura) => isSameBookAnalysisCharacterAura(aura, title, character.name)),
+    )
+    .map((character) => character.id)
+}
+
+function recognizedFromExtractedCharacters(
+  bookPath: string,
+  characters: ExtractedCharacter[],
+): RecognizedCharacter[] {
+  return characters.map((character) => ({
+    id: character.id,
+    name: character.name,
+    aliases: character.aliases ?? [],
+    appearances: character.appearanceCount,
+    chapterIndices: [Math.max(0, character.firstAppearance - 1)],
+    importanceScore: character.importance,
+    category:
+      character.category === "protagonist"
+        ? "主角"
+        : character.category === "supporting"
+          ? "配角"
+          : "次要",
+    sourceBook: bookPath,
+  }))
+}
+
 export async function loadBookAnalysisLibraryState(projectPath: string): Promise<BookAnalysisLibraryState> {
   const normalizedProjectPath = normalizePath(projectPath)
   const writingStyleStore = await loadWritingStyleStore(normalizedProjectPath)
@@ -130,6 +168,10 @@ export async function loadBookAnalysisLibraryState(projectPath: string): Promise
     const metadata = await readJson<BookAnalysisMetadata>(joinPath(entry.path, "metadata.json"))
     if (!metadata) continue
     const characters = await loadCharacters(entry.path)
+    const storedRecognizedCharacters = await loadRecognizedCharacters(entry.path)
+    const recognizedCharacters = storedRecognizedCharacters.length > 0
+      ? storedRecognizedCharacters
+      : recognizedFromExtractedCharacters(entry.path, characters)
     const skills = await loadSkills(entry.path, metadata, characters)
     const styleProfile = await readJson<BookStyleProfile>(joinPath(entry.path, "style-profile.json"))
     const styleStatus: BookStyleStatus =
@@ -139,11 +181,13 @@ export async function loadBookAnalysisLibraryState(projectPath: string): Promise
       id: entry.name,
       path: entry.path,
       metadata,
+      recognizedCharacters,
       characters,
       skills,
       styleProfile: styleProfile ?? undefined,
       styleStatus,
       boundAurasCount: getBoundAurasCount(metadata.title, bindings, auraById),
+      addedAuraCharacterIds: getAddedAuraCharacterIds(metadata.title, characters, auraStore.customAuras),
     })
   }
 

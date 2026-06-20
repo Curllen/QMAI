@@ -155,8 +155,20 @@ export function useLibraryOperations({
     }
   }, [currentProjectPath, selectedLibraryBook, libraryState.enabledStyle, reloadLibraryState])
 
-  const handleLibraryAddSkillsToSoul = useCallback(async () => {
+  const handleLibraryAddSkillsToSoul = useCallback(async (skillId: string) => {
     if (!currentProjectPath || !selectedLibraryBook || addingToSoul) return
+    const selectedSkill = selectedLibraryBook.skills.find((skill) => skill.id === skillId)
+    const selectedCharacter = selectedSkill
+      ? selectedLibraryBook.characters.find((item) => item.id === selectedSkill.characterId || item.name === selectedSkill.characterName)
+      : null
+    if (!selectedSkill || !selectedCharacter) {
+      toast.info("未找到当前角色的 Skill，请重新提取角色。")
+      return
+    }
+    if (selectedLibraryBook.addedAuraCharacterIds.includes(selectedCharacter.id)) {
+      toast.info(`「${selectedCharacter.name}」已加入自定义灵魂库，无需重复加入。`)
+      return
+    }
     if (selectedLibraryBook.skills.length === 0) {
       toast.info("当前作品还没有可加入的角色 Skill，请先提取角色。")
       return
@@ -172,17 +184,13 @@ export function useLibraryOperations({
         selectedLibraryBook.metadata,
         selectedLibraryBook.characters,
         selectedLibraryBook.skills,
-        selectedLibraryBook.skills.map((skill) => skill.id),
+        [skillId],
       )
       if (imported.length === 0) {
-        toast.info("没有可导入的角色 Skill，角色数据与 Skill 不匹配，请重新提取角色。")
+        toast.info(`「${selectedCharacter.name}」已加入自定义灵魂库，无需重复加入。`)
       } else {
         await refreshProjectState(currentProjectPath)
-        const skipped = selectedLibraryBook.skills.length - imported.length
-        const msg = skipped > 0
-          ? `已添加 ${imported.length} 个角色 Skill 到自定义灵魂（${skipped} 个因角色数据缺失被跳过）。`
-          : `已添加 ${imported.length} 个角色 Skill 到自定义灵魂。`
-        toast.success(msg)
+        toast.success(`已将「${imported[0]?.characterName ?? selectedCharacter.name}」加入自定义灵魂库。`)
       }
       await reloadLibraryState()
     } catch (err) {
