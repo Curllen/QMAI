@@ -32,6 +32,7 @@ export function LlmProviderSection() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [defaultModelTestState, setDefaultModelTestState] = useState<ModelActionState>(null)
 
   function toggleExpand(id: string) {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -82,6 +83,44 @@ export function LlmProviderSection() {
     persist(next, activePresetId).catch(() => {})
   }
 
+  async function testDefaultModel() {
+    if (!defaultLlmModel) {
+      setDefaultModelTestState({
+        loading: false,
+        success: false,
+        message: t("settings.sections.llm.pleaseSelectModel"),
+      })
+      return
+    }
+
+    setDefaultModelTestState({
+      loading: true,
+      success: false,
+      message: t("settings.sections.shared.testing"),
+    })
+
+    try {
+      const testConfig: typeof llmConfig = {
+        ...llmConfig,
+        model: defaultLlmModel,
+      }
+      const result = await testSettingsLlmModel(testConfig)
+      setDefaultModelTestState({
+        loading: false,
+        success: true,
+        message: t("settings.sections.shared.testSuccessWithModel", { model: result.model }),
+      })
+    } catch (error) {
+      setDefaultModelTestState({
+        loading: false,
+        success: false,
+        message: t("settings.sections.shared.testFailed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -99,14 +138,33 @@ export function LlmProviderSection() {
         <p className="text-xs text-muted-foreground">
           {t("settings.sections.llm.defaultLlmModelHint")}
         </p>
-        <ChatModelSelector
-          value={defaultLlmModel || ""}
-          onChange={async (model) => {
-            setDefaultLlmModel(model)
-            const { saveDefaultLlmModel } = await import("@/lib/project-store")
-            await saveDefaultLlmModel(model)
-          }}
-        />
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <ChatModelSelector
+              value={defaultLlmModel || ""}
+              onChange={async (model) => {
+                setDefaultLlmModel(model)
+                const { saveDefaultLlmModel } = await import("@/lib/project-store")
+                await saveDefaultLlmModel(model)
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void testDefaultModel()}
+            disabled={defaultModelTestState?.loading || !defaultLlmModel}
+            className="shrink-0 rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {defaultModelTestState?.loading
+              ? t("settings.sections.shared.testing")
+              : t("settings.sections.shared.testModel")}
+          </button>
+        </div>
+        {defaultModelTestState?.message ? (
+          <p className={`text-xs ${defaultModelTestState.success ? "text-emerald-600" : "text-destructive"}`}>
+            {defaultModelTestState.message}
+          </p>
+        ) : null}
       </div>
 
       {/* Custom Provider Cards - 放在顶部 */}

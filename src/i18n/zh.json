@@ -446,6 +446,7 @@
         "fetchModels": "拉取模型",
         "defaultLlmModel": "默认模型",
         "defaultLlmModelHint": "AI 会话提取记忆、提取角色等后台任务默认使用的模型。留空则使用 AI 会话当前选中的模型。",
+        "pleaseSelectModel": "请先选择模型",
         "loadingModels": "拉取中...",
         "savedBadge": "已保存",
         "configuredBadge": "已配置",
