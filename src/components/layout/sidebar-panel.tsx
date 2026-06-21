@@ -1243,8 +1243,19 @@ export function SidebarPanel() {
     return (
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-          <div className="text-sm font-semibold text-foreground">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             {t("novel.memoryCenter.title")}
+            <button
+              type="button"
+              className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-primary"
+              title="记忆中心功能使用说明"
+              onClick={(e) => {
+                e.stopPropagation()
+                void openExternalUrl("https://tcnk9ik08e1c.feishu.cn/wiki/SMrtwpJdsi4H5EkP0CicfsOhnvf?from=from_copylink")
+              }}
+            >
+              <CircleHelp className="h-3.5 w-3.5" />
+            </button>
           </div>
           <Button
             type="button"
@@ -1306,8 +1317,21 @@ export function SidebarPanel() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-foreground">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             {isChapter ? t("sidebar.knowledge") : t("sidebar.files")}
+            <button
+              type="button"
+              className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-primary"
+              title={isChapter ? "章节功能使用说明" : "大纲功能使用说明"}
+              onClick={(e) => {
+                e.stopPropagation()
+                void openExternalUrl(isChapter
+                  ? "https://tcnk9ik08e1c.feishu.cn/wiki/AOkuw8KtCixoVqko4gpc8rYGnNc?from=from_copylink"
+                  : "https://tcnk9ik08e1c.feishu.cn/wiki/CtUhwqUUBiQhOZk6OcHcc4uHnDd?from=from_copylink")
+              }}
+            >
+              <CircleHelp className="h-3.5 w-3.5" />
+            </button>
           </div>
           {isChapter && sidebarTotalWordCount !== null ? (
             <div className="mt-0.5 text-xs text-muted-foreground">

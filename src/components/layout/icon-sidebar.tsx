@@ -1,5 +1,5 @@
 import {
-  FileText, FolderOpen, Search, Network, Brain, Settings, ArrowLeftRight, Sun, Moon, Monitor, Trash2, Sparkles, LayoutDashboard, BookOpen, CircleHelp,
+  FileText, FolderOpen, Search, Network, Brain, Settings, ArrowLeftRight, Sun, Moon, Monitor, Trash2, Sparkles, LayoutDashboard, BookOpen,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next"
 import logoImg from "@/assets/QM-LOGO.png"
 import type { WikiState } from "@/stores/wiki-store"
 import { saveTheme } from "@/lib/project-store"
-import { openExternalUrl } from "@/lib/open-external-url"
 
 type NavView = WikiState["activeView"]
 
@@ -17,17 +16,6 @@ const SEARCH_NAV_ITEM: { view: NavView; icon: typeof FileText; labelKey: string;
   icon: Search,
   labelKey: "nav.search",
   novelLabelKey: "novel.nav.search",
-}
-
-// 功能使用说明文档链接
-const USAGE_GUIDE_URLS: Record<string, string> = {
-  wiki: "https://tcnk9ik08e1c.feishu.cn/wiki/AOkuw8KtCixoVqko4gpc8rYGnNc?from=from_copylink",
-  sources: "https://tcnk9ik08e1c.feishu.cn/wiki/CtUhwqUUBiQhOZk6OcHcc4uHnDd?from=from_copylink",
-  graph: "https://tcnk9ik08e1c.feishu.cn/wiki/Yrb6wfFzqiFy8akW4xAcTz3EnKh?from=from_copylink",
-  lint: "https://tcnk9ik08e1c.feishu.cn/wiki/SMrtwpJdsi4H5EkP0CicfsOhnvf?from=from_copylink",
-  soul: "https://tcnk9ik08e1c.feishu.cn/wiki/Az3owqt2kiDxBbkls0Gc3K7ZnNc?from=from_copylink",
-  reviewCenter: "https://tcnk9ik08e1c.feishu.cn/wiki/Tfp8w6hNWinb2okPvvEc3veZnZf?from=from_copylink",
-  settings: "https://tcnk9ik08e1c.feishu.cn/wiki/H8F7wRVqeifGDakS7jXcSkO4nlg?from=from_copylink",
 }
 
 const NAV_ITEMS: { view: NavView; icon: typeof FileText; labelKey: string; novelLabelKey: string }[] = [
@@ -153,27 +141,6 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
                     {pendingCount > 99 ? "99+" : pendingCount}
                   </span>
                 )}
-                {/* 帮助图标：hover时显示在右上角，点击打开使用说明 */}
-                {USAGE_GUIDE_URLS[view] && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="absolute -right-1 -top-1 flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100 [button:hover_&]:opacity-100"
-                    title={t("iconSidebar.usageGuide")}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void openExternalUrl(USAGE_GUIDE_URLS[view])
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.stopPropagation()
-                        void openExternalUrl(USAGE_GUIDE_URLS[view])
-                      }
-                    }}
-                  >
-                    <CircleHelp className="h-2.5 w-2.5" />
-                  </span>
-                )}
               </TooltipTrigger>
               <TooltipContent side="right">
                 {t(novelMode ? novelLabelKey : labelKey)}
@@ -241,27 +208,6 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
               }`}
             >
               <Settings className="h-5 w-5" />
-              {/* 帮助图标：hover时显示在右上角，点击打开使用说明 */}
-              {USAGE_GUIDE_URLS.settings && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="absolute -right-1 -top-1 flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground opacity-0 transition-opacity hover:text-primary [button:hover_&]:opacity-100"
-                  title={t("iconSidebar.usageGuide")}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void openExternalUrl(USAGE_GUIDE_URLS.settings)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.stopPropagation()
-                      void openExternalUrl(USAGE_GUIDE_URLS.settings)
-                    }
-                  }}
-                >
-                  <CircleHelp className="h-2.5 w-2.5" />
-                </span>
-              )}
             </TooltipTrigger>
             <TooltipContent side="right">
               {t(novelMode ? "novel.nav.settings" : "nav.settings")}

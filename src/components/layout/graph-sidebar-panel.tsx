@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next"
 import { useWikiStore } from "@/stores/wiki-store"
-import { Filter, SlidersHorizontal, RefreshCw } from "lucide-react"
+import { Filter, SlidersHorizontal, RefreshCw, CircleHelp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { GRAPH_MODE_LABELS, type GraphMode } from "@/lib/graph-mode"
+import { openExternalUrl } from "@/lib/open-external-url"
 
 type ColorMode = "type" | "community"
 type GraphDisplayMode = "graph" | "document" | "mindmap"
@@ -35,8 +36,19 @@ export function GraphSidebarPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-        <div className="text-sm font-semibold text-foreground">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           {t("novel.graph.title")}
+          <button
+            type="button"
+            className="inline-flex items-center justify-center text-muted-foreground transition-colors hover:text-primary"
+            title="小说图谱功能使用说明"
+            onClick={(e) => {
+              e.stopPropagation()
+              void openExternalUrl("https://tcnk9ik08e1c.feishu.cn/wiki/Yrb6wfFzqiFy8akW4xAcTz3EnKh?from=from_copylink")
+            }}
+          >
+            <CircleHelp className="h-3.5 w-3.5" />
+          </button>
         </div>
         <Button
           type="button"
