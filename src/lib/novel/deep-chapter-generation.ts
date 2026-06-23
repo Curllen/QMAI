@@ -1,9 +1,8 @@
-import type { LlmConfig } from "@/stores/wiki-store"
+﻿import type { LlmConfig } from "@/stores/wiki-store"
 import { streamChat, type ChatMessage, type RequestOverrides, type StreamCallbacks } from "@/lib/llm-client"
 import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
 import { useWikiStore } from "@/stores/wiki-store"
 import { buildContextPack, contextPackToPrompt, type ContextPack } from "./context-engine"
-import { resolveNovelModel } from "./model-resolver"
 import { reviewChapter, type NovelReviewResult } from "./review-adapter"
 import type { TaskRouteResult } from "./task-router"
 import type { GoldenThreeChapterRequest } from "./golden-three-chapters"
@@ -510,8 +509,10 @@ function resolveCurrentChapterLengthSpec(): ChapterLengthSpec {
 }
 
 function resolveWritingConfig(llmConfig: LlmConfig): LlmConfig {
-  const novelConfig = useWikiStore.getState().novelConfig
-  return resolveNovelModel(llmConfig, novelConfig, "writing")
+  // 写作模型已移除，始终使用 AI 会话当前模型。
+  // llmConfig 已在 chat-panel.tsx 中通过 effectiveChatLlmConfig 正确解析，
+  // 不再通过 resolveNovelModel 重新解析，避免二次解析使用不同 API 端点/密钥
+  return llmConfig
 }
 
 /**

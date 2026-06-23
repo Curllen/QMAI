@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Plus, Trash2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -203,17 +203,14 @@ function CustomProviderCardItem({
     success: boolean
     message: string
   } | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [manualModelInput, setManualModelInput] = useState(card.model)
 
   const llmConfig = useWikiStore((s) => s.llmConfig)
 
-  // 自动调整 textarea 高度
+  // 同步外部 card.model 变化到本地输入
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px"
-    }
-  }, [card.savedModels])
+    setManualModelInput(card.model)
+  }, [card.model])
 
   const resolvedConfig = useMemo(() => {
     const preset = {
@@ -267,12 +264,13 @@ function CustomProviderCardItem({
     }
   }
 
-  async function testSelectedModels() {
-    if (card.savedModels.length === 0) {
+  async function testCurrentModel() {
+    const modelToTest = manualModelInput.trim()
+    if (!modelToTest) {
       setModelTestState({
         loading: false,
         success: false,
-        message: "没有选择任何模型",
+        message: "请先输入或选择模型",
       })
       return
     }
@@ -280,45 +278,44 @@ function CustomProviderCardItem({
     setModelTestState({
       loading: true,
       success: false,
-      message: `正在测试 ${card.savedModels.length} 个模型...`,
+      message: `正在测试模型 ${modelToTest}...`,
     })
 
-    const results: { model: string; success: boolean; error?: string }[] = []
-
-    for (const savedModel of card.savedModels) {
-      const testConfig = {
-        ...resolvedConfig,
-        model: savedModel.model,
-      }
-
-      try {
-        await testSettingsLlmModel(testConfig)
-        results.push({ model: savedModel.model, success: true })
-      } catch (error) {
-        results.push({
-          model: savedModel.model,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
+    const testConfig = {
+      ...resolvedConfig,
+      model: modelToTest,
     }
 
-    const successCount = results.filter((r) => r.success).length
-    const failedModels = results.filter((r) => !r.success)
-
-    if (successCount === card.savedModels.length) {
+    try {
+      const result = await testSettingsLlmModel(testConfig)
       setModelTestState({
         loading: false,
         success: true,
-        message: `测试完成：${successCount}/${card.savedModels.length} 个模型可用`,
+        message: `模型 ${result.model} 测试成功`,
       })
-    } else {
+    } catch (error) {
       setModelTestState({
         loading: false,
         success: false,
-        message: `测试完成：${successCount}/${card.savedModels.length} 个模型可用，${failedModels.map((f) => f.model).join(", ")} 不可用`,
+        message: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  function addManualModelToSaved() {
+    const modelToAdd = manualModelInput.trim()
+    if (!modelToAdd) return
+    // 避免重复添加
+    if (card.savedModels.some((m) => m.model === modelToAdd)) return
+    const newModel: SavedModel = {
+      id: `model-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: modelToAdd,
+      model: modelToAdd,
+      apiKey: card.apiKey,
+      customEndpoint: card.baseUrl,
+      createdAt: Date.now(),
+    }
+    onUpdate({ savedModels: [...card.savedModels, newModel] })
   }
 
   function toggleModelSelection(modelId: string) {
@@ -562,20 +559,37 @@ function CustomProviderCardItem({
             </div>
           )}
 
-          {/* Model - Display selected models */}
+          {/* Model - Manual input + selected models display */}
           <div className="space-y-2">
             <Label htmlFor={`${card.id}-model`} className="text-xs">
               模型
             </Label>
-            <textarea
-              ref={textareaRef}
-              id={`${card.id}-model`}
-              value={card.savedModels.length > 0 ? card.savedModels.map((m) => m.model).join(", ") : ""}
-              readOnly
-              placeholder="请先拉取并选择模型"
-              className="flex min-h-[40px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              rows={1}
-            />
+            <div className="flex gap-2">
+              <Input
+                id={`${card.id}-model`}
+                value={manualModelInput}
+                onChange={(e) => {
+                  setManualModelInput(e.target.value)
+                  onUpdate({ model: e.target.value })
+                }}
+                placeholder="输入模型名称或拉取后选择"
+                className="text-sm flex-1"
+              />
+              <button
+                type="button"
+                onClick={addManualModelToSaved}
+                disabled={!manualModelInput.trim() || card.savedModels.some((m) => m.model === manualModelInput.trim())}
+                className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                title="将当前输入的模型添加到已选列表"
+              >
+                添加
+              </button>
+            </div>
+            {card.savedModels.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                已选模型：{card.savedModels.map((m) => m.model).join(", ")}
+              </div>
+            )}
           </div>
 
           {/* Test and Fetch Buttons */}
@@ -593,8 +607,8 @@ function CustomProviderCardItem({
               </button>
               <button
                 type="button"
-                onClick={() => void testSelectedModels()}
-                disabled={modelListState?.loading || modelTestState?.loading || card.savedModels.length === 0}
+                onClick={() => void testCurrentModel()}
+                disabled={modelListState?.loading || modelTestState?.loading || !manualModelInput.trim()}
                 className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {modelTestState?.loading
