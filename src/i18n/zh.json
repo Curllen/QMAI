@@ -1653,6 +1653,8 @@
     "goal": "目标",
     "cause": "起因",
     "expectedOutcome": "预期走向",
+    "coreConflict": "核心冲突",
+    "involvedCharacters": "涉及角色",
     "consistencyScore": "人设一致性",
     "probability": "概率",
     "probabilityHigh": "高",
@@ -1663,6 +1665,14 @@
     "actualWords": "实际字数",
     "totalWords": "总字数",
     "error": "错误",
-    "retry": "重试"
+    "retry": "重试",
+    "back": "返回",
+    "copied": "已复制",
+    "keyEvents": "关键事件",
+    "behaviors": "行为",
+    "motivation": "动机",
+    "stateChanges": "状态变化",
+    "summary": "摘要",
+    "recommended": "推荐"
   }
 }

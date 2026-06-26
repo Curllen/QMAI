@@ -1776,6 +1776,8 @@
     "goal": "Goal",
     "cause": "Cause",
     "expectedOutcome": "Expected Outcome",
+    "coreConflict": "Core Conflict",
+    "involvedCharacters": "Involved Characters",
     "consistencyScore": "Consistency Score",
     "probability": "Probability",
     "probabilityHigh": "High",
@@ -1786,6 +1788,14 @@
     "actualWords": "Actual Words",
     "totalWords": "Total Words",
     "error": "Error",
-    "retry": "Retry"
+    "retry": "Retry",
+    "back": "Back",
+    "copied": "Copied",
+    "keyEvents": "Key Events",
+    "behaviors": "Behaviors",
+    "motivation": "Motivation",
+    "stateChanges": "State Changes",
+    "summary": "Summary",
+    "recommended": "Recommended"
   }
 }
