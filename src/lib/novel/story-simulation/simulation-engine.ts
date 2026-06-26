@@ -628,7 +628,7 @@ function formatActionDescription(action: AgentAction, agentName: string): string
 // ── 内部辅助：检查节点是否达成目标（简单启发式） ──
 
 function isNodeGoalReached(
-  node: StoryNode,
+  _node: StoryNode,
   nodeTimelineEvents: TimelineEvent[],
   maxRounds: number,
   currentRound: number,

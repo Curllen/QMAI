@@ -6,7 +6,6 @@ import type {
   AgentChatSession,
   NovelAgent,
   SimulationState,
-  TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
 import { formatTimelineEvent, getVisibleEvents } from "@/lib/novel/story-simulation/agent-profile-builder"
 

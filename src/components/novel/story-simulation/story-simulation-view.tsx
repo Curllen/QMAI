@@ -118,7 +118,6 @@ export function StorySimulationView() {
   const agentChatMessages = useStorySimulationStore((s) => s.agentChatMessages)
   const clearAgentChat = useStorySimulationStore((s) => s.clearAgentChat)
   const bumpListRefresh = useStorySimulationStore((s) => s.bumpListRefresh)
-  const reset = useStorySimulationStore((s) => s.reset)
 
   // 保存仿真后的 agents 和 state 供采访使用
   const lastAgentsRef = useRef<NovelAgent[]>([])
