@@ -27,7 +27,7 @@ import { FrameworkList } from "@/components/novel/story-simulation/framework-lis
 
 import { useWikiStore } from "@/stores/wiki-store"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
-import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
+import { loadFrameworks, loadSimulationResults } from "@/lib/novel/story-simulation/framework-store"
 import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import type { StoryFramework } from "@/lib/novel/story-simulation/types"
 import { createDirectory, fileExists, listDirectory, preprocessFile, readFile, writeFile } from "@/commands/fs"
@@ -348,8 +348,29 @@ function StorySimulationSidebarPanel() {
   const setFrameworks = useStorySimulationStore((s) => s.setFrameworks)
   const setBinding = useStorySimulationStore((s) => s.setBinding)
   const setCurrentFramework = useStorySimulationStore((s) => s.setCurrentFramework)
+  const setCurrentReport = useStorySimulationStore((s) => s.setCurrentReport)
   const setPhase = useStorySimulationStore((s) => s.setPhase)
+  const setSavedResults = useStorySimulationStore((s) => s.setSavedResults)
+  const setSelectedResultId = useStorySimulationStore((s) => s.setSelectedResultId)
+  const currentFramework = useStorySimulationStore((s) => s.currentFramework)
+  const savedResults = useStorySimulationStore((s) => s.savedResults)
   const reset = useStorySimulationStore((s) => s.reset)
+
+  // 加载指定框架的历史推演结果
+  const loadResultsForFramework = useCallback(async (frameworkId: string) => {
+    if (!projectPath) return
+    try {
+      const results = await loadSimulationResults(projectPath, frameworkId)
+      setSavedResults(results.map(r => ({
+        id: r.id,
+        frameworkId,
+        report: r.report,
+        createdAt: r.report.createdAt,
+      })))
+    } catch {
+      setSavedResults([])
+    }
+  }, [projectPath, setSavedResults])
 
   // 进入视图时加载框架列表和绑定
   useEffect(() => {
@@ -373,9 +394,29 @@ function StorySimulationSidebarPanel() {
     }
   }, [projectPath, setFrameworks, setBinding])
 
+  // 当currentFramework变化时，加载其历史结果
+  useEffect(() => {
+    if (currentFramework) {
+      void loadResultsForFramework(currentFramework.id)
+    } else {
+      setSavedResults([])
+    }
+  }, [currentFramework, loadResultsForFramework, setSavedResults])
+
   const handleSelectFramework = (framework: StoryFramework) => {
     setCurrentFramework(framework)
+    setCurrentReport(null)
+    setSelectedResultId(null)
     setPhase("framework-confirming")
+  }
+
+  const handleSelectResult = (resultId: string) => {
+    const result = savedResults.find(r => r.id === resultId)
+    if (result) {
+      setCurrentReport(result.report)
+      setSelectedResultId(resultId)
+      setPhase("report-viewing")
+    }
   }
 
   const handleNewFramework = () => {
@@ -398,12 +439,44 @@ function StorySimulationSidebarPanel() {
           新建框架
         </Button>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <FrameworkList
           onSelectFramework={handleSelectFramework}
           onNewFramework={handleNewFramework}
         />
       </div>
+      {/* 历史推演结果 */}
+      {currentFramework && savedResults.length > 0 && (
+        <div className="shrink-0 border-t">
+          <div className="flex items-center justify-between px-3 py-2">
+            <div className="text-xs font-semibold text-muted-foreground">
+              历史推演 ({savedResults.length})
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto px-2 pb-2">
+            {savedResults.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                onClick={() => handleSelectResult(result.id)}
+                className="flex w-full flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+              >
+                <span className="truncate text-foreground">
+                  {new Date(result.createdAt).toLocaleString("zh-CN", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {result.report.recommendation?.slice(0, 30) || "查看推演结果"}...
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

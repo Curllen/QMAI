@@ -10,6 +10,13 @@ import type {
   TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
 
+export interface SavedSimulationResult {
+  id: string
+  frameworkId: string
+  report: SimulationReport
+  createdAt: string
+}
+
 export type SimulationPhase =
   | "idle"
   | "configuring"
@@ -48,6 +55,10 @@ export interface StorySimulationState {
   agentChatMessages: AgentChatMessage[]
   /** 列表刷新计数（用于触发 framework-list 重新加载） */
   listRefreshKey: number
+  /** 当前框架下已保存的推演结果 */
+  savedResults: SavedSimulationResult[]
+  /** 当前选中查看的历史结果ID */
+  selectedResultId: string | null
 
   setPhase: (phase: SimulationPhase) => void
   setMode: (mode: SimulationMode) => void
@@ -70,6 +81,8 @@ export interface StorySimulationState {
   addAgentChatMessage: (message: AgentChatMessage) => void
   clearAgentChat: () => void
   bumpListRefresh: () => void
+  setSavedResults: (results: SavedSimulationResult[]) => void
+  setSelectedResultId: (id: string | null) => void
   reset: () => void
 }
 
@@ -94,6 +107,8 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
   activeChatAgent: null,
   agentChatMessages: [],
   listRefreshKey: 0,
+  savedResults: [],
+  selectedResultId: null,
 
   setPhase: (phase) => set({ phase }),
   setMode: (mode) => set({ mode }),
@@ -118,6 +133,8 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
     set((state) => ({ agentChatMessages: [...state.agentChatMessages, message] })),
   clearAgentChat: () => set({ agentChatMessages: [], activeChatAgent: null }),
   bumpListRefresh: () => set((state) => ({ listRefreshKey: state.listRefreshKey + 1 })),
+  setSavedResults: (savedResults) => set({ savedResults }),
+  setSelectedResultId: (selectedResultId) => set({ selectedResultId }),
   reset: () =>
     set({
       phase: "idle",
@@ -131,5 +148,7 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
       timelineEvents: [],
       activeChatAgent: null,
       agentChatMessages: [],
+      savedResults: [],
+      selectedResultId: null,
     }),
 }))

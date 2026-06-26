@@ -1,8 +1,10 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network } from "lucide-react"
+import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
+import { useWikiStore } from "@/stores/wiki-store"
+import { exportReport } from "@/lib/novel/story-simulation/report-export"
 import type { StoryBranch } from "@/lib/novel/story-simulation/types"
 
 const PROBABILITY_COLORS: Record<string, string> = {
@@ -49,10 +51,38 @@ export function SimulationReportView({
   onInterviewAgent,
 }: SimulationReportViewProps) {
   const { t } = useTranslation()
+  const projectPath = useWikiStore((s) => s.project?.path)
   const report = useStorySimulationStore((s) => s.currentReport)
+  const currentFramework = useStorySimulationStore((s) => s.currentFramework)
   const timelineEvents = useStorySimulationStore((s) => s.timelineEvents)
+  const setError = useStorySimulationStore((s) => s.setError)
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async () => {
+    if (!projectPath || !report || !currentFramework) return
+    setExporting(true)
+    try {
+      const filePath = await exportReport(projectPath, currentFramework, report, timelineEvents)
+      setError(`报告已导出到：${filePath}`)
+      setTimeout(() => setError(null), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (!report) return null
+
+  // 构建名字到ID的映射
+  const nameToId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const ca of report.characterAnalyses) {
+      map.set(ca.name, ca.characterId)
+    }
+    return map
+  }, [report.characterAnalyses])
 
   // 构建角色关系网络数据
   const relationshipData = useMemo(() => {
@@ -113,10 +143,21 @@ export function SimulationReportView({
           <TrendingUp className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">{t("storySimulation.reportTitle")}</h2>
         </div>
-        <Button variant="outline" size="sm" onClick={onResimulate}>
-          <RefreshCw className="h-3.5 w-3.5" />
-          {t("storySimulation.resimulate")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            <Download className="mr-1 h-3.5 w-3.5" />
+            {exporting ? "导出中..." : "导出报告"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={onResimulate}>
+            <RefreshCw className="mr-1 h-3.5 w-3.5" />
+            {t("storySimulation.resimulate")}
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -148,14 +189,32 @@ export function SimulationReportView({
                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                         节点{ev.nodeIndex + 1}·R{ev.round + 1}
                       </span>
-                      <span className="font-medium">{ev.actorName}</span>
+                      <button
+                        type="button"
+                        className="font-medium text-primary hover:underline"
+                        onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                      >
+                        {ev.actorName}
+                      </button>
                       <span className="text-xs text-muted-foreground">
                         {actionLabel(ev.actionType)}
                       </span>
                       {ev.targetName && (
-                        <span className="text-xs text-muted-foreground">
-                          → {ev.targetName}
-                        </span>
+                        <>
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <button
+                            type="button"
+                            className="text-xs text-primary hover:underline"
+                            onClick={() => {
+                              const targetId = ev.targetId || nameToId.get(ev.targetName || "")
+                              if (targetId && ev.targetName) {
+                                onInterviewAgent(targetId, ev.targetName)
+                              }
+                            }}
+                          >
+                            {ev.targetName}
+                          </button>
+                        </>
                       )}
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-foreground/90">

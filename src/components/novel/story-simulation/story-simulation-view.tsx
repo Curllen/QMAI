@@ -13,7 +13,7 @@ import {
 } from "@/lib/novel/story-simulation/simulation-engine"
 import { generateSimulationReport } from "@/lib/novel/story-simulation/simulation-report-agent"
 import { generateStoryDraft } from "@/lib/novel/story-simulation/story-draft-generator"
-import { saveFramework } from "@/lib/novel/story-simulation/framework-store"
+import { saveFramework, saveSimulationResult, loadSimulationResults } from "@/lib/novel/story-simulation/framework-store"
 import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import { interviewAgent } from "@/lib/novel/story-simulation/agent-interview"
 import { exportInterview } from "@/lib/novel/story-simulation/interview-export"
@@ -120,6 +120,7 @@ export function StorySimulationView() {
   const agentChatMessages = useStorySimulationStore((s) => s.agentChatMessages)
   const clearAgentChat = useStorySimulationStore((s) => s.clearAgentChat)
   const bumpListRefresh = useStorySimulationStore((s) => s.bumpListRefresh)
+  const setSavedResults = useStorySimulationStore((s) => s.setSavedResults)
 
   // 保存仿真后的 agents 和 state 供采访使用
   const lastAgentsRef = useRef<NovelAgent[]>([])
@@ -289,6 +290,21 @@ export function StorySimulationView() {
       })
       setCurrentReport(report)
       setPhase("report-viewing")
+
+      // 自动保存推演结果
+      try {
+        await saveSimulationResult(projectPath, currentFramework.id, report)
+        // 刷新历史结果列表
+        const results = await loadSimulationResults(projectPath, currentFramework.id)
+        setSavedResults(results.map(r => ({
+          id: r.id,
+          frameworkId: currentFramework.id,
+          report: r.report,
+          createdAt: r.report.createdAt,
+        })))
+      } catch (saveErr) {
+        console.error("保存推演结果失败:", saveErr)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase("framework-confirming")
