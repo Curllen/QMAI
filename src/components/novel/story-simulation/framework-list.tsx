@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { Plus, Link2, Unlink } from "lucide-react"
+import { Link2, Trash2 } from "lucide-react"
 
 import { useWikiStore } from "@/stores/wiki-store"
 import {
   useStorySimulationStore,
 } from "@/stores/story-simulation-store"
-import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
+import { deleteFramework, loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
 import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import { Button } from "@/components/ui/button"
 import type { StoryFramework } from "@/lib/novel/story-simulation/types"
@@ -15,21 +15,38 @@ import { FrameworkBindingDialog } from "./framework-binding-dialog"
 interface FrameworkListProps {
   onSelectFramework: (framework: StoryFramework) => void
   onNewFramework: () => void
+  /** 刷新计数：外部 bump 时触发重新加载 */
+  refreshKey?: number
+}
+
+/** 计算卡片显示标题：优先 shortTitle，否则截取 title 前 8 字。 */
+function displayTitle(fw: StoryFramework): string {
+  if (fw.shortTitle && fw.shortTitle.trim().length > 0) {
+    return fw.shortTitle
+  }
+  if (fw.title.length <= 8) return fw.title
+  return fw.title.slice(0, 8) + "..."
 }
 
 export function FrameworkList({
   onSelectFramework,
   onNewFramework,
+  refreshKey,
 }: FrameworkListProps) {
   const projectPath = useWikiStore((s) => s.project?.path)
   const frameworks = useStorySimulationStore((s) => s.frameworks)
   const setFrameworks = useStorySimulationStore((s) => s.setFrameworks)
   const binding = useStorySimulationStore((s) => s.binding)
   const setBinding = useStorySimulationStore((s) => s.setBinding)
+  const currentFrameworkId = useStorySimulationStore(
+    (s) => s.currentFramework?.id ?? null,
+  )
+  const listRefreshKey = useStorySimulationStore((s) => s.listRefreshKey)
 
   const [loading, setLoading] = useState(true)
   const [dialogFramework, setDialogFramework] =
     useState<StoryFramework | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectPath) {
@@ -57,71 +74,109 @@ export function FrameworkList({
     return () => {
       cancelled = true
     }
-  }, [projectPath, setFrameworks, setBinding])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath, setFrameworks, setBinding, refreshKey, listRefreshKey])
+
+  const handleDelete = async (framework: StoryFramework) => {
+    if (!projectPath) return
+    const confirmed = window.confirm(
+      `确定删除框架「${framework.title}」吗？删除后不可恢复。`,
+    )
+    if (!confirmed) return
+    setDeletingId(framework.id)
+    try {
+      await deleteFramework(projectPath, framework.id)
+      const list = await loadFrameworks(projectPath)
+      setFrameworks(list)
+    } catch {
+      // 删除失败不做额外提示
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   if (!projectPath) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-4 text-xs text-muted-foreground">
         请先打开一个项目
       </div>
     )
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-medium">故事框架</h3>
-        <Button size="sm" onClick={onNewFramework}>
-          <Plus className="mr-1 h-4 w-4" />
-          新建框架
-        </Button>
-      </div>
-
+    <div className="flex h-full flex-col">
       {loading ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
           加载中...
         </div>
       ) : frameworks.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          暂无故事框架
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
+          <div className="text-xs text-muted-foreground">暂无故事框架</div>
+          <Button size="sm" variant="outline" onClick={onNewFramework}>
+            新建框架
+          </Button>
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-2 overflow-auto">
+        <div className="flex-1 space-y-1 overflow-y-auto p-2">
           {frameworks.map((framework) => {
             const isBound = binding?.frameworkId === framework.id
+            const isSelected = currentFrameworkId === framework.id
             return (
               <div
                 key={framework.id}
-                className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
+                className={`group flex w-full items-center gap-1 rounded-md border px-2 py-1.5 text-left transition ${
+                  isSelected
+                    ? "border-primary bg-primary/10"
+                    : "bg-background hover:bg-muted"
+                }`}
               >
                 <button
                   type="button"
-                  className="flex flex-1 flex-col items-start gap-1 text-left"
+                  className="flex min-w-0 flex-1 flex-col items-start"
                   onClick={() => onSelectFramework(framework)}
                 >
-                  <span className="font-medium">{framework.title}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {framework.nodes.length} 个节点 · 目标{" "}
-                    {framework.targetWords} 字
+                  <span
+                    className="w-full truncate text-sm font-medium"
+                    title={framework.title}
+                  >
+                    {displayTitle(framework)}
+                  </span>
+                  <span className="mt-0.5 text-[11px] text-muted-foreground">
+                    {framework.nodes.length} 节点 · {framework.targetWords} 字
+                    {isBound ? " · 已绑定" : ""}
                   </span>
                 </button>
-                <Button
-                  size="sm"
-                  variant={isBound ? "outline" : "default"}
-                  onClick={() => setDialogFramework(framework)}
-                >
-                  {isBound ? (
-                    <>
-                      <Unlink className="mr-1 h-4 w-4" />
-                      取消绑定
-                    </>
-                  ) : (
-                    <>
-                      <Link2 className="mr-1 h-4 w-4" />
-                      绑定到 AI 会话
-                    </>
-                  )}
-                </Button>
+                <div className="flex shrink-0 items-center opacity-60 group-hover:opacity-100">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    title={isBound ? "管理绑定" : "绑定到 AI 会话"}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDialogFramework(framework)
+                    }}
+                  >
+                    <Link2
+                      className={`h-3.5 w-3.5 ${isBound ? "text-primary" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    title="删除框架"
+                    disabled={deletingId === framework.id}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDelete(framework)
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             )
           })}

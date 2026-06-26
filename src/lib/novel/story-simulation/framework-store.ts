@@ -76,6 +76,9 @@ export function frameworkToMarkdown(framework: StoryFramework): string {
   lines.push(`id: ${yamlString(framework.id)}`)
   lines.push(`type: "story-framework"`)
   lines.push(`title: ${yamlString(framework.title)}`)
+  if (framework.shortTitle) {
+    lines.push(`shortTitle: ${yamlString(framework.shortTitle)}`)
+  }
   lines.push(`createdAt: ${yamlString(framework.createdAt)}`)
   lines.push(`sourceChapters: ${framework.sourceChapters}`)
   lines.push(`targetWords: ${framework.targetWords}`)
@@ -239,6 +242,8 @@ export function markdownToFramework(
 
     const id = fmStr(fm.id) || fallbackId || `fw-${Date.now()}`
     const title = fmStr(fm.title) || "未命名框架"
+    const shortTitleValue = fmStr(fm.shortTitle)
+    const shortTitle = shortTitleValue || undefined
     const createdAt = fmStr(fm.createdAt) || new Date().toISOString()
     const sourceChapters = parseInt(fmStr(fm.sourceChapters), 10) || 0
     const targetWords = parseInt(fmStr(fm.targetWords), 10) || 0
@@ -258,6 +263,7 @@ export function markdownToFramework(
     return {
       id,
       title,
+      shortTitle,
       premise,
       targetWords,
       simulationMode,

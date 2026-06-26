@@ -1,4 +1,6 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Check } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
@@ -8,6 +10,7 @@ import { cn } from "@/lib/utils"
 interface FrameworkConfirmPanelProps {
   onConfirm: () => void
   onRegenerate: () => void
+  onSave?: () => void
 }
 
 // 起/承/转/合 阶段对应的标签配色
@@ -21,11 +24,20 @@ const PHASE_STYLES: Record<StoryNode["phase"], string> = {
 export function FrameworkConfirmPanel({
   onConfirm,
   onRegenerate,
+  onSave,
 }: FrameworkConfirmPanelProps) {
   const { t } = useTranslation()
   const currentFramework = useStorySimulationStore((s) => s.currentFramework)
+  const [savedTip, setSavedTip] = useState(false)
 
   if (!currentFramework) return null
+
+  const handleSave = () => {
+    if (!onSave) return
+    onSave()
+    setSavedTip(true)
+    setTimeout(() => setSavedTip(false), 2000)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,10 +46,22 @@ export function FrameworkConfirmPanel({
         <h3 className="text-lg font-semibold">
           {t("storySimulation.frameworkTitle")}
         </h3>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button variant="outline" onClick={onRegenerate}>
             {t("storySimulation.regenerateFramework")}
           </Button>
+          {onSave && (
+            <Button variant="outline" onClick={handleSave}>
+              {savedTip ? (
+                <>
+                  <Check className="mr-1 h-4 w-4 text-emerald-500" />
+                  已保存
+                </>
+              ) : (
+                "保存框架"
+              )}
+            </Button>
+          )}
           <Button onClick={onConfirm}>
             {t("storySimulation.confirmFramework")}
           </Button>

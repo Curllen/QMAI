@@ -23,8 +23,13 @@ import { GraphSidebarPanel } from "./graph-sidebar-panel"
 import { SoulSidebarPanel } from "./soul-sidebar-panel"
 import { ReviewCenterSidebarPanel } from "./review-center-sidebar-panel"
 import { BookAnalysisSidebarPanel } from "./book-analysis-sidebar-panel"
+import { FrameworkList } from "@/components/novel/story-simulation/framework-list"
 
 import { useWikiStore } from "@/stores/wiki-store"
+import { useStorySimulationStore } from "@/stores/story-simulation-store"
+import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
+import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
+import type { StoryFramework } from "@/lib/novel/story-simulation/types"
 import { createDirectory, fileExists, listDirectory, preprocessFile, readFile, writeFile } from "@/commands/fs"
 import { countChapterBodyWords } from "@/lib/chapter-word-count"
 import { buildChapterTotalWordCountLabel } from "@/lib/chapter-display"
@@ -336,6 +341,72 @@ export function DismantlingSidebarPanel() {
 }
 
 void DismantlingSidebarPanel
+
+/** 剧情推演室侧边栏：头部标题+新建按钮 + 框架列表 */
+function StorySimulationSidebarPanel() {
+  const projectPath = useWikiStore((s) => s.project?.path)
+  const setFrameworks = useStorySimulationStore((s) => s.setFrameworks)
+  const setBinding = useStorySimulationStore((s) => s.setBinding)
+  const setCurrentFramework = useStorySimulationStore((s) => s.setCurrentFramework)
+  const setPhase = useStorySimulationStore((s) => s.setPhase)
+  const reset = useStorySimulationStore((s) => s.reset)
+
+  // 进入视图时加载框架列表和绑定
+  useEffect(() => {
+    if (!projectPath) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [list, currentBinding] = await Promise.all([
+          loadFrameworks(projectPath),
+          loadBinding(projectPath),
+        ])
+        if (cancelled) return
+        setFrameworks(list)
+        setBinding(currentBinding)
+      } catch {
+        // 忽略加载错误
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [projectPath, setFrameworks, setBinding])
+
+  const handleSelectFramework = (framework: StoryFramework) => {
+    setCurrentFramework(framework)
+    setPhase("framework-confirming")
+  }
+
+  const handleNewFramework = () => {
+    reset()
+    setPhase("configuring")
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+        <div className="text-sm font-semibold text-foreground">故事框架</div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs"
+          onClick={handleNewFramework}
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          新建框架
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1">
+        <FrameworkList
+          onSelectFramework={handleSelectFramework}
+          onNewFramework={handleNewFramework}
+        />
+      </div>
+    </div>
+  )
+}
 
 function inferModeFromPath(path: string): "knowledge" | "files" {
   const normalized = normalizePath(path)
@@ -1056,6 +1127,10 @@ export function SidebarPanel() {
       cancelled = true
     }
   }, [activeView, loadMemoryCenter, novelMode, project?.path])
+
+  if (activeView === "storySimulation") {
+    return <StorySimulationSidebarPanel />
+  }
 
   if (activeView === "graph") {
     return <GraphSidebarPanel />

@@ -1,11 +1,13 @@
 import { create } from "zustand"
 import type {
+  AgentChatMessage,
   SimulationMode,
   StoryFramework,
   SimulationReport,
   StoryDraft,
   ExtractionResult,
   FrameworkBinding,
+  TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
 
 export type SimulationPhase =
@@ -36,6 +38,14 @@ export interface StorySimulationState {
   error: string | null
   progress: number
   progressLabel: string
+  /** 仿真过程中的时间线事件（实时流） */
+  timelineEvents: TimelineEvent[]
+  /** 当前正在采访的角色 */
+  activeChatAgent: { id: string; name: string } | null
+  /** 采访对话消息 */
+  agentChatMessages: AgentChatMessage[]
+  /** 列表刷新计数（用于触发 framework-list 重新加载） */
+  listRefreshKey: number
 
   setPhase: (phase: SimulationPhase) => void
   setMode: (mode: SimulationMode) => void
@@ -51,6 +61,12 @@ export interface StorySimulationState {
   setBinding: (binding: FrameworkBinding | null) => void
   setError: (error: string | null) => void
   setProgress: (progress: number, label: string) => void
+  setTimelineEvents: (events: TimelineEvent[]) => void
+  addTimelineEvent: (event: TimelineEvent) => void
+  setActiveChatAgent: (agent: { id: string; name: string } | null) => void
+  addAgentChatMessage: (message: AgentChatMessage) => void
+  clearAgentChat: () => void
+  bumpListRefresh: () => void
   reset: () => void
 }
 
@@ -70,6 +86,10 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
   error: null,
   progress: 0,
   progressLabel: "",
+  timelineEvents: [],
+  activeChatAgent: null,
+  agentChatMessages: [],
+  listRefreshKey: 0,
 
   setPhase: (phase) => set({ phase }),
   setMode: (mode) => set({ mode }),
@@ -85,6 +105,14 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
   setBinding: (binding) => set({ binding }),
   setError: (error) => set({ error }),
   setProgress: (progress, progressLabel) => set({ progress, progressLabel }),
+  setTimelineEvents: (timelineEvents) => set({ timelineEvents }),
+  addTimelineEvent: (event) =>
+    set((state) => ({ timelineEvents: [...state.timelineEvents, event] })),
+  setActiveChatAgent: (activeChatAgent) => set({ activeChatAgent }),
+  addAgentChatMessage: (message) =>
+    set((state) => ({ agentChatMessages: [...state.agentChatMessages, message] })),
+  clearAgentChat: () => set({ agentChatMessages: [], activeChatAgent: null }),
+  bumpListRefresh: () => set((state) => ({ listRefreshKey: state.listRefreshKey + 1 })),
   reset: () =>
     set({
       phase: "idle",
@@ -95,5 +123,8 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
       error: null,
       progress: 0,
       progressLabel: "",
+      timelineEvents: [],
+      activeChatAgent: null,
+      agentChatMessages: [],
     }),
 }))
