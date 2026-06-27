@@ -3,29 +3,6 @@ import type { LlmConfig, ProviderConfigs } from "@/stores/wiki-store"
 export type LlmProvider = LlmConfig["provider"]
 
 /**
- * Providers that don't need an API key to operate:
- *   - `ollama` runs on a local HTTP endpoint with no auth
- *   - `custom` is an OpenAI-compatible local-or-LAN endpoint that
- *     may or may not require auth (LM Studio, llama.cpp, vLLM
- *     defaults are all unauthenticated; users who deploy behind a
- *     proxy can still set apiKey to add Bearer auth)
- *   - `claude-code` spawns the Claude Code CLI subprocess, which
- *     authenticates via the user's existing ~/.claude OAuth — no
- *     API key is needed (or accepted) at this layer.
- *   - `codex-cli` spawns the Codex CLI subprocess, which authenticates
- *     via the user's existing Codex/ChatGPT login.
- *
- * Hosted providers (openai, anthropic, google, minimax) require a
- * key from the user.
- */
-export const PROVIDERS_WITHOUT_KEY: ReadonlySet<LlmProvider> = new Set<LlmProvider>([
-  "ollama",
-  "custom",
-  "claude-code",
-  "codex-cli",
-])
-
-/**
  * Maps LlmConfig.provider values to their corresponding LLM_PRESETS id,
  * for providers that are gated by a single well-known preset toggle.
  */
@@ -70,8 +47,8 @@ export function hasUsableLlm(
   const hasModel = cfg.model.trim().length > 0
 
   if (cfg.provider === "claude-code" || cfg.provider === "codex-cli") {
-    const presetId = PRESET_ID_BY_PROVIDER[cfg.provider]
-    return presetId !== undefined && isPresetEnabled(providerConfigs, presetId)
+    const presetId = PRESET_ID_BY_PROVIDER[cfg.provider]!
+    return isPresetEnabled(providerConfigs, presetId)
   }
 
   if (cfg.provider === "ollama") {
