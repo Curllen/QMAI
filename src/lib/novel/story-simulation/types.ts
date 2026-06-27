@@ -365,3 +365,93 @@ export function getModeConfig(mode: SimulationMode): ModeConfig {
 export function calcMaxAgentsPerRound(activeAgentCount: number): number {
   return Math.min(8, activeAgentCount)
 }
+
+// ── 模式可视化说明 ──
+
+export interface ModeVisualInfo {
+  /** 模式名称 */
+  name: string
+  /** 简短描述 */
+  shortDesc: string
+  /** 详细特点 */
+  features: string[]
+  /** 适合场景 */
+  bestFor: string
+  /** 轮数相对多少 */
+  roundsLabel: string
+  /** 随机事件多少 */
+  randomnessLabel: string
+  /** 剧情自由度 */
+  freedomLabel: string
+  /** 标签颜色 */
+  color: string
+  /** emoji图标 */
+  icon: string
+}
+
+export const MODE_VISUAL_INFO: Record<SimulationMode, ModeVisualInfo> = {
+  "event-driven": {
+    name: "事件驱动",
+    shortDesc: "按框架节点推进，节奏紧凑，剧情走向明确",
+    features: [
+      "严格按节点目标推进剧情",
+      "角色倾向于主动行动推动事态",
+      "随机事件较少，走向可控",
+      "每轮所有角色都参与互动",
+    ],
+    bestFor: "已有明确大纲，需要快速产出符合预期的剧情",
+    roundsLabel: "适中 (0.8x)",
+    randomnessLabel: "低 (10%)",
+    freedomLabel: "低",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    icon: "🎯",
+  },
+  "free-emergence": {
+    name: "自由涌现",
+    shortDesc: "角色自由互动，剧情自然发展，惊喜多",
+    features: [
+      "不强制节点目标，剧情自然涌现",
+      "角色更关注情感和关系变化",
+      "随机事件较多，可能有意外发展",
+      "每轮随机选择部分角色活跃",
+    ],
+    bestFor: "探索角色可能性，寻找灵感和意外剧情",
+    roundsLabel: "较多 (1.5x)",
+    randomnessLabel: "高 (25%)",
+    freedomLabel: "高",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    icon: "🌊",
+  },
+  "decision-tree": {
+    name: "决策树",
+    shortDesc: "聚焦关键抉择，因果清晰，冲突感强",
+    features: [
+      "强调角色面临选择时的权衡",
+      "重点关注决策的因果链",
+      "对抗和决策类行为更多",
+      "每轮聚焦关键角色互动",
+    ],
+    bestFor: "强剧情冲突、权谋斗争、关键抉择场景",
+    roundsLabel: "标准 (1.0x)",
+    randomnessLabel: "中 (15%)",
+    freedomLabel: "中",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    icon: "🌳",
+  },
+  hybrid: {
+    name: "混合模式",
+    shortDesc: "平衡推进与自由，综合表现佳，推荐首选",
+    features: [
+      "灵活选择行为类型，平衡推进与互动",
+      "既有主线推进，也有角色自由发挥",
+      "随机事件适中，既有惊喜也不失控",
+      "大部分角色参与，互动丰富",
+    ],
+    bestFor: "大多数场景，平衡可控性和创造性",
+    roundsLabel: "较多 (1.2x)",
+    randomnessLabel: "中 (20%)",
+    freedomLabel: "中高",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+    icon: "⚖️",
+  },
+}

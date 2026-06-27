@@ -3,15 +3,16 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { WORD_BUDGET_PRESETS, type SimulationMode } from "@/lib/novel/story-simulation/types"
+import { WORD_BUDGET_PRESETS, type SimulationMode, MODE_VISUAL_INFO } from "@/lib/novel/story-simulation/types"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
 import { cn } from "@/lib/utils"
+import { Info } from "lucide-react"
 
-const MODES = [
-  { mode: "event-driven" as SimulationMode, labelKey: "storySimulation.modeEventDriven", descKey: "storySimulation.modeEventDrivenDesc" },
-  { mode: "free-emergence" as SimulationMode, labelKey: "storySimulation.modeFreeEmergence", descKey: "storySimulation.modeFreeEmergenceDesc" },
-  { mode: "decision-tree" as SimulationMode, labelKey: "storySimulation.modeDecisionTree", descKey: "storySimulation.modeDecisionTreeDesc" },
-  { mode: "hybrid" as SimulationMode, labelKey: "storySimulation.modeHybrid", descKey: "storySimulation.modeHybridDesc" },
+const MODES: { mode: SimulationMode }[] = [
+  { mode: "event-driven" },
+  { mode: "free-emergence" },
+  { mode: "decision-tree" },
+  { mode: "hybrid" },
 ]
 
 const CHAPTER_OPTIONS = [5, 10, 20, 30, 50]
@@ -46,29 +47,89 @@ export function SimulationConfigPanel({ onStart }: SimulationConfigPanelProps) {
   const setSourceChapters = useStorySimulationStore((s) => s.setSourceChapters)
   const setSimulationRounds = useStorySimulationStore((s) => s.setSimulationRounds)
 
+  const selectedModeInfo = MODE_VISUAL_INFO[mode]
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       {/* 1. 仿真模式选择 */}
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-medium">{t("storySimulation.selectMode")}</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-medium">
+          {t("storySimulation.selectMode")}
+          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+        </h3>
         <div className="grid grid-cols-2 gap-3">
-          {MODES.map((m) => (
-            <button
-              key={m.mode}
-              type="button"
-              onClick={() => setMode(m.mode)}
-              className={cn(
-                "flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors",
-                mode === m.mode
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-primary/50"
-              )}
-            >
-              <span className="text-sm font-medium">{t(m.labelKey)}</span>
-              <span className="text-xs text-muted-foreground">{t(m.descKey)}</span>
-            </button>
-          ))}
+          {MODES.map((m) => {
+            const info = MODE_VISUAL_INFO[m.mode]
+            const isSelected = mode === m.mode
+            return (
+              <button
+                key={m.mode}
+                type="button"
+                onClick={() => setMode(m.mode)}
+                className={cn(
+                  "flex flex-col items-start gap-2 rounded-lg border p-3 text-left transition-all",
+                  isSelected
+                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                    : "border-border hover:border-primary/50 hover:bg-accent/30"
+                )}
+              >
+                <div className="flex w-full items-center justify-between">
+                  <span className="text-lg">{info.icon}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", info.color)}>
+                    {info.freedomLabel}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">{info.name}</span>
+                <span className="text-xs leading-relaxed text-muted-foreground">{info.shortDesc}</span>
+              </button>
+            )
+          })}
         </div>
+
+        {/* 选中模式的详细说明 */}
+        {selectedModeInfo && (
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-xl">{selectedModeInfo.icon}</span>
+              <span className="font-medium">{selectedModeInfo.name}模式</span>
+              <span className={cn("ml-auto rounded-full px-2 py-0.5 text-xs", selectedModeInfo.color)}>
+                推荐
+              </span>
+            </div>
+            
+            <div className="mb-3 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded-md bg-background p-2">
+                <div className="text-muted-foreground">轮数</div>
+                <div className="mt-0.5 font-medium">{selectedModeInfo.roundsLabel}</div>
+              </div>
+              <div className="rounded-md bg-background p-2">
+                <div className="text-muted-foreground">随机性</div>
+                <div className="mt-0.5 font-medium">{selectedModeInfo.randomnessLabel}</div>
+              </div>
+              <div className="rounded-md bg-background p-2">
+                <div className="text-muted-foreground">自由度</div>
+                <div className="mt-0.5 font-medium">{selectedModeInfo.freedomLabel}</div>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">模式特点：</p>
+              <ul className="space-y-1">
+                {selectedModeInfo.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs">
+                    <span className="text-primary">•</span>
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-md bg-primary/5 p-2 text-xs">
+              <span className="font-medium text-primary">适用场景：</span>
+              <span className="text-foreground/80"> {selectedModeInfo.bestFor}</span>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 2. 用户思路 */}

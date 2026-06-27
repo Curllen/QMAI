@@ -6,6 +6,7 @@
 import { createDirectory, writeFileAtomic } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 import type { AgentChatMessage } from "./types"
+import type { SavedInterview } from "./interview-store"
 
 const SIM_ROOT = ".qmai/simulations"
 const INTERVIEWS_DIR = `${SIM_ROOT}/interviews`
@@ -26,9 +27,24 @@ function interviewFilePath(projectPath: string, agentName: string, timestamp: st
  */
 export async function exportInterview(
   projectPath: string,
-  agentName: string,
-  messages: AgentChatMessage[],
+  agentNameOrInterview: string | SavedInterview,
+  messages?: AgentChatMessage[],
 ): Promise<string> {
+  let agentName: string
+  let msgs: AgentChatMessage[]
+  let frameworkTitle: string | undefined
+  let createdAt: string | undefined
+
+  if (typeof agentNameOrInterview === "string") {
+    agentName = agentNameOrInterview
+    msgs = messages || []
+  } else {
+    agentName = agentNameOrInterview.agentName
+    msgs = agentNameOrInterview.session.messages
+    frameworkTitle = agentNameOrInterview.frameworkTitle
+    createdAt = agentNameOrInterview.createdAt
+  }
+
   const dir = interviewsDir(projectPath)
   await createDirectory(dir)
 
@@ -39,13 +55,19 @@ export async function exportInterview(
   const lines: string[] = []
   lines.push(`# 与「${agentName}」的对话`)
   lines.push("")
+  if (frameworkTitle) {
+    lines.push(`> 故事框架：${frameworkTitle}`)
+  }
+  if (createdAt) {
+    lines.push(`> 创建时间：${new Date(createdAt).toLocaleString("zh-CN")}`)
+  }
   lines.push(`> 导出时间：${now.toLocaleString("zh-CN")}`)
-  lines.push(`> 消息数量：${messages.length}`)
+  lines.push(`> 消息数量：${msgs.length}`)
   lines.push("")
   lines.push("---")
   lines.push("")
 
-  for (const msg of messages) {
+  for (const msg of msgs) {
     const time = new Date(msg.timestamp).toLocaleTimeString("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",

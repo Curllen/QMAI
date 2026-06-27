@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network, Download, ChevronDown, ChevronRight } from "lucide-react"
+import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network, Download, ChevronDown, ChevronRight, GitCompare, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useStorySimulationStore } from "@/stores/story-simulation-store"
+import { useStorySimulationStore, type SavedSimulationResult } from "@/stores/story-simulation-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { exportReport } from "@/lib/novel/story-simulation/report-export"
-import type { StoryBranch, TimelineEvent, StoryFramework } from "@/lib/novel/story-simulation/types"
+import type { StoryBranch, TimelineEvent, StoryFramework, SimulationReport } from "@/lib/novel/story-simulation/types"
 
 const PROBABILITY_COLORS: Record<string, string> = {
   high: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
@@ -19,6 +19,7 @@ interface SimulationReportViewProps {
   onInterviewAgent: (agentId: string, agentName: string) => void
   onViewDraft?: () => void
   hasDraft?: boolean
+  onViewInterviewHistory?: () => void
 }
 
 /** 将 actionType 映射为中文动词短语 */
@@ -47,38 +48,28 @@ function actionLabel(type: string): string {
   }
 }
 
-export function SimulationReportView({
-  onResimulate,
-  onGenerateDraft,
-  onInterviewAgent,
-  onViewDraft,
-  hasDraft,
-}: SimulationReportViewProps) {
-  const { t } = useTranslation()
-  const projectPath = useWikiStore((s) => s.project?.path)
-  const report = useStorySimulationStore((s) => s.currentReport)
-  const currentFramework = useStorySimulationStore((s) => s.currentFramework)
-  const timelineEvents = useStorySimulationStore((s) => s.timelineEvents)
-  const setError = useStorySimulationStore((s) => s.setError)
-  const [exporting, setExporting] = useState(false)
-
-  const handleExport = async () => {
-    if (!projectPath || !report || !currentFramework) return
-    setExporting(true)
-    try {
-      const filePath = await exportReport(projectPath, currentFramework, report, timelineEvents)
-      setError(`报告已导出到：${filePath}`)
-      setTimeout(() => setError(null), 5000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "导出失败")
-      setTimeout(() => setError(null), 5000)
-    } finally {
-      setExporting(false)
-    }
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr)
+    return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+  } catch {
+    return dateStr
   }
+}
 
-  if (!report) return null
+// ── 单个报告内容面板（可复用，用于对比模式） ──
 
+interface ReportContentProps {
+  report: SimulationReport
+  timelineEvents: TimelineEvent[]
+  framework?: StoryFramework | null
+  onInterviewAgent?: (agentId: string, agentName: string) => void
+  onGenerateDraft?: (branch: StoryBranch) => void
+  title?: string
+  compact?: boolean
+}
+
+function ReportContent({ report, timelineEvents, framework, onInterviewAgent, onGenerateDraft, title, compact }: ReportContentProps) {
   // 构建名字到ID的映射
   const nameToId = useMemo(() => {
     const map = new Map<string, string>()
@@ -92,9 +83,7 @@ export function SimulationReportView({
   const relationshipData = useMemo(() => {
     if (timelineEvents.length === 0) return null
 
-    // 统计角色活跃度
     const activityCount = new Map<string, number>()
-    // 统计角色间互动：key = "A|B"（字母序），value = { count, sentiment }
     const interactions = new Map<string, { count: number; sentiment: number; lastAction: string }>()
 
     for (const ev of timelineEvents) {
@@ -105,20 +94,11 @@ export function SimulationReportView({
         const existing = interactions.get(pair) || { count: 0, sentiment: 0, lastAction: "" }
         let sentimentDelta = 0
         switch (ev.actionType) {
-          case "ally":
-            sentimentDelta = 2
-            break
-          case "speak":
-            sentimentDelta = 0.5
-            break
-          case "confront":
-            sentimentDelta = -2
-            break
-          case "react":
-            sentimentDelta = ev.content.includes("好感") || ev.content.includes("赞同") ? 1 : -1
-            break
-          default:
-            sentimentDelta = 0
+          case "ally": sentimentDelta = 2; break
+          case "speak": sentimentDelta = 0.5; break
+          case "confront": sentimentDelta = -2; break
+          case "react": sentimentDelta = ev.content.includes("好感") || ev.content.includes("赞同") ? 1 : -1; break
+          default: sentimentDelta = 0
         }
         interactions.set(pair, {
           count: existing.count + 1,
@@ -142,38 +122,15 @@ export function SimulationReportView({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold">{t("storySimulation.reportTitle")}</h2>
+      {title && (
+        <div className="border-b bg-muted/30 px-4 py-2 text-sm font-medium text-center">
+          {title}
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            <Download className="mr-1 h-3.5 w-3.5" />
-            {exporting ? "导出中..." : "导出报告"}
-          </Button>
-          {hasDraft && onViewDraft && (
-            <Button variant="default" size="sm" onClick={onViewDraft}>
-              <Sparkles className="mr-1 h-3.5 w-3.5" />
-              查看草稿
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={onResimulate}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            {t("storySimulation.resimulate")}
-          </Button>
-        </div>
-      </div>
-
+      )}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="mx-auto max-w-3xl space-y-6">
+        <div className={`mx-auto ${compact ? "max-w-none" : "max-w-3xl"} space-y-6`}>
           {/* 角色关系网络 */}
-          {relationshipData && relationshipData.characters.length > 1 && (
+          {relationshipData && relationshipData.characters.length > 1 && !compact && (
             <section>
               <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <Network className="h-3.5 w-3.5" />
@@ -183,18 +140,19 @@ export function SimulationReportView({
             </section>
           )}
 
-          {/* 关键剧情事件时间线 - 按节点分组折叠 */}
+          {/* 关键剧情事件时间线 */}
           {timelineEvents.length > 0 && (
             <TimelineGroupedEvents
               events={timelineEvents}
-              framework={currentFramework}
+              framework={framework}
               nameToId={nameToId}
               onInterviewAgent={onInterviewAgent}
+              compact={compact}
             />
           )}
 
           {/* 角色采访区 */}
-          {report.characterAnalyses.length > 0 && (
+          {!compact && report.characterAnalyses.length > 0 && onInterviewAgent && (
             <section>
               <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <MessageCircle className="h-3.5 w-3.5" />
@@ -206,9 +164,7 @@ export function SimulationReportView({
                     key={char.characterId}
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      onInterviewAgent(char.characterId, char.name)
-                    }
+                    onClick={() => onInterviewAgent(char.characterId, char.name)}
                   >
                     <MessageCircle className="mr-1 h-3.5 w-3.5" />
                     与 {char.name} 对话
@@ -222,7 +178,7 @@ export function SimulationReportView({
           {report.characterAnalyses.length > 0 && (
             <section>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("storySimulation.characterAnalysis")}
+                角色行为分析
               </h3>
               <div className="space-y-3">
                 {report.characterAnalyses.map((char) => (
@@ -230,24 +186,18 @@ export function SimulationReportView({
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{char.name}</span>
                       <span className="rounded px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                        {t("storySimulation.consistencyScore")}: {char.consistencyScore}
+                        一致性: {char.consistencyScore}
                       </span>
                     </div>
 
                     {char.behaviors.length > 0 && (
                       <div className="mt-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">
-                          {t("storySimulation.behaviors")}
-                        </p>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">行为：</p>
                         <ul className="space-y-1">
                           {char.behaviors.map((b, i) => (
                             <li key={i} className="text-sm">
-                              <span className="text-muted-foreground">[{b.node}]</span>{" "}
-                              {b.action}
-                              <span className="text-muted-foreground">
-                                {" "}
-                                — {t("storySimulation.motivation")}: {b.motivation}
-                              </span>
+                              <span className="text-muted-foreground">[{b.node}]</span> {b.action}
+                              <span className="text-muted-foreground"> — 动机: {b.motivation}</span>
                             </li>
                           ))}
                         </ul>
@@ -256,13 +206,9 @@ export function SimulationReportView({
 
                     {char.stateChanges.length > 0 && (
                       <div className="mt-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">
-                          {t("storySimulation.stateChanges")}
-                        </p>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">状态变化：</p>
                         <ul className="list-disc space-y-0.5 pl-4 text-sm">
-                          {char.stateChanges.map((s, i) => (
-                            <li key={i}>{s}</li>
-                          ))}
+                          {char.stateChanges.map((s, i) => <li key={i}>{s}</li>)}
                         </ul>
                       </div>
                     )}
@@ -276,7 +222,7 @@ export function SimulationReportView({
           {report.branches.length > 0 && (
             <section>
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("storySimulation.storyBranches")}
+                走向分支
               </h3>
               <div className="space-y-3">
                 {report.branches.map((branch, idx) => (
@@ -284,15 +230,10 @@ export function SimulationReportView({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{branch.title}</span>
                       {branch.recommendation && (
-                        <span className="rounded px-1.5 py-0.5 text-xs bg-primary/10 text-primary">
-                          {t("storySimulation.recommended")}
-                        </span>
+                        <span className="rounded px-1.5 py-0.5 text-xs bg-primary/10 text-primary">推荐</span>
                       )}
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-xs ${PROBABILITY_COLORS[branch.probability]}`}
-                      >
-                        {t("storySimulation.probability")}:{" "}
-                        {t(`storySimulation.probability${branch.probability.charAt(0).toUpperCase()}${branch.probability.slice(1)}`)}
+                      <span className={`rounded px-1.5 py-0.5 text-xs ${PROBABILITY_COLORS[branch.probability]}`}>
+                        概率: {branch.probability === "high" ? "高" : branch.probability === "medium" ? "中" : "低"}
                       </span>
                     </div>
 
@@ -300,13 +241,9 @@ export function SimulationReportView({
 
                     {branch.keyEvents.length > 0 && (
                       <div className="mt-2">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">
-                          {t("storySimulation.keyEvents")}
-                        </p>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">关键事件：</p>
                         <ul className="list-disc space-y-0.5 pl-4 text-sm">
-                          {branch.keyEvents.map((e, i) => (
-                            <li key={i}>{e}</li>
-                          ))}
+                          {branch.keyEvents.map((e, i) => <li key={i}>{e}</li>)}
                         </ul>
                       </div>
                     )}
@@ -314,31 +251,29 @@ export function SimulationReportView({
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       {branch.pros && (
                         <div className="rounded-md bg-green-50 p-2 text-sm dark:bg-green-950/30">
-                          <span className="font-medium text-green-700 dark:text-green-400">
-                            {t("storySimulation.pros")}:{" "}
-                          </span>
+                          <span className="font-medium text-green-700 dark:text-green-400">利：</span>
                           {branch.pros}
                         </div>
                       )}
                       {branch.cons && (
                         <div className="rounded-md bg-red-50 p-2 text-sm dark:bg-red-950/30">
-                          <span className="font-medium text-red-700 dark:text-red-400">
-                            {t("storySimulation.cons")}:{" "}
-                          </span>
+                          <span className="font-medium text-red-700 dark:text-red-400">弊：</span>
                           {branch.cons}
                         </div>
                       )}
                     </div>
 
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => onGenerateDraft(branch)}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {t("storySimulation.generateDraft")}
-                    </Button>
+                    {!compact && onGenerateDraft && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => onGenerateDraft(branch)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        生成草稿
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -351,7 +286,7 @@ export function SimulationReportView({
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                 <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
                   <Sparkles className="h-3.5 w-3.5" />
-                  {t("storySimulation.recommendation")}
+                  综合推荐
                 </h3>
                 <p className="text-sm leading-relaxed">{report.recommendation}</p>
               </div>
@@ -359,6 +294,201 @@ export function SimulationReportView({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+export function SimulationReportView({
+  onResimulate,
+  onGenerateDraft,
+  onInterviewAgent,
+  onViewDraft,
+  hasDraft,
+  onViewInterviewHistory,
+}: SimulationReportViewProps) {
+  const { t } = useTranslation()
+  const projectPath = useWikiStore((s) => s.project?.path)
+  const report = useStorySimulationStore((s) => s.currentReport)
+  const currentFramework = useStorySimulationStore((s) => s.currentFramework)
+  const timelineEvents = useStorySimulationStore((s) => s.timelineEvents)
+  const savedResults = useStorySimulationStore((s) => s.savedResults)
+  const setError = useStorySimulationStore((s) => s.setError)
+  const [exporting, setExporting] = useState(false)
+  const [compareMode, setCompareMode] = useState(false)
+  const [selectedCompareId, setSelectedCompareId] = useState<string | null>(null)
+  const [viewingResultId, setViewingResultId] = useState<string | null>(null)
+
+  // 当前查看的结果（可能是历史结果）
+  const currentResult: SavedSimulationResult | null = useMemo(() => {
+    if (!viewingResultId) return null
+    return savedResults.find(r => r.id === viewingResultId) || null
+  }, [viewingResultId, savedResults])
+
+  const activeReport = currentResult?.report || report
+  const activeTimeline = currentResult?.timelineEvents || timelineEvents
+  const compareResult = selectedCompareId ? savedResults.find(r => r.id === selectedCompareId) : null
+
+  // 可选择对比的结果（排除当前查看的）
+  const comparableResults = useMemo(() => {
+    return savedResults.filter(r => r.id !== viewingResultId && r.report)
+  }, [savedResults, viewingResultId])
+
+  const handleExport = async () => {
+    if (!projectPath || !activeReport || !currentFramework) return
+    setExporting(true)
+    try {
+      const filePath = await exportReport(projectPath, currentFramework, activeReport, activeTimeline)
+      setError(`报告已导出到：${filePath}`)
+      setTimeout(() => setError(null), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExitCompare = () => {
+    setCompareMode(false)
+    setSelectedCompareId(null)
+  }
+
+  if (!activeReport) return null
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">{t("storySimulation.reportTitle")}</h2>
+          {currentResult && (
+            <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              {formatDate(currentResult.createdAt)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* 历史结果选择 */}
+          {savedResults.length > 0 && (
+            <select
+              value={viewingResultId || ""}
+              onChange={(e) => {
+                setViewingResultId(e.target.value || null)
+                setCompareMode(false)
+                setSelectedCompareId(null)
+              }}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">最新推演</option>
+              {savedResults.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatDate(r.createdAt)} ({r.report.mode})
+                </option>
+              ))}
+            </select>
+          )}
+          {/* 对比按钮 */}
+          {comparableResults.length > 0 && !compareMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCompareMode(true)
+                if (comparableResults.length > 0) {
+                  setSelectedCompareId(comparableResults[0].id)
+                }
+              }}
+            >
+              <GitCompare className="mr-1 h-3.5 w-3.5" />
+              对比结果
+            </Button>
+          )}
+          {compareMode && (
+            <>
+              <select
+                value={selectedCompareId || ""}
+                onChange={(e) => setSelectedCompareId(e.target.value || null)}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+              >
+                {comparableResults.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    对比: {formatDate(r.createdAt)}
+                  </option>
+                ))}
+              </select>
+              <Button variant="ghost" size="sm" onClick={handleExitCompare}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+          {onViewInterviewHistory && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onViewInterviewHistory}
+            >
+              <MessageCircle className="mr-1 h-3.5 w-3.5" />
+              采访历史
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            <Download className="mr-1 h-3.5 w-3.5" />
+            {exporting ? "导出中..." : "导出报告"}
+          </Button>
+          {!currentResult && hasDraft && onViewDraft && (
+            <Button variant="default" size="sm" onClick={onViewDraft}>
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              查看草稿
+            </Button>
+          )}
+          {!currentResult && (
+            <Button variant="outline" size="sm" onClick={onResimulate}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              {t("storySimulation.resimulate")}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* 内容区域：单栏或双栏对比 */}
+      {compareMode && compareResult ? (
+        <div className="flex min-h-0 flex-1">
+          <div className="min-w-0 flex-1 border-r">
+            <ReportContent
+              report={activeReport}
+              timelineEvents={activeTimeline}
+              framework={currentFramework}
+              onInterviewAgent={!currentResult ? onInterviewAgent : undefined}
+              onGenerateDraft={!currentResult ? onGenerateDraft : undefined}
+              title={currentResult ? `结果 A (${formatDate(currentResult.createdAt)})` : "结果 A (最新)"}
+              compact={true}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <ReportContent
+              report={compareResult.report}
+              timelineEvents={compareResult.timelineEvents || []}
+              framework={currentFramework}
+              title={`结果 B (${formatDate(compareResult.createdAt)})`}
+              compact={true}
+            />
+          </div>
+        </div>
+      ) : (
+        <ReportContent
+          report={activeReport}
+          timelineEvents={activeTimeline}
+          framework={currentFramework}
+          onInterviewAgent={!currentResult ? onInterviewAgent : undefined}
+          onGenerateDraft={!currentResult ? onGenerateDraft : undefined}
+        />
+      )}
     </div>
   )
 }
@@ -510,11 +640,13 @@ function TimelineGroupedEvents({
   framework,
   nameToId,
   onInterviewAgent,
+  compact,
 }: {
   events: TimelineEvent[]
   framework?: StoryFramework | null
   nameToId: Map<string, string>
-  onInterviewAgent: (agentId: string, agentName: string) => void
+  onInterviewAgent?: (agentId: string, agentName: string) => void
+  compact?: boolean
 }) {
   // 折叠状态：key = nodeIndex，value = 是否折叠
   const [collapsedNodes, setCollapsedNodes] = useState<Set<number>>(new Set())
@@ -595,7 +727,7 @@ function TimelineGroupedEvents({
           </button>
         </div>
       </div>
-      <div className="space-y-3">
+      <div className={compact ? "space-y-2" : "space-y-3"}>
         {groupedEvents.map(({ nodeIndex, nodeInfo, events: nodeEvents }) => {
           const isCollapsed = collapsedNodes.has(nodeIndex)
           const phase = nodeInfo?.phase || "起"
@@ -605,7 +737,7 @@ function TimelineGroupedEvents({
               {/* 节点标题栏 - 可点击折叠 */}
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/50"
+                className={`flex w-full items-center gap-2 text-left hover:bg-accent/50 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}
                 onClick={() => toggleNode(nodeIndex)}
               >
                 {isCollapsed ? (
@@ -616,50 +748,58 @@ function TimelineGroupedEvents({
                 <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
                   {phaseLabel(phase)}
                 </span>
-                <span className="text-sm font-medium">
+                <span className={`font-medium ${compact ? "text-xs" : "text-sm"}`}>
                   节点 {nodeIndex + 1}：{nodeTitle}
                 </span>
                 <span className="ml-auto text-[11px] text-muted-foreground">
-                  {nodeEvents.length} 条事件
+                  {nodeEvents.length} 条
                 </span>
               </button>
               {/* 节点事件列表 */}
               {!isCollapsed && (
-                <div className="space-y-2 border-t p-3">
+                <div className={`border-t ${compact ? "space-y-1 p-2" : "space-y-2 p-3"}`}>
                   {nodeEvents.map((ev) => (
                     <div
                       key={ev.id}
-                      className="rounded-md border bg-muted/20 px-3 py-2 text-sm"
+                      className={`rounded-md border bg-muted/20 ${compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm"}`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                           R{ev.round + 1}
                         </span>
-                        <button
-                          type="button"
-                          className="font-medium text-primary hover:underline"
-                          onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
-                        >
-                          {ev.actorName}
-                        </button>
+                        {onInterviewAgent ? (
+                          <button
+                            type="button"
+                            className="font-medium text-primary hover:underline"
+                            onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                          >
+                            {ev.actorName}
+                          </button>
+                        ) : (
+                          <span className="font-medium">{ev.actorName}</span>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           {actionLabel(ev.actionType)}
                         </span>
                         {ev.targetName && (
                           <>
                             <span className="text-xs text-muted-foreground">→</span>
-                            <button
-                              type="button"
-                              className="text-xs text-primary hover:underline"
-                              onClick={() => {
-                                const targetId = ev.targetId || nameToId.get(ev.targetName || "")
-                                if (targetId && ev.targetName) {
-                                  onInterviewAgent(targetId, ev.targetName)
-                                }
-                              }}
-                            >
-                              {ev.targetName}
-                            </button>
+                            {onInterviewAgent ? (
+                              <button
+                                type="button"
+                                className="text-xs text-primary hover:underline"
+                                onClick={() => {
+                                  const targetId = ev.targetId || nameToId.get(ev.targetName || "")
+                                  if (targetId && ev.targetName) {
+                                    onInterviewAgent(targetId, ev.targetName)
+                                  }
+                                }}
+                              >
+                                {ev.targetName}
+                              </button>
+                            ) : (
+                              <span className="text-xs">{ev.targetName}</span>
+                            )}
                           </>
                         )}
                       </div>

@@ -10,6 +10,7 @@ import type {
   TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
 import type { SerializedSimulationSnapshot } from "@/lib/novel/story-simulation/simulation-serializer"
+import type { SavedInterview } from "@/lib/novel/story-simulation/interview-store"
 
 export interface SavedSimulationResult {
   id: string
@@ -63,6 +64,14 @@ export interface StorySimulationState {
   savedResults: SavedSimulationResult[]
   /** 当前选中查看的历史结果ID */
   selectedResultId: string | null
+  /** 是否显示采访历史面板 */
+  showInterviewHistory: boolean
+  /** 已保存的采访列表 */
+  savedInterviews: SavedInterview[]
+  /** 当前查看的采访详情 */
+  viewingInterview: SavedInterview | null
+  /** 对比模式下要对比的结果ID（null表示不对比） */
+  compareWithResultId: string | null
 
   setPhase: (phase: SimulationPhase) => void
   setMode: (mode: SimulationMode) => void
@@ -87,6 +96,10 @@ export interface StorySimulationState {
   bumpListRefresh: () => void
   setSavedResults: (results: SavedSimulationResult[]) => void
   setSelectedResultId: (id: string | null) => void
+  setShowInterviewHistory: (show: boolean) => void
+  setSavedInterviews: (interviews: SavedInterview[]) => void
+  setViewingInterview: (interview: SavedInterview | null) => void
+  setCompareWithResultId: (id: string | null) => void
   reset: () => void
 }
 
@@ -113,6 +126,10 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
   listRefreshKey: 0,
   savedResults: [],
   selectedResultId: null,
+  showInterviewHistory: false,
+  savedInterviews: [],
+  viewingInterview: null,
+  compareWithResultId: null,
 
   setPhase: (phase) => set({ phase }),
   setMode: (mode) => set({ mode }),
@@ -139,6 +156,10 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
   bumpListRefresh: () => set((state) => ({ listRefreshKey: state.listRefreshKey + 1 })),
   setSavedResults: (savedResults) => set({ savedResults }),
   setSelectedResultId: (selectedResultId) => set({ selectedResultId }),
+  setShowInterviewHistory: (showInterviewHistory) => set({ showInterviewHistory }),
+  setSavedInterviews: (savedInterviews) => set({ savedInterviews }),
+  setViewingInterview: (viewingInterview) => set({ viewingInterview }),
+  setCompareWithResultId: (compareWithResultId) => set({ compareWithResultId }),
   reset: () =>
     set({
       phase: "idle",
@@ -154,5 +175,9 @@ export const useStorySimulationStore = create<StorySimulationState>((set) => ({
       agentChatMessages: [],
       savedResults: [],
       selectedResultId: null,
+      showInterviewHistory: false,
+      savedInterviews: [],
+      viewingInterview: null,
+      compareWithResultId: null,
     }),
 }))

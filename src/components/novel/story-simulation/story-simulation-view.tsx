@@ -33,6 +33,7 @@ import { SimulationConfigPanel } from "./simulation-config-panel"
 import { FrameworkConfirmPanel } from "./framework-confirm-panel"
 import { SimulationReportView } from "./simulation-report-view"
 import { StoryDraftView } from "./story-draft-view"
+import { InterviewHistoryView } from "./interview-history-view"
 import { Button } from "@/components/ui/button"
 
 const PROGRESS_PHASES = [
@@ -152,6 +153,7 @@ export function StorySimulationView() {
   const clearAgentChat = useStorySimulationStore((s) => s.clearAgentChat)
   const bumpListRefresh = useStorySimulationStore((s) => s.bumpListRefresh)
   const setSavedResults = useStorySimulationStore((s) => s.setSavedResults)
+  const setShowInterviewHistory = useStorySimulationStore((s) => s.setShowInterviewHistory)
 
   // 保存仿真后的 agents 和 state 供采访使用
   const lastAgentsRef = useRef<NovelAgent[]>([])
@@ -727,6 +729,7 @@ export function StorySimulationView() {
                 onInterviewAgent={(id, name) => handleInterviewAgent(id, name)}
                 onViewDraft={handleViewDraft}
                 hasDraft={!!currentDraft}
+                onViewInterviewHistory={() => setShowInterviewHistory(true)}
               />
             </div>
             {activeChatAgent && (
@@ -754,6 +757,7 @@ export function StorySimulationView() {
           </div>
         )}
       </div>
+      <InterviewHistoryView />
     </div>
   )
 }
