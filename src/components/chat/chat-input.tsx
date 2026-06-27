@@ -6,7 +6,7 @@ import { useChatStore } from "@/stores/chat-store"
 import {
   clampResizableInputHeight,
   DEFAULT_RESIZABLE_INPUT_HEIGHT,
-  resolveResizableInputMaxHeight,
+  resolveViewportAwareMaxHeight,
 } from "./chat-input-resize"
 
 interface ChatInputProps {
@@ -63,13 +63,16 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingCon
   )
 
   const getResizeBounds = useCallback(() => {
-    const panelHeight = resolveResizePanelHeight(rootRef.current)
+    const rootEl = rootRef.current
+    const inputTopOffset = rootEl?.getBoundingClientRect().top ?? 0
+    const viewportHeight = window.innerHeight
+    // 优先使用视口边界感知的最大高度，防止输入框下沿超出软件界面
+    const viewportMax = resolveViewportAwareMaxHeight(inputTopOffset, viewportHeight)
+    const panelHeight = resolveResizePanelHeight(rootEl)
+    const panelMax = panelHeight > 0 ? Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(panelHeight / 2)) : viewportMax
     return {
       minHeight: DEFAULT_RESIZABLE_INPUT_HEIGHT,
-      maxHeight: resolveResizableInputMaxHeight({
-        panelHeight,
-        viewportHeight: window.innerHeight,
-      }),
+      maxHeight: Math.min(viewportMax, panelMax),
     }
   }, [])
 

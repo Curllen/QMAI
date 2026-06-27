@@ -298,6 +298,7 @@ export async function ingestChapter(
   chapterPath: string,
   _reviewModel?: string,
   signal?: AbortSignal,
+  chapterNumberOverride?: number,
 ): Promise<IngestResult> {
   const pp = normalizePath(projectPath)
   const state = useWikiStore.getState()
@@ -318,7 +319,7 @@ export async function ingestChapter(
     return { snapshot: null, failReason: "not_final" }
   }
 
-  const chapterNumber = parseChapterNumber(fm.chapter_number) ?? 0
+  const chapterNumber = chapterNumberOverride ?? parseChapterNumber(fm.chapter_number) ?? 0
   if (chapterNumber <= 0) {
     console.warn("[Chapter Ingest] Invalid chapter number, skipping ingest.")
     return { snapshot: null, failReason: "invalid_chapter_number" }

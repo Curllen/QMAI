@@ -645,7 +645,7 @@ export function PreviewPanel() {
             abortController: ingestAbortController,
           })
           const { ingestChapter } = await import("@/lib/novel/chapter-ingest")
-          const result = await ingestChapter(project.path, targetPath, resolveReviewModel(), ingestAbortController.signal)
+          const result = await ingestChapter(project.path, targetPath, resolveReviewModel(), ingestAbortController.signal, chapterFrontmatter?.chapterNumber as number | undefined)
           useImportProgressStore.getState().finishTask(ingestTaskId, result.snapshot ? "done" : "error", {
             completed: result.snapshot ? 1 : 0,
             total: 1,
@@ -703,7 +703,7 @@ export function PreviewPanel() {
     })
     try {
       const { ingestChapter } = await import("@/lib/novel/chapter-ingest")
-      const result = await ingestChapter(projectPath, filePath, resolveReviewModel(), ingestAbortController.signal)
+      const result = await ingestChapter(projectPath, filePath, resolveReviewModel(), ingestAbortController.signal, chapterFrontmatter?.chapterNumber as number | undefined)
       useImportProgressStore.getState().finishTask(ingestTaskId, result.snapshot ? "done" : "error", {
         completed: result.snapshot ? 1 : 0,
         total: 1,
