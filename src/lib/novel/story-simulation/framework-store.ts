@@ -24,6 +24,7 @@ import type {
   StoryNode,
   TimelineEvent,
 } from "./types"
+import type { SerializedSimulationSnapshot } from "./simulation-serializer"
 
 const SIM_ROOT = ".qmai/simulations"
 const FRAMEWORKS_DIR = `${SIM_ROOT}/frameworks`
@@ -402,6 +403,7 @@ export async function saveSimulationResult(
   report: SimulationReport,
   draft?: StoryDraft,
   timelineEvents?: TimelineEvent[],
+  agentSnapshot?: SerializedSimulationSnapshot,
 ): Promise<string> {
   await ensureSimulationDirs(projectPath)
   const resultId = `result-${Date.now()}`
@@ -412,6 +414,7 @@ export async function saveSimulationResult(
     report,
     draft: draft ?? null,
     timelineEvents: timelineEvents ?? [],
+    agentSnapshot: agentSnapshot ?? null,
   }
   await writeFileAtomic(`${dir}/${resultId}.json`, JSON.stringify(payload, null, 2))
   await writeFileAtomic(
@@ -449,6 +452,7 @@ export async function loadSimulationResults(
   report: SimulationReport
   draft?: StoryDraft | null
   timelineEvents?: TimelineEvent[]
+  agentSnapshot?: SerializedSimulationSnapshot | null
 }[]> {
   const dir = frameworkResultsDir(projectPath, frameworkId)
   let entries: FileNode[]
@@ -463,6 +467,7 @@ export async function loadSimulationResults(
     report: SimulationReport
     draft?: StoryDraft | null
     timelineEvents?: TimelineEvent[]
+    agentSnapshot?: SerializedSimulationSnapshot | null
   }[] = []
   for (const entry of entries) {
     if (entry.is_dir) continue
@@ -473,6 +478,7 @@ export async function loadSimulationResults(
         report: SimulationReport
         draft?: StoryDraft | null
         timelineEvents?: TimelineEvent[]
+        agentSnapshot?: SerializedSimulationSnapshot | null
       }
       if (parsed && parsed.report) {
         results.push({
@@ -480,6 +486,7 @@ export async function loadSimulationResults(
           report: parsed.report,
           draft: parsed.draft ?? null,
           timelineEvents: parsed.timelineEvents ?? [],
+          agentSnapshot: parsed.agentSnapshot ?? null,
         })
       }
     } catch {

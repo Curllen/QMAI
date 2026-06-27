@@ -202,13 +202,15 @@ export interface StoryNode {
 
 // ── 仿真事件（保留以兼容报告生成器和旧流程） ──
 export interface SimulationEvent {
-  type: "agent-action" | "node-complete" | "node-start"
+  type: "agent-action" | "node-complete" | "node-start" | "info"
   agent?: NovelAgent
   action?: AgentAction
   round?: number
   node?: StoryNode
   stateChanges?: string[]
   timestamp: string
+  /** info 类型事件的消息 */
+  message?: string
   /** 关联的时间线事件（新引擎填充） */
   timelineEvent?: TimelineEvent
 }
@@ -304,6 +306,60 @@ export function calcNodeCount(targetWords: number): number {
 
 export function calcMaxRoundsPerNode(wordBudget: number): number {
   return Math.max(2, Math.floor(wordBudget / 10000))
+}
+
+// ── 仿真模式配置 ──
+
+export interface ModeConfig {
+  /** 轮数乘数 */
+  roundsMultiplier: number
+  /** 注入到 prompt 中的行为倾向提示 */
+  behaviorHint: string
+  /** 随机事件触发概率（0-1，0=不触发） */
+  randomEventChance: number
+  /** 每轮活跃 Agent 比例（1=全部，0.5=随机一半） */
+  agentSubsetRatio: number
+  /** 是否强制按节点目标推进 */
+  strictNodeProgression: boolean
+}
+
+const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
+  "event-driven": {
+    roundsMultiplier: 0.8,
+    behaviorHint:
+      "你倾向于推动事态发展（pushPlot），以达成节点目标为首要任务。谨慎使用观察行为，优先采取主动行动推动剧情。",
+    randomEventChance: 0.1,
+    agentSubsetRatio: 1,
+    strictNodeProgression: true,
+  },
+  "free-emergence": {
+    roundsMultiplier: 1.5,
+    behaviorHint:
+      "你倾向于自由表达和互动（evaluate/speak/observe），关注自身情感和与他人关系的变化。剧情会在角色互动中自然涌现，不必急于达成节点目标。",
+    randomEventChance: 0.25,
+    agentSubsetRatio: 0.7,
+    strictNodeProgression: false,
+  },
+  "decision-tree": {
+    roundsMultiplier: 1.0,
+    behaviorHint:
+      "你倾向于做出关键决策和对抗（confront/decide/react）。每个行为都应体现你在面对选择时的权衡与取舍，重点关注决策的因果链。",
+    randomEventChance: 0.15,
+    agentSubsetRatio: 0.5,
+    strictNodeProgression: true,
+  },
+  hybrid: {
+    roundsMultiplier: 1.2,
+    behaviorHint:
+      "你可以灵活选择行为类型：有时推动剧情，有时观察评价，有时与他人对话。根据当前情境和角色性格自然选择最合适的行为。",
+    randomEventChance: 0.2,
+    agentSubsetRatio: 0.85,
+    strictNodeProgression: false,
+  },
+}
+
+export function getModeConfig(mode: SimulationMode): ModeConfig {
+  return MODE_CONFIGS[mode] ?? MODE_CONFIGS.hybrid
 }
 
 export function calcMaxAgentsPerRound(activeAgentCount: number): number {

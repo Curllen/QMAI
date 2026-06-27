@@ -18,7 +18,8 @@ import type {
   StoryNode,
   TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
-import { calcMaxRoundsPerNode } from "@/lib/novel/story-simulation/types"
+import { calcMaxRoundsPerNode, getModeConfig } from "@/lib/novel/story-simulation/types"
+import type { ModeConfig } from "@/lib/novel/story-simulation/types"
 
 // ── 对外接口 ──
 
@@ -166,8 +167,14 @@ function buildUserMessage(
   node: StoryNode,
   agentName: string,
   injectionEvent?: string,
+  modeHint?: string,
 ): string {
   const parts: string[] = [context]
+  if (modeHint) {
+    parts.push("")
+    parts.push("【行为倾向】")
+    parts.push(modeHint)
+  }
   if (injectionEvent) {
     parts.push("")
     parts.push("【突发事件】")
@@ -627,6 +634,26 @@ function formatActionDescription(action: AgentAction, agentName: string): string
 
 // ── 内部辅助：检查节点是否达成目标（简单启发式） ──
 
+const RANDOM_EVENTS = [
+  "一阵异样的风声掠过，似乎预示着某种变故即将到来。",
+  "远处传来模糊的响动，所有角色都感到了一丝不安。",
+  "天色骤变，云层翻涌，仿佛有什么大事正在酝酿。",
+  "一个不起眼的线索被发现，可能改变所有人的判断。",
+  "时间流逝比预想的更快，紧迫感在角色间蔓延。",
+  "一个意外来客出现在众人视野中。",
+  "一段被遗忘的记忆突然浮现，影响着某个角色的判断。",
+  "环境的微妙变化让角色们重新审视当前局势。",
+]
+
+function generateRandomEvent(): SimulationEvent | null {
+  const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+  return {
+    type: "info",
+    timestamp: new Date().toISOString(),
+    message: `【随机事件】${RANDOM_EVENTS[idx]}`,
+  }
+}
+
 function isNodeGoalReached(
   _node: StoryNode,
   nodeTimelineEvents: TimelineEvent[],
@@ -662,6 +689,7 @@ async function agentDecideAndAct(
   recentEventDescs: string[],
   injectionEvent: string | undefined,
   signal?: AbortSignal,
+  modeHint?: string,
 ): Promise<{ parsed: ParsedAction; tlEvent: TimelineEvent; simEvent: SimulationEvent } | null> {
   // 1. 观察：筛选该 Agent 可见的时间线事件
   const visibleEvents = getVisibleEvents(
@@ -684,7 +712,7 @@ async function agentDecideAndAct(
     { role: "system", content: buildSystemPrompt(agent) },
     {
       role: "user",
-      content: buildUserMessage(context, node, agent.name, injectionEvent),
+      content: buildUserMessage(context, node, agent.name, injectionEvent, modeHint),
     },
   ]
 
@@ -741,10 +769,13 @@ export async function runSimulation(
 ): Promise<SimulationEvent[]> {
   const events: SimulationEvent[] = []
   const { agents, framework, wordBudget, llmConfig, injectionEvent, maxRoundsPerNode } = input
+  const mode = input.mode || framework.simulationMode || "hybrid"
+  const modeConfig: ModeConfig = getModeConfig(mode)
   const totalNodes = framework.nodes.length
-  // 使用用户指定的轮数，若未指定则自动计算
+  // 使用用户指定的轮数，若未指定则自动计算并乘以模式系数
   const calculatedRounds = calcMaxRoundsPerNode(wordBudget) || MAX_ROUNDS_PER_NODE_FALLBACK
-  const maxRounds = Math.max(1, maxRoundsPerNode ?? calculatedRounds)
+  const baseRounds = Math.max(1, maxRoundsPerNode ?? calculatedRounds)
+  const maxRounds = Math.max(1, Math.round(baseRounds * modeConfig.roundsMultiplier))
   let aborted = false
 
   // 初始化仿真状态
@@ -815,8 +846,17 @@ export async function runSimulation(
 
         state.currentRound = round
 
+        // 根据模式决定本轮活跃 Agent 子集
+        let roundAgentList = nodeAgentList
+        if (modeConfig.agentSubsetRatio < 1 && nodeAgentList.length > 1) {
+          const subsetSize = Math.max(1, Math.ceil(nodeAgentList.length * modeConfig.agentSubsetRatio))
+          // 简单的随机选择：打乱后取前 N 个
+          const shuffled = [...nodeAgentList].sort(() => Math.random() - 0.5)
+          roundAgentList = shuffled.slice(0, subsetSize)
+        }
+
         // a. 每个活跃 Agent 观察并决策
-        for (const agent of nodeAgentList) {
+        for (const agent of roundAgentList) {
           if (signal?.aborted) {
             aborted = true
             break
@@ -826,22 +866,39 @@ export async function runSimulation(
           const currentAgent = state.activeAgents.get(agent.characterId)
           if (!currentAgent) continue
 
-          const result = await agentDecideAndAct(
-            currentAgent,
-            node,
-            state,
-            llmConfig,
-            extraction,
-            recentEventDescs,
-            round === 0 ? injectionEvent : undefined,
-            signal,
-          )
+          let result: Awaited<ReturnType<typeof agentDecideAndAct>> | null = null
+          try {
+            result = await agentDecideAndAct(
+              currentAgent,
+              node,
+              state,
+              llmConfig,
+              extraction,
+              recentEventDescs,
+              round === 0 ? injectionEvent : undefined,
+              signal,
+              modeConfig.behaviorHint,
+            )
+          } catch (agentErr) {
+            // 单个 Agent 失败不中断整个推演，记录事件后跳过
+            console.warn(`[simulation] Agent ${currentAgent.name} 决策失败，跳过本轮：`, agentErr)
+            const warnEvent: SimulationEvent = {
+              type: "info",
+              timestamp: new Date().toISOString(),
+              message: `${currentAgent.name} 本轮无行动（API错误），继续推演`,
+            }
+            events.push(warnEvent)
+            callbacks.onEvent(warnEvent)
+            continue
+          }
 
           if (!result) {
             if (signal?.aborted) {
               aborted = true
+              break
             }
-            break
+            // null 且非 abort，跳过该 agent 继续
+            continue
           }
 
           const { parsed, tlEvent, simEvent } = result
@@ -883,7 +940,34 @@ export async function runSimulation(
 
         if (aborted) break
 
-        // e. 检查节点目标是否达成
+        // e. 随机事件（根据模式概率触发）
+        if (modeConfig.randomEventChance > 0 && Math.random() < modeConfig.randomEventChance) {
+          const randomEvent = generateRandomEvent()
+          if (randomEvent) {
+            events.push(randomEvent)
+            callbacks.onEvent(randomEvent)
+            const tlEvent: TimelineEvent = {
+              id: `tl-rand-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              actorId: "system",
+              actorName: "系统事件",
+              actionType: "pushPlot",
+              content: randomEvent.message || "",
+              observableBy: Array.from(state.activeAgents.keys()),
+              round,
+              nodeIndex: node.index,
+              timestamp: new Date().toISOString(),
+              impacts: [],
+              targetId: undefined,
+              targetName: undefined,
+            }
+            state.timelineEvents.push(tlEvent)
+            nodeTimelineEvents.push(tlEvent)
+            callbacks.onTimelineEvent?.(tlEvent)
+            recentEventDescs.push(`[系统事件] ${randomEvent.message}`)
+          }
+        }
+
+        // f. 检查节点目标是否达成
         if (isNodeGoalReached(node, nodeTimelineEvents, maxRounds, round)) {
           break
         }
@@ -913,7 +997,25 @@ export async function runSimulation(
     return events
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
+    // 如果是 abort 导致的错误，正常返回已收集事件
+    if (signal?.aborted || error.name === "AbortError") {
+      return events
+    }
+    // 其他致命错误才回调 onError 并抛出
+    console.error("[simulation] 仿真引擎致命错误：", error)
     callbacks.onError(error)
+    // 如果已经收集了一些事件，仍然返回它们而非抛出，让上层能部分使用结果
+    if (events.length > 0) {
+      const errorEvent: SimulationEvent = {
+        type: "info",
+        timestamp: new Date().toISOString(),
+        message: `推演过程中遇到错误：${error.message}，已返回已推演内容`,
+      }
+      events.push(errorEvent)
+      callbacks.onEvent(errorEvent)
+      callbacks.onComplete(events)
+      return events
+    }
     throw error
   }
 }

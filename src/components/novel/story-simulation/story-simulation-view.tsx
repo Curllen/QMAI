@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { Send, X, Download } from "lucide-react"
+import { Send, X, Download, ChevronDown, ChevronRight, Save, Loader2 } from "lucide-react"
 
 import { useWikiStore } from "@/stores/wiki-store"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
@@ -16,7 +16,9 @@ import { generateStoryDraft } from "@/lib/novel/story-simulation/story-draft-gen
 import { saveFramework, saveSimulationResult, loadSimulationResults } from "@/lib/novel/story-simulation/framework-store"
 import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import { interviewAgent } from "@/lib/novel/story-simulation/agent-interview"
+import { saveInterview } from "@/lib/novel/story-simulation/interview-store"
 import { exportInterview } from "@/lib/novel/story-simulation/interview-export"
+import { serializeSimulationState, deserializeSimulationSnapshot } from "@/lib/novel/story-simulation/simulation-serializer"
 import type {
   AgentChatMessage,
   ExtractionResult,
@@ -122,11 +124,14 @@ export function StorySimulationView() {
   const extractionResult = useStorySimulationStore((s) => s.extractionResult)
   const currentFramework = useStorySimulationStore((s) => s.currentFramework)
   const currentReport = useStorySimulationStore((s) => s.currentReport)
+  const currentDraft = useStorySimulationStore((s) => s.currentDraft)
   const error = useStorySimulationStore((s) => s.error)
   const progress = useStorySimulationStore((s) => s.progress)
   const progressLabel = useStorySimulationStore((s) => s.progressLabel)
   const timelineEvents = useStorySimulationStore((s) => s.timelineEvents)
   const activeChatAgent = useStorySimulationStore((s) => s.activeChatAgent)
+  const savedResults = useStorySimulationStore((s) => s.savedResults)
+  const selectedResultId = useStorySimulationStore((s) => s.selectedResultId)
 
   const setPhase = useStorySimulationStore((s) => s.setPhase)
   const setExtractionResult = useStorySimulationStore(
@@ -152,10 +157,15 @@ export function StorySimulationView() {
   const lastAgentsRef = useRef<NovelAgent[]>([])
   const lastSimulationStateRef = useRef<SimulationState | null>(null)
 
+  // 取消控制器
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+
   // 采访输入框
   const [chatInput, setChatInput] = useState("")
   const [chatSending, setChatSending] = useState(false)
   const [chatExporting, setChatExporting] = useState(false)
+  const [chatSaving, setChatSaving] = useState(false)
   const chatStreamRef = useRef("")
   const chatLogRef = useRef<HTMLDivElement | null>(null)
 
@@ -169,7 +179,31 @@ export function StorySimulationView() {
     }
   }, [agentChatMessages, activeChatAgent])
 
+  // 选择历史结果时，反序列化恢复agent状态，支持采访
+  useEffect(() => {
+    if (!selectedResultId) return
+    const result = savedResults.find(r => r.id === selectedResultId)
+    if (result?.agentSnapshot) {
+      try {
+        const { agents, state } = deserializeSimulationSnapshot(result.agentSnapshot)
+        lastAgentsRef.current = agents
+        lastSimulationStateRef.current = state
+      } catch (err) {
+        console.error("反序列化历史结果失败:", err)
+      }
+    }
+  }, [selectedResultId, savedResults])
+
   // ── 核心流程 ──
+
+  /** 取消当前正在进行的操作 */
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      setIsCancelling(true)
+      setError("正在取消...")
+      abortControllerRef.current.abort()
+    }
+  }
 
   /** 提取内容并生成故事框架，进入框架确认阶段。 */
   const handleStart = async () => {
@@ -235,6 +269,10 @@ export function StorySimulationView() {
     }
     setError(null)
     setTimelineEvents([])
+    setIsCancelling(false)
+    const ac = new AbortController()
+    abortControllerRef.current = ac
+
     try {
       // 若尚无提取结果（如从历史框架进入），先提取
       let extraction = extractionResult
@@ -292,7 +330,15 @@ export function StorySimulationView() {
         },
         extraction,
         callbacks,
+        ac.signal,
       )
+
+      if (ac.signal.aborted) {
+        setPhase("framework-confirming")
+        setError("推演已取消")
+        setTimeout(() => setError(null), 3000)
+        return
+      }
 
       // 保存仿真状态供采访使用
       lastSimulationStateRef.current = {
@@ -313,18 +359,32 @@ export function StorySimulationView() {
         llmConfig,
         onProgress: (label) =>
           setProgress(phaseBaseProgressRef.current, label),
+        signal: ac.signal,
       })
+
+      if (ac.signal.aborted) {
+        setPhase("framework-confirming")
+        setError("已取消")
+        setTimeout(() => setError(null), 3000)
+        return
+      }
+
       setCurrentReport(report)
       setPhase("report-viewing")
 
-      // 自动保存推演结果（包含时间线事件）
+      // 自动保存推演结果（包含时间线事件和agent快照）
       try {
+        const agentSnapshot = serializeSimulationState(
+          lastSimulationStateRef.current!,
+          lastAgentsRef.current,
+        )
         await saveSimulationResult(
           projectPath,
           currentFramework.id,
           report,
           undefined,
-          timelineEvents,
+          collectedTimeline,
+          agentSnapshot,
         )
         // 刷新历史结果列表
         const results = await loadSimulationResults(projectPath, currentFramework.id)
@@ -334,14 +394,24 @@ export function StorySimulationView() {
           report: r.report,
           draft: r.draft,
           timelineEvents: r.timelineEvents,
+          agentSnapshot: r.agentSnapshot,
           createdAt: r.report.createdAt,
         })))
       } catch (saveErr) {
         console.error("保存推演结果失败:", saveErr)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setPhase("framework-confirming")
+      if (ac.signal.aborted) {
+        setPhase("framework-confirming")
+        setError("推演已取消")
+        setTimeout(() => setError(null), 3000)
+      } else {
+        setError(err instanceof Error ? err.message : String(err))
+        setPhase("framework-confirming")
+      }
+    } finally {
+      setIsCancelling(false)
+      abortControllerRef.current = null
     }
   }
 
@@ -364,6 +434,10 @@ export function StorySimulationView() {
       return
     }
     setError(null)
+    setIsCancelling(false)
+    const ac = new AbortController()
+    abortControllerRef.current = ac
+
     try {
       setPhase("draft-generating")
       phaseBaseProgressRef.current = 90
@@ -376,18 +450,31 @@ export function StorySimulationView() {
         llmConfig,
         onProgress: (label) =>
           setProgress(phaseBaseProgressRef.current, label),
+        signal: ac.signal,
       })
+
+      if (ac.signal.aborted) {
+        setPhase("report-viewing")
+        setError("草稿生成已取消")
+        setTimeout(() => setError(null), 3000)
+        return
+      }
+
       setCurrentDraft(draft)
       setPhase("draft-viewing")
 
       // 更新保存的推演结果，添加草稿
       try {
+        const agentSnapshot = lastSimulationStateRef.current
+          ? serializeSimulationState(lastSimulationStateRef.current, lastAgentsRef.current)
+          : undefined
         await saveSimulationResult(
           projectPath,
           currentFramework.id,
           currentReport,
           draft,
           timelineEvents,
+          agentSnapshot,
         )
         // 刷新历史结果列表
         const results = await loadSimulationResults(projectPath, currentFramework.id)
@@ -397,20 +484,37 @@ export function StorySimulationView() {
           report: r.report,
           draft: r.draft,
           timelineEvents: r.timelineEvents,
+          agentSnapshot: r.agentSnapshot,
           createdAt: r.report.createdAt,
         })))
       } catch (saveErr) {
         console.error("更新推演结果草稿失败:", saveErr)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setPhase("report-viewing")
+      if (ac.signal.aborted) {
+        setPhase("report-viewing")
+        setError("草稿生成已取消")
+        setTimeout(() => setError(null), 3000)
+      } else {
+        setError(err instanceof Error ? err.message : String(err))
+        setPhase("report-viewing")
+      }
+    } finally {
+      setIsCancelling(false)
+      abortControllerRef.current = null
     }
   }
 
   /** 草稿视图返回报告视图。 */
   const handleBackToReport = () => {
     setPhase("report-viewing")
+  }
+
+  /** 从报告视图进入草稿视图。 */
+  const handleViewDraft = () => {
+    if (currentDraft) {
+      setPhase("draft-viewing")
+    }
   }
 
   /** 打开 Agent 采访面板。 */
@@ -440,6 +544,30 @@ export function StorySimulationView() {
       setError(err instanceof Error ? err.message : "导出失败")
     } finally {
       setChatExporting(false)
+    }
+  }
+
+  /** 保存采访对话到项目。 */
+  const handleSaveChat = async () => {
+    if (!activeChatAgent || !projectPath || agentChatMessages.length === 0) return
+    setChatSaving(true)
+    try {
+      const session = {
+        agentId: activeChatAgent.id,
+        agentName: activeChatAgent.name,
+        messages: agentChatMessages,
+      }
+      await saveInterview(projectPath, session, {
+        frameworkId: currentFramework?.id,
+        frameworkTitle: currentFramework?.title,
+      })
+      setError(`采访对话已保存（${agentChatMessages.length}条消息）`)
+      setTimeout(() => setError(null), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setChatSaving(false)
     }
   }
 
@@ -569,12 +697,18 @@ export function StorySimulationView() {
           <ProgressPanel
             progress={progress}
             label={progressLabel || progressTitle}
+            onCancel={handleCancel}
+            cancelling={isCancelling}
           />
         ) : phase === "simulating" ? (
           <SimulatingTimelinePanel
             progress={progress}
             label={progressLabel || progressTitle}
             events={timelineEvents}
+            framework={currentFramework}
+            onInterviewAgent={(id, name) => handleInterviewAgent(id, name)}
+            onCancel={handleCancel}
+            cancelling={isCancelling}
           />
         ) : phase === "framework-confirming" ? (
           <div className="flex-1 overflow-y-auto p-4">
@@ -591,6 +725,8 @@ export function StorySimulationView() {
                 onResimulate={handleResimulate}
                 onGenerateDraft={(branch) => void handleGenerateDraft(branch)}
                 onInterviewAgent={(id, name) => handleInterviewAgent(id, name)}
+                onViewDraft={handleViewDraft}
+                hasDraft={!!currentDraft}
               />
             </div>
             {activeChatAgent && (
@@ -602,8 +738,10 @@ export function StorySimulationView() {
                 onSend={() => void handleSendChat()}
                 onClose={handleCloseChat}
                 onExport={() => void handleExportChat()}
+                onSave={() => void handleSaveChat()}
                 sending={chatSending}
                 exporting={chatExporting}
+                saving={chatSaving}
                 chatLogRef={chatLogRef}
               />
             )}
@@ -620,13 +758,17 @@ export function StorySimulationView() {
   )
 }
 
-/** 进度展示面板：文字 + 进度条。 */
+/** 进度展示面板：文字 + 进度条 + 取消按钮。 */
 function ProgressPanel({
   progress,
   label,
+  onCancel,
+  cancelling,
 }: {
   progress: number
   label: string
+  onCancel?: () => void
+  cancelling?: boolean
 }) {
   const clamped = Math.min(100, Math.max(0, progress))
   return (
@@ -639,21 +781,39 @@ function ProgressPanel({
         />
       </div>
       <div className="text-xs text-muted-foreground">{clamped}%</div>
+      {onCancel && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          disabled={cancelling}
+          className="mt-2"
+        >
+          {cancelling ? "正在取消..." : "取消"}
+        </Button>
+      )}
     </div>
   )
 }
 
-/** 仿真中面板：进度条 + 实时时间线事件流（带筛选）。 */
+/** 仿真中面板：进度条 + 实时时间线事件流（按节点分组折叠，带筛选）。 */
 function SimulatingTimelinePanel({
   progress,
   label,
   events,
+  framework,
   onInterviewAgent,
+  onCancel,
+  cancelling,
 }: {
   progress: number
   label: string
   events: TimelineEvent[]
+  framework?: StoryFramework | null
   onInterviewAgent?: (agentId: string, agentName: string) => void
+  onCancel?: () => void
+  cancelling?: boolean
 }) {
   const clamped = Math.min(100, Math.max(0, progress))
   const logRef = useRef<HTMLDivElement | null>(null)
@@ -661,23 +821,69 @@ function SimulatingTimelinePanel({
   // 筛选状态
   const [filterActor, setFilterActor] = useState<string>("all")
   const [filterType, setFilterType] = useState<string>("all")
+  // 折叠状态：key = nodeIndex，value = 是否折叠
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<number>>(new Set())
 
   // 从事件中提取所有角色和行动类型
-  const actors = Array.from(new Set(events.map((e) => e.actorName))).sort()
-  const actionTypes = Array.from(new Set(events.map((e) => e.actionType))).sort()
+  const actors = useMemo(
+    () => Array.from(new Set(events.map((e) => e.actorName))).sort(),
+    [events],
+  )
+  const actionTypes = useMemo(
+    () => Array.from(new Set(events.map((e) => e.actionType))).sort(),
+    [events],
+  )
 
-  // 过滤事件
-  const filteredEvents = events.filter((e) => {
-    if (filterActor !== "all" && e.actorName !== filterActor) return false
-    if (filterType !== "all" && e.actionType !== filterType) return false
-    return true
-  })
+  // 构建节点索引映射
+  const nodeMap = useMemo(() => {
+    const map = new Map<number, { title: string; phase: string }>()
+    if (framework) {
+      for (const node of framework.nodes) {
+        map.set(node.index, { title: node.title, phase: node.phase })
+      }
+    }
+    return map
+  }, [framework])
+
+  // 阶段中文标签
+  const phaseLabel = (phase: string): string => {
+    const map: Record<string, string> = { 起: "起", 承: "承", 转: "转", 合: "合" }
+    return map[phase] || phase
+  }
+
+  // 按节点分组事件
+  const groupedEvents = useMemo(() => {
+    // 先过滤事件
+    const filtered = events.filter((e) => {
+      if (filterActor !== "all" && e.actorName !== filterActor) return false
+      if (filterType !== "all" && e.actionType !== filterType) return false
+      return true
+    })
+    // 按 nodeIndex 分组
+    const groups = new Map<number, TimelineEvent[]>()
+    for (const ev of filtered) {
+      const idx = ev.nodeIndex
+      if (!groups.has(idx)) groups.set(idx, [])
+      groups.get(idx)!.push(ev)
+    }
+    // 按节点索引排序
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([nodeIndex, evs]) => ({
+        nodeIndex,
+        nodeInfo: nodeMap.get(nodeIndex),
+        events: evs,
+      }))
+  }, [events, filterActor, filterType, nodeMap])
+
+  // 计算过滤后的事件总数
+  const totalFiltered = groupedEvents.reduce((sum, g) => sum + g.events.length, 0)
 
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
     }
-  }, [filteredEvents.length])
+  }, [totalFiltered])
 
   // 行动类型中文标签
   const actionTypeLabel = (type: string): string => {
@@ -700,6 +906,24 @@ function SimulatingTimelinePanel({
     return map[type] || type
   }
 
+  const toggleNode = (idx: number) => {
+    setCollapsedNodes((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) {
+        next.delete(idx)
+      } else {
+        next.add(idx)
+      }
+      return next
+    })
+  }
+
+  const expandAll = () => setCollapsedNodes(new Set())
+  const collapseAll = () => {
+    const allNodes = new Set(groupedEvents.map((g) => g.nodeIndex))
+    setCollapsedNodes(allNodes)
+  }
+
   return (
     <div className="flex flex-1 flex-col p-6">
       <div className="mb-4 flex flex-col items-center gap-2">
@@ -710,7 +934,21 @@ function SimulatingTimelinePanel({
             style={{ width: `${clamped}%` }}
           />
         </div>
-        <div className="text-xs text-muted-foreground">{clamped}%</div>
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-muted-foreground">{clamped}%</div>
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={cancelling}
+              className="h-7 text-xs"
+            >
+              {cancelling ? "正在取消..." : "取消推演"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 筛选栏 */}
@@ -749,9 +987,26 @@ function SimulatingTimelinePanel({
               清除筛选
             </button>
           )}
-          <span className="ml-auto text-muted-foreground">
-            显示 {filteredEvents.length}/{events.length} 条
-          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={expandAll}
+            >
+              全部展开
+            </button>
+            <span className="text-muted-foreground">|</span>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={collapseAll}
+            >
+              全部折叠
+            </button>
+            <span className="ml-2 text-muted-foreground">
+              显示 {totalFiltered}/{events.length} 条
+            </span>
+          </div>
         </div>
       )}
 
@@ -759,51 +1014,86 @@ function SimulatingTimelinePanel({
         ref={logRef}
         className="flex-1 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-sm"
       >
-        {filteredEvents.length === 0 ? (
+        {groupedEvents.length === 0 ? (
           <div className="py-8 text-center text-xs text-muted-foreground">
             {events.length === 0 ? "等待角色行动..." : "没有符合筛选条件的事件"}
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {filteredEvents.map((ev) => (
-              <div key={ev.id} className="leading-relaxed">
-                <span className="mr-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                  {ev.nodeIndex + 1}-{ev.round + 1}
-                </span>
-                {onInterviewAgent ? (
+          <div className="space-y-3">
+            {groupedEvents.map(({ nodeIndex, nodeInfo, events: nodeEvents }) => {
+              const isCollapsed = collapsedNodes.has(nodeIndex)
+              const phase = nodeInfo?.phase || "起"
+              const nodeTitle = nodeInfo?.title || `节点 ${nodeIndex + 1}`
+              return (
+                <div key={nodeIndex} className="rounded-md border bg-background/50">
+                  {/* 节点标题栏 - 可点击折叠 */}
                   <button
                     type="button"
-                    className="font-medium text-primary hover:underline"
-                    onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/50"
+                    onClick={() => toggleNode(nodeIndex)}
                   >
-                    {ev.actorName}
+                    {isCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                      {phaseLabel(phase)}
+                    </span>
+                    <span className="text-sm font-medium">
+                      节点 {nodeIndex + 1}：{nodeTitle}
+                    </span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">
+                      {nodeEvents.length} 条事件
+                    </span>
                   </button>
-                ) : (
-                  <span className="font-medium">{ev.actorName}</span>
-                )}
-                <span className="text-muted-foreground">
-                  {" "}
-                  {ev.targetName && ev.targetId && onInterviewAgent ? (
-                    <>
-                      {actionTypePhraseOnly(ev.actionType)}{" "}
-                      <button
-                        type="button"
-                        className="text-primary hover:underline"
-                        onClick={() => onInterviewAgent(ev.targetId!, ev.targetName!)}
-                      >
-                        {ev.targetName}
-                      </button>
-                      ：
-                    </>
-                  ) : (
-                    <>
-                      {actionPhrase(ev.actionType, ev.targetName)}：
-                    </>
+                  {/* 节点事件列表 */}
+                  {!isCollapsed && (
+                    <div className="space-y-1.5 border-t px-3 py-2">
+                      {nodeEvents.map((ev) => (
+                        <div key={ev.id} className="leading-relaxed">
+                          <span className="mr-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                            R{ev.round + 1}
+                          </span>
+                          {onInterviewAgent ? (
+                            <button
+                              type="button"
+                              className="font-medium text-primary hover:underline"
+                              onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                            >
+                              {ev.actorName}
+                            </button>
+                          ) : (
+                            <span className="font-medium">{ev.actorName}</span>
+                          )}
+                          <span className="text-muted-foreground">
+                            {" "}
+                            {ev.targetName && ev.targetId && onInterviewAgent ? (
+                              <>
+                                {actionTypePhraseOnly(ev.actionType)}{" "}
+                                <button
+                                  type="button"
+                                  className="text-primary hover:underline"
+                                  onClick={() => onInterviewAgent(ev.targetId!, ev.targetName!)}
+                                >
+                                  {ev.targetName}
+                                </button>
+                                ：
+                              </>
+                            ) : (
+                              <>
+                                {actionPhrase(ev.actionType, ev.targetName)}：
+                              </>
+                            )}
+                          </span>
+                          <span>{ev.content}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </span>
-                <span>{ev.content}</span>
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -820,8 +1110,10 @@ function AgentChatPanel({
   onSend,
   onClose,
   onExport,
+  onSave,
   sending,
   exporting,
+  saving,
   chatLogRef,
 }: {
   agentName: string
@@ -831,8 +1123,10 @@ function AgentChatPanel({
   onSend: () => void
   onClose: () => void
   onExport: () => void
+  onSave: () => void
   sending: boolean
   exporting: boolean
+  saving: boolean
   chatLogRef: React.RefObject<HTMLDivElement | null>
 }) {
   return (
@@ -840,6 +1134,17 @@ function AgentChatPanel({
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="text-sm font-semibold">与 {agentName} 对话</div>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            onClick={onSave}
+            title="保存采访对话"
+            disabled={saving || messages.length === 0}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          </Button>
           <Button
             type="button"
             size="icon"

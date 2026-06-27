@@ -371,6 +371,7 @@ function StorySimulationSidebarPanel() {
         report: r.report,
         draft: r.draft,
         timelineEvents: r.timelineEvents,
+        agentSnapshot: r.agentSnapshot,
         createdAt: r.report.createdAt,
       })))
     } catch {

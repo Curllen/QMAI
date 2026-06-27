@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network, Download } from "lucide-react"
+import { MessageCircle, RefreshCw, Sparkles, TrendingUp, Network, Download, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { exportReport } from "@/lib/novel/story-simulation/report-export"
-import type { StoryBranch } from "@/lib/novel/story-simulation/types"
+import type { StoryBranch, TimelineEvent, StoryFramework } from "@/lib/novel/story-simulation/types"
 
 const PROBABILITY_COLORS: Record<string, string> = {
   high: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
@@ -17,6 +17,8 @@ interface SimulationReportViewProps {
   onResimulate: () => void
   onGenerateDraft: (branch: StoryBranch) => void
   onInterviewAgent: (agentId: string, agentName: string) => void
+  onViewDraft?: () => void
+  hasDraft?: boolean
 }
 
 /** 将 actionType 映射为中文动词短语 */
@@ -49,6 +51,8 @@ export function SimulationReportView({
   onResimulate,
   onGenerateDraft,
   onInterviewAgent,
+  onViewDraft,
+  hasDraft,
 }: SimulationReportViewProps) {
   const { t } = useTranslation()
   const projectPath = useWikiStore((s) => s.project?.path)
@@ -153,6 +157,12 @@ export function SimulationReportView({
             <Download className="mr-1 h-3.5 w-3.5" />
             {exporting ? "导出中..." : "导出报告"}
           </Button>
+          {hasDraft && onViewDraft && (
+            <Button variant="default" size="sm" onClick={onViewDraft}>
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              查看草稿
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onResimulate}>
             <RefreshCw className="mr-1 h-3.5 w-3.5" />
             {t("storySimulation.resimulate")}
@@ -173,57 +183,14 @@ export function SimulationReportView({
             </section>
           )}
 
-          {/* 关键剧情事件时间线 */}
+          {/* 关键剧情事件时间线 - 按节点分组折叠 */}
           {timelineEvents.length > 0 && (
-            <section>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                关键剧情事件
-              </h3>
-              <div className="space-y-2">
-                {timelineEvents.map((ev) => (
-                  <div
-                    key={ev.id}
-                    className="rounded-md border px-3 py-2 text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                        节点{ev.nodeIndex + 1}·R{ev.round + 1}
-                      </span>
-                      <button
-                        type="button"
-                        className="font-medium text-primary hover:underline"
-                        onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
-                      >
-                        {ev.actorName}
-                      </button>
-                      <span className="text-xs text-muted-foreground">
-                        {actionLabel(ev.actionType)}
-                      </span>
-                      {ev.targetName && (
-                        <>
-                          <span className="text-xs text-muted-foreground">→</span>
-                          <button
-                            type="button"
-                            className="text-xs text-primary hover:underline"
-                            onClick={() => {
-                              const targetId = ev.targetId || nameToId.get(ev.targetName || "")
-                              if (targetId && ev.targetName) {
-                                onInterviewAgent(targetId, ev.targetName)
-                              }
-                            }}
-                          >
-                            {ev.targetName}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm leading-relaxed text-foreground/90">
-                      {ev.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <TimelineGroupedEvents
+              events={timelineEvents}
+              framework={currentFramework}
+              nameToId={nameToId}
+              onInterviewAgent={onInterviewAgent}
+            />
           )}
 
           {/* 角色采访区 */}
@@ -533,5 +500,180 @@ function RelationshipGraph({ data }: { data: RelationshipGraphData }) {
         <span>· 节点大小=活跃度 · 线粗细=互动次数</span>
       </div>
     </div>
+  )
+}
+
+// ── 按节点分组折叠的时间线组件 ──
+
+function TimelineGroupedEvents({
+  events,
+  framework,
+  nameToId,
+  onInterviewAgent,
+}: {
+  events: TimelineEvent[]
+  framework?: StoryFramework | null
+  nameToId: Map<string, string>
+  onInterviewAgent: (agentId: string, agentName: string) => void
+}) {
+  // 折叠状态：key = nodeIndex，value = 是否折叠
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<number>>(new Set())
+
+  // 构建节点索引映射
+  const nodeMap = useMemo(() => {
+    const map = new Map<number, { title: string; phase: string }>()
+    if (framework) {
+      for (const node of framework.nodes) {
+        map.set(node.index, { title: node.title, phase: node.phase })
+      }
+    }
+    return map
+  }, [framework])
+
+  // 阶段中文标签
+  const phaseLabel = (phase: string): string => {
+    const map: Record<string, string> = { 起: "起", 承: "承", 转: "转", 合: "合" }
+    return map[phase] || phase
+  }
+
+  // 按节点分组事件
+  const groupedEvents = useMemo(() => {
+    const groups = new Map<number, TimelineEvent[]>()
+    for (const ev of events) {
+      const idx = ev.nodeIndex
+      if (!groups.has(idx)) groups.set(idx, [])
+      groups.get(idx)!.push(ev)
+    }
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([nodeIndex, evs]) => ({
+        nodeIndex,
+        nodeInfo: nodeMap.get(nodeIndex),
+        events: evs,
+      }))
+  }, [events, nodeMap])
+
+  const toggleNode = (idx: number) => {
+    setCollapsedNodes((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) {
+        next.delete(idx)
+      } else {
+        next.add(idx)
+      }
+      return next
+    })
+  }
+
+  const expandAll = () => setCollapsedNodes(new Set())
+  const collapseAll = () => {
+    const allNodes = new Set(groupedEvents.map((g) => g.nodeIndex))
+    setCollapsedNodes(allNodes)
+  }
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          关键剧情事件
+        </h3>
+        <div className="flex items-center gap-1 text-xs">
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={expandAll}
+          >
+            全部展开
+          </button>
+          <span className="text-muted-foreground">|</span>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={collapseAll}
+          >
+            全部折叠
+          </button>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {groupedEvents.map(({ nodeIndex, nodeInfo, events: nodeEvents }) => {
+          const isCollapsed = collapsedNodes.has(nodeIndex)
+          const phase = nodeInfo?.phase || "起"
+          const nodeTitle = nodeInfo?.title || `节点 ${nodeIndex + 1}`
+          return (
+            <div key={nodeIndex} className="rounded-md border bg-background/50">
+              {/* 节点标题栏 - 可点击折叠 */}
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/50"
+                onClick={() => toggleNode(nodeIndex)}
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                  {phaseLabel(phase)}
+                </span>
+                <span className="text-sm font-medium">
+                  节点 {nodeIndex + 1}：{nodeTitle}
+                </span>
+                <span className="ml-auto text-[11px] text-muted-foreground">
+                  {nodeEvents.length} 条事件
+                </span>
+              </button>
+              {/* 节点事件列表 */}
+              {!isCollapsed && (
+                <div className="space-y-2 border-t p-3">
+                  {nodeEvents.map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="rounded-md border bg-muted/20 px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          R{ev.round + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                        >
+                          {ev.actorName}
+                        </button>
+                        <span className="text-xs text-muted-foreground">
+                          {actionLabel(ev.actionType)}
+                        </span>
+                        {ev.targetName && (
+                          <>
+                            <span className="text-xs text-muted-foreground">→</span>
+                            <button
+                              type="button"
+                              className="text-xs text-primary hover:underline"
+                              onClick={() => {
+                                const targetId = ev.targetId || nameToId.get(ev.targetName || "")
+                                if (targetId && ev.targetName) {
+                                  onInterviewAgent(targetId, ev.targetName)
+                                }
+                              }}
+                            >
+                              {ev.targetName}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm leading-relaxed text-foreground/90">
+                        {ev.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }

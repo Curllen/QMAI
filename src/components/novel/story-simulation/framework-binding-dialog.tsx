@@ -33,6 +33,7 @@ export function FrameworkBindingDialog({
   onBound,
 }: FrameworkBindingDialogProps) {
   const projectPath = useWikiStore((s) => s.project?.path)
+  const bumpBindingVersion = useWikiStore((s) => s.bumpBindingVersion)
   const binding = useStorySimulationStore((s) => s.binding)
   const setBinding = useStorySimulationStore((s) => s.setBinding)
 
@@ -57,6 +58,7 @@ export function FrameworkBindingDialog({
     try {
       const updated = await saveBinding(projectPath, framework, chapterCount)
       setBinding(updated)
+      bumpBindingVersion()
       onBound()
       onOpenChange(false)
     } catch (err) {
@@ -74,6 +76,7 @@ export function FrameworkBindingDialog({
     try {
       await clearBinding(projectPath)
       setBinding(null)
+      bumpBindingVersion()
       onBound()
       onOpenChange(false)
     } catch (err) {

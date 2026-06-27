@@ -1,10 +1,22 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Check, Copy, Download, FileText } from "lucide-react"
+import { ArrowLeft, Check, Copy, Download, FileText, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { exportDraft } from "@/lib/novel/story-simulation/draft-export"
+import { importDraftToChapters } from "@/lib/novel/story-simulation/draft-importer"
+import { getNextChapterNumber } from "@/lib/novel/chapter-utils"
+import { refreshProjectState } from "@/lib/project-refresh"
 
 interface StoryDraftViewProps {
   onBack: () => void
@@ -16,8 +28,45 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
   const currentFramework = useStorySimulationStore((s) => s.currentFramework)
   const draft = useStorySimulationStore((s) => s.currentDraft)
   const setError = useStorySimulationStore((s) => s.setError)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
+  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const [copied, setCopied] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importResult, setImportResult] = useState<{
+    count: number
+    startChapter: number
+    paths: string[]
+    backedUpCount: number
+  } | null>(null)
+  const [startChapter, setStartChapter] = useState(1)
+  const [overwrite, setOverwrite] = useState(false)
+  const [autoStartChapter, setAutoStartChapter] = useState(true)
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([])
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; title: string } | null>(null)
+
+  // 打开对话框时自动计算下一个章节号，并默认全选
+  useEffect(() => {
+    if (showImportDialog && projectPath && autoStartChapter && !importResult && draft) {
+      let cancelled = false
+      void (async () => {
+        try {
+          const next = await getNextChapterNumber(projectPath)
+          if (!cancelled) setStartChapter(next)
+        } catch {
+          // 计算失败时使用默认值
+        }
+      })()
+      // 默认全选
+      if (selectedIndices.length === 0 && draft) {
+        setSelectedIndices(draft.chapters.map((_, i) => i))
+      }
+      return () => {
+        cancelled = true
+      }
+    }
+  }, [showImportDialog, projectPath, autoStartChapter, importResult, draft, selectedIndices.length])
 
   if (!draft) return null
 
@@ -45,6 +94,82 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
     }
   }
 
+  const handleImport = async () => {
+    if (!projectPath || !currentFramework || !draft) return
+    if (selectedIndices.length === 0) {
+      setError("请至少选择一章导入")
+      setTimeout(() => setError(null), 3000)
+      return
+    }
+    setImporting(true)
+    try {
+      const result = await importDraftToChapters(
+        projectPath,
+        currentFramework,
+        draft,
+        {
+          startChapter,
+          overwrite,
+          selectedIndices,
+          onProgress: (current, total, title) => {
+            setImportProgress({ current, total, title })
+          },
+        },
+      )
+      setImportResult({
+        count: result.importedCount,
+        startChapter: result.startChapter,
+        paths: result.chapterPaths,
+        backedUpCount: result.backedUpPaths.length,
+      })
+      // 刷新项目状态
+      await refreshProjectState(projectPath)
+      // 选中第一个导入的章节
+      if (result.chapterPaths.length > 0) {
+        setSelectedFile(result.chapterPaths[0])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导入失败")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setImporting(false)
+      setImportProgress(null)
+    }
+  }
+
+  const handleGoToChapters = () => {
+    setShowImportDialog(false)
+    setImportResult(null)
+    setAutoStartChapter(true)
+    setOverwrite(false)
+    setSelectedIndices([])
+    setActiveView("wiki")
+  }
+
+  const handleCloseDialog = () => {
+    setShowImportDialog(false)
+    setImportResult(null)
+    setAutoStartChapter(true)
+    setOverwrite(false)
+    setSelectedIndices([])
+  }
+
+  const toggleChapter = (idx: number) => {
+    setSelectedIndices((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx],
+    )
+  }
+
+  const toggleAll = () => {
+    if (draft && selectedIndices.length === draft.chapters.length) {
+      setSelectedIndices([])
+    } else if (draft) {
+      setSelectedIndices(draft.chapters.map((_, i) => i))
+    }
+  }
+
+  const allSelected = draft && selectedIndices.length === draft.chapters.length
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-4 py-3">
@@ -55,6 +180,15 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
           <h2 className="text-sm font-semibold">{t("storySimulation.draftTitle")}</h2>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setShowImportDialog(true)}
+            disabled={importing}
+          >
+            <BookOpen className="mr-1 h-3.5 w-3.5" />
+            导入到章节库
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -94,6 +228,189 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
           ))}
         </div>
       </div>
+
+      {/* 导入确认对话框 */}
+      <Dialog open={showImportDialog} onOpenChange={(open) => {
+        if (!open) handleCloseDialog()
+        else setShowImportDialog(true)
+      }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {importResult ? "导入成功" : "导入草稿到章节库"}
+            </DialogTitle>
+            {!importResult && (
+              <DialogDescription>
+                选择要导入的章节，配置起始章节号和覆盖选项。
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {importResult ? (
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                <div className="font-medium">✓ 成功导入 {importResult.count} 章</div>
+                <div className="mt-1 text-xs opacity-80">
+                  章节范围：第{importResult.startChapter}章 ~ 第{importResult.startChapter + importResult.count - 1}章
+                </div>
+                {importResult.backedUpCount > 0 && (
+                  <div className="mt-1 text-xs opacity-80">
+                    已自动备份 {importResult.backedUpCount} 个原章节文件
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              {/* 章节选择 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">选择导入章节</span>
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {allSelected ? "取消全选" : "全选"}
+                  </button>
+                </div>
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded border p-2">
+                  {draft.chapters.map((chapter, idx) => (
+                    <label
+                      key={idx}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-accent"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIndices.includes(idx)}
+                        onChange={() => toggleChapter(idx)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="flex-1 truncate text-sm">
+                        {idx + 1}. {chapter.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        ~{chapter.content.length}字
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  已选 {selectedIndices.length} / {draft.chapters.length} 章
+                </div>
+              </div>
+
+              {/* 起始章节号 */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoStartChapter}
+                    onChange={(e) => {
+                      setAutoStartChapter(e.target.checked)
+                      if (e.target.checked && projectPath) {
+                        void getNextChapterNumber(projectPath).then(setStartChapter)
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium">
+                    自动选择起始章节号
+                  </span>
+                </label>
+                {!autoStartChapter && (
+                  <div className="flex items-center gap-2 pl-6">
+                    <span className="text-sm text-muted-foreground">起始章节：</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={startChapter}
+                      onChange={(e) => setStartChapter(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-24"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      将从第{startChapter}章开始
+                    </span>
+                  </div>
+                )}
+                {autoStartChapter && (
+                  <div className="pl-6 text-xs text-muted-foreground">
+                    从下一个可用章节号（第{startChapter}章）开始
+                  </div>
+                )}
+              </div>
+
+              {/* 覆盖选项 */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={overwrite}
+                    onChange={(e) => setOverwrite(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium">
+                    覆盖已存在的章节文件
+                  </span>
+                </label>
+                {overwrite && (
+                  <p className="pl-6 text-xs text-emerald-600 dark:text-emerald-400">
+                    ✓ 覆盖前会自动备份原章节文件到 .qmai/chapter-backups/
+                  </p>
+                )}
+                {!overwrite && (
+                  <p className="pl-6 text-xs text-amber-600 dark:text-amber-400">
+                    ⚠️ 如果目标章节号已存在，导入将失败并中止。
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            {importResult ? (
+              <>
+                <Button variant="outline" onClick={handleCloseDialog}>
+                  留在当前页
+                </Button>
+                <Button onClick={handleGoToChapters}>
+                  前往章节查看
+                </Button>
+              </>
+            ) : importing && importProgress ? (
+              <div className="w-full space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="truncate">正在导入：{importProgress.title}</span>
+                  <span className="shrink-0">{importProgress.current}/{importProgress.total}</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleCloseDialog}
+                  disabled={importing}
+                >
+                  取消
+                </Button>
+                <Button onClick={handleImport} disabled={importing || selectedIndices.length === 0}>
+                  {importing && importProgress
+                    ? `导入中 ${importProgress.current}/${importProgress.total}...`
+                    : importing
+                      ? "导入中..."
+                      : `确认导入（${selectedIndices.length}章）`}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

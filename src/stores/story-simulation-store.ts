@@ -9,6 +9,7 @@ import type {
   FrameworkBinding,
   TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
+import type { SerializedSimulationSnapshot } from "@/lib/novel/story-simulation/simulation-serializer"
 
 export interface SavedSimulationResult {
   id: string
@@ -16,6 +17,7 @@ export interface SavedSimulationResult {
   report: SimulationReport
   draft?: StoryDraft | null
   timelineEvents?: TimelineEvent[]
+  agentSnapshot?: SerializedSimulationSnapshot | null
   createdAt: string
 }
 
