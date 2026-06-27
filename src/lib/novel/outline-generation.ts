@@ -10,6 +10,7 @@ import { useOutlineGenerationStore } from "@/stores/outline-generation-store"
 import { useImportProgressStore } from "@/stores/import-progress-store"
 import type { LlmConfig } from "@/stores/wiki-store"
 import { useWikiStore } from "@/stores/wiki-store"
+import { hasUsableLlm } from "@/lib/has-usable-llm"
 import { ingestOutline } from "./chapter-ingest"
 import { buildContextPack, type ContextPack } from "./context-engine"
 import { resolveModelConfig } from "@/lib/novel/model-resolver"
@@ -453,6 +454,10 @@ export async function runOutlineGenerationTask(taskId: string, llmConfig: LlmCon
     ? resolveModelConfig(task.modelId, llmConfig, providerConfigs)
     : llmConfig
 
+  if (!hasUsableLlm(effectiveLlmConfig, providerConfigs)) {
+    throw new Error("请先在设置中配置并选择一个可用的 AI 模型，或在大纲弹窗中选择模型后再试。")
+  }
+
   const abortController = new AbortController()
   const progressTaskId = useImportProgressStore.getState().startTask({
     projectPath: task.projectPath,
@@ -498,6 +503,15 @@ export async function runOutlineRefinementTask(taskId: string, llmConfig: LlmCon
   const task = useOutlineGenerationStore.getState().tasks.find((item) => item.id === taskId)
   if (!task) return
 
+  const { providerConfigs } = useWikiStore.getState()
+  const effectiveLlmConfig = task.modelId
+    ? resolveModelConfig(task.modelId, llmConfig, providerConfigs)
+    : llmConfig
+
+  if (!hasUsableLlm(effectiveLlmConfig, providerConfigs)) {
+    throw new Error("请先在设置中配置并选择一个可用的 AI 模型，或在大纲弹窗中选择模型后再试。")
+  }
+
   const abortController = new AbortController()
   const progressTaskId = useImportProgressStore.getState().startTask({
     projectPath: task.projectPath,
@@ -513,7 +527,7 @@ export async function runOutlineRefinementTask(taskId: string, llmConfig: LlmCon
     if (task.selectedSectionKey) {
       outlinePath = await generateOutlineRefinementSectionFile(
         task.projectPath,
-        llmConfig,
+        effectiveLlmConfig,
         task.userRequest,
         task.selectedSectionKey as OutlineSectionGenerationKey,
         {
@@ -525,7 +539,7 @@ export async function runOutlineRefinementTask(taskId: string, llmConfig: LlmCon
     } else {
       const result = await generateOutlineRefinementFiles(
         task.projectPath,
-        llmConfig,
+        effectiveLlmConfig,
         task.userRequest,
         {
           mode: (task.writeMode as OutlineRefinementWriteMode | null) ?? undefined,

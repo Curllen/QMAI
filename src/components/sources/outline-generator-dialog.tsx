@@ -102,6 +102,7 @@ export function OutlineGeneratorDialog({
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const llmConfig = useWikiStore((s) => s.llmConfig)
+  const providerConfigs = useWikiStore((s) => s.providerConfigs)
   const dataVersion = useWikiStore((s) => s.dataVersion)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const createTask = useOutlineGenerationStore((s: OutlineGenerationState) => s.createTask)
@@ -142,6 +143,21 @@ export function OutlineGeneratorDialog({
     () => getSubGenres(channel, mainGenre),
     [channel, mainGenre],
   )
+
+  const hasAvailableModels = useMemo(() => {
+    for (const key of Object.keys(providerConfigs)) {
+      const config = providerConfigs[key]
+      if (key.startsWith("custom-")) {
+        if (config.enabled === false) continue
+      } else {
+        if (config.enabled !== true) continue
+      }
+      if (config.savedModels && config.savedModels.length > 0) {
+        return true
+      }
+    }
+    return false
+  }, [providerConfigs])
 
   useEffect(() => {
     const genres = getMainGenresByChannel(channel)
@@ -420,6 +436,7 @@ export function OutlineGeneratorDialog({
         displayTitle: currentSection?.title ?? t("novel.outlineGenerator.refineTitle"),
         writeMode: refineWriteMode,
         targetPath: refineWriteMode === "appendCurrent" ? selectedFile : null,
+        modelId: modelId || undefined,
       })
       updateTask(taskId, {
         status: "generating",
@@ -861,11 +878,15 @@ export function OutlineGeneratorDialog({
 
         <DialogFooter className="items-center gap-2 sm:justify-between">
           <div className="flex items-center gap-2">
-            <ChatModelSelector
-              value={modelId}
-              onChange={setModelId}
-              disabled={generating || taskGenerating}
-            />
+            {hasAvailableModels ? (
+              <ChatModelSelector
+                value={modelId}
+                onChange={setModelId}
+                disabled={generating || taskGenerating}
+              />
+            ) : (
+              <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button

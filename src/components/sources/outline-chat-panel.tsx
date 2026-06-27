@@ -214,6 +214,21 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const activeConv = conversations.find((c) => c.id === activeConversationId)
   const activeMessages = activeConv?.messages ?? []
 
+  const hasAvailableModels = useMemo(() => {
+    for (const key of Object.keys(providerConfigs)) {
+      const config = providerConfigs[key]
+      if (key.startsWith("custom-")) {
+        if (config.enabled === false) continue
+      } else {
+        if (config.enabled !== true) continue
+      }
+      if (config.savedModels && config.savedModels.length > 0) {
+        return true
+      }
+    }
+    return false
+  }, [providerConfigs])
+
   const [inputValue, setInputValue] = useState("")
   const [localModelId, setLocalModelId] = useState(activeConv?.modelId ?? "")
 
@@ -271,7 +286,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
     }
     if (!hasUsableLlm(effectiveLlmConfig, providerConfigs)) {
       const convId = activeConversationId ?? createConversation()
-      addMessage(convId, { id: crypto.randomUUID(), role: "assistant", content: "请先在设置中配置可用的AI模型（API Key 和模型名称），或在AI会话中选择一个模型。" })
+      addMessage(convId, { id: crypto.randomUUID(), role: "assistant", content: "请先在设置中配置并选择一个可用的 AI 模型，或在下方模型选择器中选择模型后再试。" })
       return
     }
 
@@ -433,7 +448,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       effectiveLlmConfig = resolveModelConfig(activeConv.modelId, effectiveLlmConfig, providerConfigs)
     }
     if (!hasUsableLlm(effectiveLlmConfig, providerConfigs)) {
-      addMessage(activeConversationId, { id: crypto.randomUUID(), role: "assistant", content: "请先在设置中配置可用的AI模型（API Key 和模型名称），或在AI会话中选择一个模型。" })
+      addMessage(activeConversationId, { id: crypto.randomUUID(), role: "assistant", content: "请先在设置中配置并选择一个可用的 AI 模型，或在下方模型选择器中选择模型后再试。" })
       return
     }
 
@@ -647,16 +662,20 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
                 <ChatDockControls />
               </div>
-              <ChatModelSelector
-                value={localModelId}
-                onChange={(value) => {
-                  setLocalModelId(value)
-                  if (activeConversationId) {
-                    setConversationModel(activeConversationId, value)
-                  }
-                }}
-                disabled={isStreaming}
-              />
+              {hasAvailableModels ? (
+                <ChatModelSelector
+                  value={localModelId}
+                  onChange={(value) => {
+                    setLocalModelId(value)
+                    if (activeConversationId) {
+                      setConversationModel(activeConversationId, value)
+                    }
+                  }}
+                  disabled={isStreaming}
+                />
+              ) : (
+                <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
+              )}
             </div>
           </TooltipProvider>
         }
