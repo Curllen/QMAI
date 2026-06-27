@@ -1,6 +1,23 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, Pencil, X } from "lucide-react"
+import { Check, GripVertical, Pencil, X } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,7 +55,20 @@ export function FrameworkConfirmPanel({
   const [shortTitleDraft, setShortTitleDraft] = useState("")
   const [premiseDraft, setPremiseDraft] = useState("")
 
+  // 拖拽传感器（需在 early return 之前调用，避免违反 Rules of Hooks）
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
   if (!currentFramework) return null
+
+  // 节点按 index 排序后的引用，供渲染与拖拽复用
+  const sortedNodes = currentFramework.nodes.slice().sort((a, b) => a.index - b.index)
 
   const handleSave = () => {
     if (!onSave) return
@@ -91,6 +121,23 @@ export function FrameworkConfirmPanel({
         n.index === nodeIndex ? { ...n, ...updates } : n,
       ),
     })
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !currentFramework) return
+
+    const oldIndex = sortedNodes.findIndex((n) => n.index === active.id)
+    const newIndex = sortedNodes.findIndex((n) => n.index === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(sortedNodes, oldIndex, newIndex)
+    const updatedNodes = reordered.map((n, i) => ({ ...n, index: i }))
+    setCurrentFramework({
+      ...currentFramework,
+      nodes: updatedNodes,
+    })
+    setSavedTip(false)
   }
 
   return (
@@ -222,17 +269,68 @@ export function FrameworkConfirmPanel({
       <div className="flex flex-col gap-3">
         <div className="text-sm font-medium text-muted-foreground">
           {t("storySimulation.frameworkNodes")}
+          <span className="ml-2 text-xs font-normal text-muted-foreground/70">
+            （拖拽手柄可排序）
+          </span>
         </div>
-        {currentFramework.nodes
-          .slice()
-          .sort((a, b) => a.index - b.index)
-          .map((node) => (
-            <FrameworkNodeCard
-              key={node.index}
-              node={node}
-              onUpdate={(updates) => updateNode(node.index, updates)}
-            />
-          ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sortedNodes.map((n) => n.index)}
+            strategy={verticalListSortingStrategy}
+          >
+            {sortedNodes.map((node) => (
+              <SortableNodeCard
+                key={node.index}
+                node={node}
+                onUpdate={(updates) => updateNode(node.index, updates)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      </div>
+    </div>
+  )
+}
+
+function SortableNodeCard({
+  node,
+  onUpdate,
+}: {
+  node: StoryNode
+  onUpdate: (updates: Partial<StoryNode>) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: node.index })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      <button
+        type="button"
+        className="absolute left-0 top-0 z-10 flex h-full w-6 cursor-grab items-center justify-center text-muted-foreground/30 hover:text-primary active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+        title="拖拽排序"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="pl-6">
+        <FrameworkNodeCard node={node} onUpdate={onUpdate} />
       </div>
     </div>
   )
