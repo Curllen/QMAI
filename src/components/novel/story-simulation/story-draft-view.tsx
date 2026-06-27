@@ -1,8 +1,10 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Check, Copy, FileText } from "lucide-react"
+import { ArrowLeft, Check, Copy, Download, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
+import { useWikiStore } from "@/stores/wiki-store"
+import { exportDraft } from "@/lib/novel/story-simulation/draft-export"
 
 interface StoryDraftViewProps {
   onBack: () => void
@@ -10,8 +12,12 @@ interface StoryDraftViewProps {
 
 export function StoryDraftView({ onBack }: StoryDraftViewProps) {
   const { t } = useTranslation()
+  const projectPath = useWikiStore((s) => s.project?.path)
+  const currentFramework = useStorySimulationStore((s) => s.currentFramework)
   const draft = useStorySimulationStore((s) => s.currentDraft)
+  const setError = useStorySimulationStore((s) => s.setError)
   const [copied, setCopied] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   if (!draft) return null
 
@@ -24,6 +30,21 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleExport = async () => {
+    if (!projectPath || !currentFramework || !draft) return
+    setExporting(true)
+    try {
+      const filePath = await exportDraft(projectPath, currentFramework, draft)
+      setError(`草稿已导出到：${filePath}`)
+      setTimeout(() => setError(null), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败")
+      setTimeout(() => setError(null), 5000)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-4 py-3">
@@ -33,14 +54,25 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
           </Button>
           <h2 className="text-sm font-semibold">{t("storySimulation.draftTitle")}</h2>
         </div>
-        <Button variant="outline" size="sm" onClick={handleCopyAll}>
-          {copied ? (
-            <Check className="h-3.5 w-3.5" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-          {copied ? t("storySimulation.copied") : t("storySimulation.copyAll")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            <Download className="mr-1 h-3.5 w-3.5" />
+            {exporting ? "导出中..." : "导出MD"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleCopyAll}>
+            {copied ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+            {copied ? t("storySimulation.copied") : t("storySimulation.copyAll")}
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">

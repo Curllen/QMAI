@@ -75,6 +75,32 @@ function actionPhrase(type: string, targetName?: string): string {
   }
 }
 
+/** 返回只有动作的短语（不含目标名），用于可点击目标名场景。 */
+function actionTypePhraseOnly(type: string): string {
+  switch (type) {
+    case "evaluate":
+      return "评价"
+    case "pushPlot":
+      return "推动"
+    case "observe":
+      return "观察到"
+    case "react":
+      return "对"
+    case "speak":
+      return "对"
+    case "ally":
+      return "向"
+    case "confront":
+      return "与"
+    case "conceal":
+      return "隐瞒"
+    case "investigate":
+      return "调查"
+    default:
+      return "对"
+  }
+}
+
 /**
  * 故事推演室主视图（重构后）。
  *
@@ -622,10 +648,12 @@ function SimulatingTimelinePanel({
   progress,
   label,
   events,
+  onInterviewAgent,
 }: {
   progress: number
   label: string
   events: TimelineEvent[]
+  onInterviewAgent?: (agentId: string, agentName: string) => void
 }) {
   const clamped = Math.min(100, Math.max(0, progress))
   const logRef = useRef<HTMLDivElement | null>(null)
@@ -742,10 +770,36 @@ function SimulatingTimelinePanel({
                 <span className="mr-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
                   {ev.nodeIndex + 1}-{ev.round + 1}
                 </span>
-                <span className="font-medium">{ev.actorName}</span>
+                {onInterviewAgent ? (
+                  <button
+                    type="button"
+                    className="font-medium text-primary hover:underline"
+                    onClick={() => onInterviewAgent(ev.actorId, ev.actorName)}
+                  >
+                    {ev.actorName}
+                  </button>
+                ) : (
+                  <span className="font-medium">{ev.actorName}</span>
+                )}
                 <span className="text-muted-foreground">
                   {" "}
-                  {actionPhrase(ev.actionType, ev.targetName)}：
+                  {ev.targetName && ev.targetId && onInterviewAgent ? (
+                    <>
+                      {actionTypePhraseOnly(ev.actionType)}{" "}
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => onInterviewAgent(ev.targetId!, ev.targetName!)}
+                      >
+                        {ev.targetName}
+                      </button>
+                      ：
+                    </>
+                  ) : (
+                    <>
+                      {actionPhrase(ev.actionType, ev.targetName)}：
+                    </>
+                  )}
                 </span>
                 <span>{ev.content}</span>
               </div>
