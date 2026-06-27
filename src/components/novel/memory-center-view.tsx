@@ -504,6 +504,8 @@ export function MemoryCenterView() {
   )
 }
 
+const DEFAULT_SNAPSHOT_PAGE_SIZE = 15
+
 function MemoryCenterDetailPanel({
   detailView,
   onOpenSnapshot,
@@ -521,81 +523,157 @@ function MemoryCenterDetailPanel({
   onDeleteMarkdown: () => void
   t: (key: string, opts?: Record<string, unknown>) => string
 }) {
+  const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
   const [rangeStart, setRangeStart] = useState("")
   const [rangeEnd, setRangeEnd] = useState("")
 
   if (detailView.kind === "snapshotList") {
     const chapterCards = detailView.cards.filter((c) => c.chapterNumber > 0)
+    const outlineCards = detailView.cards.filter((c) => c.chapterNumber < 0)
     const maxChapter = chapterCards.length > 0 ? chapterCards[0].chapterNumber : 0
 
-    const filteredCards = useMemo(() => {
+    // 区间筛选
+    const filteredChapterCards = useMemo(() => {
       const start = rangeStart.trim() ? Number(rangeStart.trim()) : 0
       const end = rangeEnd.trim() ? Number(rangeEnd.trim()) : 0
+      let filtered = chapterCards
       if (start > 0 && end > 0 && start <= end) {
-        return detailView.cards.filter((c) => c.chapterNumber >= start && c.chapterNumber <= end)
+        filtered = chapterCards.filter((c) => c.chapterNumber >= start && c.chapterNumber <= end)
+      } else if (start > 0) {
+        filtered = chapterCards.filter((c) => c.chapterNumber >= start)
+      } else if (end > 0) {
+        filtered = chapterCards.filter((c) => c.chapterNumber <= end)
       }
-      if (start > 0) {
-        return detailView.cards.filter((c) => c.chapterNumber >= start)
-      }
-      if (end > 0) {
-        return detailView.cards.filter((c) => c.chapterNumber <= end)
-      }
-      return detailView.cards
-    }, [detailView.cards, rangeStart, rangeEnd])
+      return filtered
+    }, [chapterCards, rangeStart, rangeEnd])
+
+    // 默认显示最近15章，区间搜索时显示全部匹配
+    const displayCards = useMemo(() => {
+      if (rangeStart || rangeEnd) return filteredChapterCards
+      return filteredChapterCards.slice(0, DEFAULT_SNAPSHOT_PAGE_SIZE)
+    }, [filteredChapterCards, rangeStart, rangeEnd])
+
+    // 章节列表（用于侧边栏选择）
+    const allChapterNumbers = useMemo(() =>
+      chapterCards.map((c) => c.chapterNumber),
+    [chapterCards])
+
+    // 选中的章节卡片
+    const selectedCard = useMemo(() => {
+      if (selectedChapter === null) return null
+      return detailView.cards.find((c) => c.chapterNumber === selectedChapter) ?? null
+    }, [detailView.cards, selectedChapter])
 
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <input
-            type="number"
-            min={1}
-            max={maxChapter}
-            placeholder="起始章"
-            value={rangeStart}
-            onChange={(e) => setRangeStart(e.target.value)}
-            className="h-7 w-20 rounded border bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <span className="text-xs text-muted-foreground">—</span>
-          <input
-            type="number"
-            min={1}
-            max={maxChapter}
-            placeholder="结束章"
-            value={rangeEnd}
-            onChange={(e) => setRangeEnd(e.target.value)}
-            className="h-7 w-20 rounded border bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          {(rangeStart || rangeEnd) ? (
-            <button
-              type="button"
-              onClick={() => { setRangeStart(""); setRangeEnd("") }}
-              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+      <div className="flex h-full gap-0">
+        {/* 左侧章节列表 */}
+        <div className="flex w-48 shrink-0 flex-col border-r">
+          <div className="border-b px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <Search className="h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="number"
+                min={1}
+                max={maxChapter}
+                placeholder="起始章"
+                value={rangeStart}
+                onChange={(e) => { setRangeStart(e.target.value); setSelectedChapter(null) }}
+                className="h-6 w-14 rounded border bg-background px-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <span className="text-xs text-muted-foreground">-</span>
+              <input
+                type="number"
+                min={1}
+                max={maxChapter}
+                placeholder="结束章"
+                value={rangeEnd}
+                onChange={(e) => { setRangeEnd(e.target.value); setSelectedChapter(null) }}
+                className="h-6 w-14 rounded border bg-background px-1.5 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {(rangeStart || rangeEnd) ? (
+                <button
+                  type="button"
+                  onClick={() => { setRangeStart(""); setRangeEnd(""); setSelectedChapter(null) }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {allChapterNumbers.length === 0 ? (
+              <p className="p-3 text-xs text-muted-foreground">暂无章节快照</p>
+            ) : (
+              allChapterNumbers.map((cn) => (
+                <button
+                  key={cn}
+                  type="button"
+                  onClick={() => setSelectedChapter(cn === selectedChapter ? null : cn)}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent ${
+                    cn === selectedChapter
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span>第{cn}章</span>
+                </button>
+              ))
+            )}
+          </div>
+          {outlineCards.length > 0 ? (
+            <div className="border-t px-3 py-1.5">
+              <p className="text-xs text-muted-foreground">
+                大纲快照：{outlineCards.length}条
+              </p>
+            </div>
           ) : null}
-          <span className="ml-auto text-xs text-muted-foreground">
-            {filteredCards.length !== detailView.cards.length
-              ? `${filteredCards.length}/${detailView.cards.length}`
-              : `共${detailView.cards.length}条`}
-          </span>
         </div>
-        {filteredCards.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">该区间内暂无章节快照</p>
-        ) : (
-          filteredCards.map((card) => (
+
+        {/* 右侧快照详情 */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {selectedCard ? (
             <SnapshotCard
-              key={card.chapterNumber}
-              card={card}
-              buttonId={`memory-center-detail-snapshot-${card.chapterNumber}`}
+              card={selectedCard}
+              buttonId={`memory-center-detail-snapshot-${selectedCard.chapterNumber}`}
               onOpen={onOpenSnapshot}
               onEdit={onEditSnapshot}
               onDelete={onDeleteSnapshot}
               t={t}
             />
-          ))
-        )}
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {rangeStart || rangeEnd
+                    ? `区间 ${rangeStart || "1"}–${rangeEnd || maxChapter} 章，共${filteredChapterCards.length}条`
+                    : `最近${Math.min(displayCards.length, DEFAULT_SNAPSHOT_PAGE_SIZE)}章（共${chapterCards.length}章）`}
+                </p>
+              </div>
+              {displayCards.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">该区间内暂无章节快照</p>
+              ) : (
+                displayCards.map((card) => (
+                  <SnapshotCard
+                    key={card.chapterNumber}
+                    card={card}
+                    buttonId={`memory-center-detail-snapshot-${card.chapterNumber}`}
+                    onOpen={onOpenSnapshot}
+                    onEdit={onEditSnapshot}
+                    onDelete={onDeleteSnapshot}
+                    t={t}
+                  />
+                ))
+              )}
+              {!rangeStart && !rangeEnd && chapterCards.length > DEFAULT_SNAPSHOT_PAGE_SIZE ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  仅显示最近{DEFAULT_SNAPSHOT_PAGE_SIZE}章，使用左侧章节列表或区间搜索查看更多
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
