@@ -49,7 +49,6 @@ src/test-helpers/*
 /_fix_encoding.py
 CLAUDE.md
 de-ai-skill.md
-README.md
 
 # === 中文命名文档/临时文件 ===
 提示词.md
