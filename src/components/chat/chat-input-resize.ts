@@ -1,34 +1,88 @@
 export const DEFAULT_RESIZABLE_INPUT_HEIGHT = 44
-/** 输入框底部预留空间：发送按钮 + padding + 拖拽条 + 模型选择器等 */
 const INPUT_BOTTOM_RESERVED = 80
+const MIN_MESSAGE_AREA_MIN = 80
+const MIN_MESSAGE_AREA_RATIO = 0.15
 
 export interface ResizableInputBounds {
   minHeight: number
   maxHeight: number
 }
 
-export function resolveResizableInputMaxHeight({
-  panelHeight,
-  viewportHeight,
-}: {
-  panelHeight: number
+export interface ResizeContext {
+  startRootTop: number
+  startRootHeight: number
+  startInputHeight: number
   viewportHeight: number
-}): number {
-  const availableHeight = panelHeight > 0 ? panelHeight : viewportHeight
-  return Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(availableHeight / 2))
+  containerHeight: number
+  fixedOverhead: number
 }
 
-/**
- * 根据输入框在视口中的位置计算最大高度，防止向上拖动时超出软件界面下沿边界。
- * @param inputTopOffset 输入框顶部距视口顶部的距离（通过 getBoundingClientRect().top 获取）
- * @param viewportHeight 视口高度（window.innerHeight）
- */
-export function resolveViewportAwareMaxHeight(
-  inputTopOffset: number,
-  viewportHeight: number,
-): number {
-  const availableSpace = viewportHeight - inputTopOffset - INPUT_BOTTOM_RESERVED
-  return Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(availableSpace))
+function computeMinMessageAreaHeight(containerHeight: number): number {
+  return Math.max(MIN_MESSAGE_AREA_MIN, Math.floor(containerHeight * MIN_MESSAGE_AREA_RATIO))
+}
+
+export function createResizeContext(rootEl: HTMLDivElement | null, currentInputHeight: number): ResizeContext | null {
+  if (!rootEl) return null
+  const rootRect = rootEl.getBoundingClientRect()
+  const containerEl = findChatContainer(rootEl)
+  const containerRect = containerEl?.getBoundingClientRect()
+  const containerHeight = containerRect?.height ?? window.innerHeight
+  const textareaEl = rootEl.querySelector("textarea")
+  const textareaRect = textareaEl?.getBoundingClientRect()
+  const actualTextareaHeight = textareaRect?.height ?? currentInputHeight
+  const fixedOverhead = Math.max(0, rootRect.height - actualTextareaHeight)
+  return {
+    startRootTop: rootRect.top,
+    startRootHeight: rootRect.height,
+    startInputHeight: currentInputHeight,
+    viewportHeight: window.innerHeight,
+    containerHeight,
+    fixedOverhead,
+  }
+}
+
+function findChatContainer(root: HTMLDivElement): HTMLElement | null {
+  let current: HTMLElement | null = root.parentElement
+  for (let i = 0; i < 6 && current; i++) {
+    const style = window.getComputedStyle(current)
+    if (style.display === "flex" && style.flexDirection === "column" && current.classList.contains("overflow-hidden")) {
+      return current
+    }
+    current = current.parentElement
+  }
+  return root.parentElement
+}
+
+export function resolveMaxHeightFromContext(ctx: ResizeContext, nextHeight: number): number {
+  const predictedRootTop = ctx.startRootTop - (nextHeight - ctx.startInputHeight)
+  const viewportAvailable = ctx.viewportHeight - predictedRootTop - INPUT_BOTTOM_RESERVED
+  const minMessageArea = computeMinMessageAreaHeight(ctx.containerHeight)
+  const containerAvailable = ctx.containerHeight - minMessageArea - ctx.fixedOverhead
+  const effectiveMax = Math.min(
+    Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(viewportAvailable)),
+    Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(containerAvailable)),
+  )
+  return effectiveMax
+}
+
+export function getResizeBoundsForElement(rootEl: HTMLDivElement | null): ResizableInputBounds {
+  if (!rootEl) {
+    return { minHeight: DEFAULT_RESIZABLE_INPUT_HEIGHT, maxHeight: 200 }
+  }
+  const containerEl = findChatContainer(rootEl)
+  const containerRect = containerEl?.getBoundingClientRect()
+  const containerHeight = containerRect?.height ?? window.innerHeight
+  const rootRect = rootEl.getBoundingClientRect()
+  const textareaEl = rootEl.querySelector("textarea")
+  const textareaHeight = textareaEl?.getBoundingClientRect().height ?? DEFAULT_RESIZABLE_INPUT_HEIGHT
+  const fixedOverhead = Math.max(0, rootRect.height - textareaHeight)
+  const minMessageArea = computeMinMessageAreaHeight(containerHeight)
+  const containerMax = Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(containerHeight - minMessageArea - fixedOverhead))
+  const viewportMax = Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, Math.floor(window.innerHeight - rootRect.top - INPUT_BOTTOM_RESERVED))
+  return {
+    minHeight: DEFAULT_RESIZABLE_INPUT_HEIGHT,
+    maxHeight: Math.min(containerMax, viewportMax),
+  }
 }
 
 export function clampResizableInputHeight(
@@ -39,4 +93,13 @@ export function clampResizableInputHeight(
   const maxHeight = Math.max(minHeight, Math.floor(bounds.maxHeight))
   if (!Number.isFinite(nextHeight)) return minHeight
   return Math.min(maxHeight, Math.max(minHeight, Math.round(nextHeight)))
+}
+
+export function isHeightAtMax(currentHeight: number, bounds: ResizableInputBounds): boolean {
+  const maxHeight = Math.max(bounds.minHeight, Math.floor(bounds.maxHeight))
+  return currentHeight >= maxHeight - 1
+}
+
+export function isHeightAtMin(currentHeight: number, bounds: ResizableInputBounds): boolean {
+  return currentHeight <= bounds.minHeight + 1
 }
