@@ -302,7 +302,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
       : "拖动调整输入框高度，双击重置"
 
   return (
-    <div ref={rootRef} className="border-t p-3">
+    <div ref={rootRef} className="border-t px-3 pt-2 pb-0">
       <div className="rounded-2xl border bg-background shadow-sm overflow-hidden flex flex-col">
         <div
           role="separator"
