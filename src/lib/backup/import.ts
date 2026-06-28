@@ -10,6 +10,7 @@ import type {
   ImportResult,
   ImportStrategy,
   ProjectRestoreInfo,
+  ProjectManifestEntry,
   BackupProgressCallback,
 } from "./types"
 
@@ -29,6 +30,50 @@ async function refreshCurrentProjectIfNeeded(restoredProjects: Array<{ path: str
   if (needsRefresh) {
     await refreshProjectState(currentPath)
   }
+}
+
+/**
+ * 导入前读取备份 manifest，检查路径可达性。
+ * 如果有项目路径的盘符不存在，弹窗让用户选择新目录并构建路径重映射表。
+ * @returns 重映射表（projectId -> 新路径），如果无需重映射则返回空对象。
+ *          如果用户取消选择，返回 null。
+ */
+async function checkAndRemapPaths(zipPath: string): Promise<Record<string, string> | null> {
+  let manifest: ProjectManifestEntry[]
+  try {
+    manifest = await invoke<ProjectManifestEntry[]>("read_backup_manifest", { zipPath })
+  } catch {
+    // manifest 读取失败，回退到原行为（直接导入）
+    return {}
+  }
+
+  const inaccessibleProjects = manifest.filter((p) => !p.pathAccessible)
+
+  if (inaccessibleProjects.length === 0) {
+    // 所有路径可达，无需重映射
+    return {}
+  }
+
+  // 弹窗让用户选择新的基础目录
+  const newBaseDir = await open({
+    title: "部分项目路径不存在（原盘符不可用），请选择新的存放目录",
+    directory: true,
+    multiple: false,
+  })
+
+  if (!newBaseDir || typeof newBaseDir !== "string") {
+    // 用户取消
+    return null
+  }
+
+  // 构建重映射表：{ projectId: "{新目录}/{原项目文件夹名}" }
+  const overrides: Record<string, string> = {}
+  for (const project of inaccessibleProjects) {
+    const folderName = project.path.split(/[\\/]/).filter(Boolean).pop() || project.id
+    overrides[project.id] = `${newBaseDir}\\${folderName}`
+  }
+
+  return overrides
 }
 
 export async function importBackup(
@@ -52,10 +97,24 @@ export async function importBackup(
     }
   }
 
+  // 导入前检查路径可达性，必要时弹窗让用户选择新目录
+  const pathOverrides = await checkAndRemapPaths(zipPath)
+  if (pathOverrides === null) {
+    return {
+      success: false,
+      appState: null,
+      localStorageData: null,
+      projects: [],
+      warnings: [],
+      error: "用户取消了导入",
+    }
+  }
+
   const params: ImportParams = {
     zipPath,
     strategy,
     projects,
+    projectPathOverrides: Object.keys(pathOverrides).length > 0 ? pathOverrides : undefined,
   }
 
   let unlisten: UnlistenFn | undefined
