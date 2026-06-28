@@ -99,7 +99,7 @@ pub struct BackupProgressPayload {
     pub message: String,
 }
 
-const PROJECT_SUBDIRS: &[&str] = &[".qmai", ".novel", "book-analysis", "raw"];
+const PROJECT_SUBDIRS: &[&str] = &[".qmai", ".novel", "book-analysis", "raw", ".trash"];
 const PROJECT_FILES: &[&str] = &["soul.md", "schema.md", "purpose.md"];
 
 // 知识目录的可能名称（新版用 QM，旧版用 wiki），导出时统一以 wiki 名称存入 zip
@@ -797,5 +797,13 @@ mod tests {
         assert!(target.join("sub/chapter2.md").exists());
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn test_trash_in_project_subdirs() {
+        assert!(
+            PROJECT_SUBDIRS.contains(&".trash"),
+            ".trash 应包含在 PROJECT_SUBDIRS 中"
+        );
     }
 }
