@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect, type ReactNode } from "react"
-import { Send, Square } from "lucide-react"
+import { ArrowUp, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { isImeComposing } from "@/lib/keyboard-utils"
 import { useChatStore } from "@/stores/chat-store"
@@ -37,12 +37,11 @@ interface ChatInputProps {
   placeholder?: string
   leadingControls?: ReactNode
   footerControls?: ReactNode
-  inlineSendButton?: boolean
   value?: string
   onChange?: (value: string) => void
 }
 
-export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingControls, footerControls, inlineSendButton = true, value: controlledValue, onChange }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingControls, footerControls, value: controlledValue, onChange }: ChatInputProps) {
   const activeConversationId = useChatStore((state) => state.activeConversationId)
   const setConversationInputDraft = useChatStore((state) => state.setConversationInputDraft)
   const conversation = useChatStore((state) =>
@@ -297,7 +296,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingCon
       : "拖动调整输入框高度，双击重置"
 
   return (
-    <div ref={rootRef} className="border-t">
+    <div ref={rootRef} className="border-t p-3">
       <div
         role="separator"
         aria-label="拖动调整输入框高度"
@@ -308,53 +307,53 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingCon
       >
         <span className={`h-0.5 w-10 rounded-full transition-colors ${handleBarColor}`} />
       </div>
-      {leadingControls ? (
-        <div className="px-3 pb-2">
-          {leadingControls}
+      <div className="rounded-2xl border bg-background shadow-sm overflow-hidden flex flex-col">
+        <div className="px-4 pt-3">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            dir="auto"
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder ?? "输入消息，Enter 发送，Shift+Enter 换行"}
+            disabled={isStreaming}
+            rows={1}
+            className="w-full resize-none bg-transparent px-0 py-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ height: inputHeight, maxHeight: inputHeight, overflowY: "auto" }}
+          />
         </div>
-      ) : null}
-      <div className="flex items-end gap-2 px-3 pb-3">
-        <textarea
-          ref={textareaRef}
-          value={value}
-          dir="auto"
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder ?? "输入消息，Enter 发送，Shift+Enter 换行"}
-          disabled={isStreaming}
-          rows={1}
-          className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ height: inputHeight, maxHeight: inputHeight, overflowY: "auto" }}
-        />
-        {inlineSendButton && (isStreaming ? (
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={onStop}
-            className="shrink-0"
-            title="停止生成"
-            aria-label="停止生成"
-          >
-            <Square className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={!value.trim()}
-            className="shrink-0"
-            title="发送消息"
-            aria-label="发送消息"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        ))}
+        <div className="flex items-center justify-between border-t px-3 py-2.5 gap-2">
+          {(leadingControls || footerControls) ? (
+            <div className="flex items-center gap-2 min-w-0 overflow-x-auto">
+              {leadingControls}
+              {footerControls}
+            </div>
+          ) : null}
+          {isStreaming ? (
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={onStop}
+              className="shrink-0"
+              title="停止生成"
+              aria-label="停止生成"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              onClick={handleSend}
+              disabled={!value.trim()}
+              className="shrink-0"
+              title="发送消息"
+              aria-label="发送消息"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
-      {footerControls ? (
-        <div className="px-3 pb-2">
-          {footerControls}
-        </div>
-      ) : null}
     </div>
   )
 }
