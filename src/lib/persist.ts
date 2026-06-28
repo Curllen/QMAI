@@ -103,6 +103,17 @@ interface PersistedChatData {
   messages: DisplayMessage[]
 }
 
+function normalizeConversation(conv: Conversation): Conversation {
+  return {
+    ...conv,
+    deAiMode: Boolean(conv.deAiMode),
+    selectedDeAiSkillId:
+      conv.selectedDeAiSkillId === null || typeof conv.selectedDeAiSkillId === "string"
+        ? conv.selectedDeAiSkillId
+        : undefined,
+  }
+}
+
 export async function saveChatHistory(
   projectPath: string,
   conversations: Conversation[],
@@ -153,7 +164,7 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
   try {
     // Try new format: separate files per conversation
     const convContent = await readFile(`${pp}/.qmai/conversations.json`)
-    const conversations = safeParseArray<Conversation>(convContent, "conversations")
+    const conversations = safeParseArray<Conversation>(convContent, "conversations").map(normalizeConversation)
 
     const allMessages: DisplayMessage[] = []
     for (const conv of conversations) {
@@ -182,6 +193,7 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
           createdAt: legacyMessages[0]?.timestamp ?? Date.now(),
           updatedAt: legacyMessages[legacyMessages.length - 1]?.timestamp ?? Date.now(),
           deAiMode: false,
+          selectedDeAiSkillId: undefined,
         }
         const migratedMessages = legacyMessages.map((m) => ({
           ...m,
@@ -193,7 +205,12 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
       // Old combined format
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const data = parsed as PersistedChatData
-        return data
+        return {
+          conversations: Array.isArray(data.conversations)
+            ? data.conversations.map(normalizeConversation)
+            : [],
+          messages: Array.isArray(data.messages) ? data.messages : [],
+        }
       }
       console.warn("persist: 聊天历史数据格式无效")
       return { conversations: [], messages: [] }
