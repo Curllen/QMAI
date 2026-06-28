@@ -105,12 +105,13 @@ export function ChatModelSelector({ value, onChange, disabled }: ChatModelSelect
       const availableBelow = window.innerHeight - rect.bottom
       let top: number
       let maxHeight: number
-      if (availableBelow < DROPDOWN_MAX_HEIGHT + DROPDOWN_GAP && availableAbove >= DROPDOWN_MAX_HEIGHT + DROPDOWN_GAP) {
-        top = rect.top - DROPDOWN_MAX_HEIGHT - DROPDOWN_GAP
-        maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, Math.max(DROPDOWN_MIN_HEIGHT, availableAbove - DROPDOWN_GAP))
+      // 始终优先放下方，只有下方空间不足最小高度时才翻转到上方
+      if (availableBelow < DROPDOWN_MIN_HEIGHT && availableAbove >= DROPDOWN_MIN_HEIGHT) {
+        maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, availableAbove - DROPDOWN_GAP)
+        top = rect.top - maxHeight - DROPDOWN_GAP
       } else {
-        top = rect.bottom + DROPDOWN_GAP
         maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, Math.max(DROPDOWN_MIN_HEIGHT, availableBelow - DROPDOWN_GAP))
+        top = rect.bottom + DROPDOWN_GAP
       }
       setDropdownStyle({
         left: Math.min(rect.left, window.innerWidth - width - 4),
@@ -119,9 +120,12 @@ export function ChatModelSelector({ value, onChange, disabled }: ChatModelSelect
         maxHeight,
       })
     }
-    updatePosition()
+    const raf = requestAnimationFrame(updatePosition)
     window.addEventListener("resize", updatePosition)
-    return () => window.removeEventListener("resize", updatePosition)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener("resize", updatePosition)
+    }
   }, [open])
 
   return (
@@ -143,17 +147,19 @@ export function ChatModelSelector({ value, onChange, disabled }: ChatModelSelect
       {open && dropdownStyle && createPortal(
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
             onClick={() => setOpen(false)}
           />
           <div
-            className="fixed z-50 rounded-md border bg-popover p-1 shadow-md model-selector-dropdown"
+            className="fixed rounded-md border bg-popover p-1 shadow-md model-selector-dropdown"
             style={{
               left: dropdownStyle.left,
               top: dropdownStyle.top,
               width: dropdownStyle.width,
               maxHeight: dropdownStyle.maxHeight,
               overflowY: "auto",
+              zIndex: 9999,
             }}
           >
             {modelGroups.map((group, groupIdx) => (
