@@ -35,13 +35,19 @@ interface ChatInputProps {
   onStop: () => void
   isStreaming: boolean
   placeholder?: string
+  leftControls?: ReactNode
+  rightControls?: ReactNode
+  /** @deprecated 请使用 leftControls 代替 */
   leadingControls?: ReactNode
+  /** @deprecated 请使用 leftControls 代替 */
   footerControls?: ReactNode
   value?: string
   onChange?: (value: string) => void
 }
 
-export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingControls, footerControls, value: controlledValue, onChange }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftControls, rightControls, leadingControls, footerControls, value: controlledValue, onChange }: ChatInputProps) {
+  const leftToolbarContent = leftControls ?? leadingControls ?? footerControls
+  const rightToolbarContent = rightControls
   const activeConversationId = useChatStore((state) => state.activeConversationId)
   const setConversationInputDraft = useChatStore((state) => state.setConversationInputDraft)
   const conversation = useChatStore((state) =>
@@ -297,18 +303,18 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingCon
 
   return (
     <div ref={rootRef} className="border-t p-3">
-      <div
-        role="separator"
-        aria-label="拖动调整输入框高度"
-        title={resizeTitle}
-        className="flex h-2 cursor-ns-resize items-center justify-center transition-colors"
-        onPointerDown={handleResizePointerDown}
-        onDoubleClick={handleDoubleClick}
-      >
-        <span className={`h-0.5 w-10 rounded-full transition-colors ${handleBarColor}`} />
-      </div>
       <div className="rounded-2xl border bg-background shadow-sm overflow-hidden flex flex-col">
-        <div className="px-4 pt-3">
+        <div
+          role="separator"
+          aria-label="拖动调整输入框高度"
+          title={resizeTitle}
+          className="flex h-2 cursor-ns-resize items-center justify-center transition-colors"
+          onPointerDown={handleResizePointerDown}
+          onDoubleClick={handleDoubleClick}
+        >
+          <span className={`h-0.5 w-10 rounded-full transition-colors ${handleBarColor}`} />
+        </div>
+        <div className="px-4 pt-2">
           <textarea
             ref={textareaRef}
             value={value}
@@ -323,35 +329,37 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leadingCon
           />
         </div>
         <div className="flex items-center justify-between border-t px-3 py-2.5 gap-2">
-          {(leadingControls || footerControls) ? (
+          {leftToolbarContent ? (
             <div className="flex items-center gap-2 min-w-0 overflow-x-auto">
-              {leadingControls}
-              {footerControls}
+              {leftToolbarContent}
             </div>
-          ) : null}
-          {isStreaming ? (
-            <Button
-              variant="destructive"
-              size="icon"
-              onClick={onStop}
-              className="shrink-0"
-              title="停止生成"
-              aria-label="停止生成"
-            >
-              <Square className="h-4 w-4" />
-            </Button>
           ) : (
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={!value.trim()}
-              className="shrink-0"
-              title="发送消息"
-              aria-label="发送消息"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
+            <div className="flex-1" />
           )}
+          <div className="flex items-center gap-2 shrink-0">
+            {rightToolbarContent}
+            {isStreaming ? (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={onStop}
+                title="停止生成"
+                aria-label="停止生成"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                onClick={handleSend}
+                disabled={!value.trim()}
+                title="发送消息"
+                aria-label="发送消息"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

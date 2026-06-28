@@ -656,26 +656,28 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         placeholder="输入关于大纲的问题..."
         value={inputValue}
         onChange={setInputValue}
-        footerControls={
+        leftControls={
           <TooltipProvider delay={200}>
             <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
               <ChatDockControls />
-              {hasAvailableModels ? (
-                <ChatModelSelector
-                  value={localModelId}
-                  onChange={(value) => {
-                    setLocalModelId(value)
-                    if (activeConversationId) {
-                      setConversationModel(activeConversationId, value)
-                    }
-                  }}
-                  disabled={isStreaming}
-                />
-              ) : (
-                <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
-              )}
             </div>
           </TooltipProvider>
+        }
+        rightControls={
+          hasAvailableModels ? (
+            <ChatModelSelector
+              value={localModelId}
+              onChange={(value) => {
+                setLocalModelId(value)
+                if (activeConversationId) {
+                  setConversationModel(activeConversationId, value)
+                }
+              }}
+              disabled={isStreaming}
+            />
+          ) : (
+            <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
+          )
         }
       />
     </div>

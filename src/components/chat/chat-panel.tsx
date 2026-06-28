@@ -1507,7 +1507,7 @@ export function ChatPanel() {
             onSend={handleSend}
             onStop={handleStop}
             isStreaming={isStreaming}
-            footerControls={
+            leftControls={
               <TooltipProvider delay={200}>
                 <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
                   <ChatDockControls />
@@ -1588,15 +1588,17 @@ export function ChatPanel() {
                       </Tooltip>
                     </>
                   )}
-                  <ChatModelSelector
-                    value={aiChatModel}
-                    onChange={(model) => {
-                      setAiChatModel(model)
-                      void saveAiChatModel(model)
-                    }}
-                  />
                 </div>
               </TooltipProvider>
+            }
+            rightControls={
+              <ChatModelSelector
+                value={aiChatModel}
+                onChange={(model) => {
+                  setAiChatModel(model)
+                  void saveAiChatModel(model)
+                }}
+              />
             }
             placeholder={
               mode === "ingest"
