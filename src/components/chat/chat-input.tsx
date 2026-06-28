@@ -11,6 +11,7 @@ import {
   resolveMaxHeightFromContext,
   isHeightAtMax,
   isHeightAtMin,
+  findChatContainer,
   type ResizeContext,
   type ResizableInputBounds,
 } from "./chat-input-resize"
@@ -91,43 +92,79 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
     userSetMinHeightRef.current = userSetMinHeight
   }, [userSetMinHeight])
 
-  useEffect(() => {
-    const handleResize = () => {
-      const userMin = userSetMinHeightRef.current
-      const ta = textareaRef.current
+  const handleContainerResize = useCallback(() => {
+    const userMin = userSetMinHeightRef.current
+    const ta = textareaRef.current
 
-      if (userMin != null) {
-        // 用户已手动设置高度：窗口 resize 时只做上下边界检查，保持高度尽量不变
-        const bounds = getResizeBoundsForElement(rootRef.current)
-        const current = inputHeightRef.current
-        const next = clampResizableInputHeight(current, bounds)
-        if (next !== current) {
-          if (ta) {
-            ta.style.height = `${next}px`
-          }
-          setInputHeight(next)
-          setUserSetMinHeight(next)
+    if (userMin != null) {
+      // 用户已手动设置高度：容器变化时只做上下边界检查，保持高度尽量不变
+      const bounds = getResizeBoundsForElement(rootRef.current)
+      const current = inputHeightRef.current
+      const next = clampResizableInputHeight(current, bounds)
+      if (next !== current) {
+        if (ta) {
+          ta.style.height = `${next}px`
         }
-        setIsAtLimitTop(isHeightAtMax(next, bounds))
-        setIsAtLimitBottom(isHeightAtMin(next, bounds))
-        return
-      }
-
-      if (ta) {
-        const bounds = getResizeBoundsForElement(rootRef.current)
-        ta.style.height = "auto"
-        const contentHeight = ta.scrollHeight
-        const current = inputHeightRef.current
-        const next = clampResizableInputHeight(Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, contentHeight, current), bounds)
-        ta.style.height = `${next}px`
         setInputHeight(next)
-      } else {
-        const bounds = getResizeBoundsForElement(rootRef.current)
-        setInputHeight((prev) => clampResizableInputHeight(prev, bounds))
+        setUserSetMinHeight(next)
+        // 同步到 localStorage，防止下次启动仍用超出边界的高度
+        saveInputHeight(next)
       }
+      setIsAtLimitTop(isHeightAtMax(next, bounds))
+      setIsAtLimitBottom(isHeightAtMin(next, bounds))
+      return
     }
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
+
+    if (ta) {
+      const bounds = getResizeBoundsForElement(rootRef.current)
+      ta.style.height = "auto"
+      const contentHeight = ta.scrollHeight
+      const current = inputHeightRef.current
+      const next = clampResizableInputHeight(Math.max(DEFAULT_RESIZABLE_INPUT_HEIGHT, contentHeight, current), bounds)
+      ta.style.height = `${next}px`
+      setInputHeight(next)
+    } else {
+      const bounds = getResizeBoundsForElement(rootRef.current)
+      setInputHeight((prev) => clampResizableInputHeight(prev, bounds))
+    }
+  }, [])
+
+  // 监听 window resize
+  useEffect(() => {
+    window.addEventListener("resize", handleContainerResize)
+    return () => window.removeEventListener("resize", handleContainerResize)
+  }, [handleContainerResize])
+
+  // 使用 ResizeObserver 监听容器大小变化（停靠模式切换、容器拖拽等）
+  useEffect(() => {
+    const rootEl = rootRef.current
+    if (!rootEl) return
+    const containerEl = findChatContainer(rootEl)
+    if (!containerEl || typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => {
+      handleContainerResize()
+    })
+    observer.observe(containerEl)
+    return () => observer.disconnect()
+  }, [handleContainerResize])
+
+  // 挂载时校验 localStorage 中保存的高度是否超出当前容器 maxHeight
+  // 防止在不同停靠模式（右侧大容器 vs 底部小容器）间切换时 textarea 高度溢出
+  useEffect(() => {
+    const saved = savedHeight.current
+    if (saved == null) return
+    const bounds = getResizeBoundsForElement(rootRef.current)
+    const clamped = clampResizableInputHeight(saved, bounds)
+    if (clamped !== saved) {
+      const ta = textareaRef.current
+      if (ta) {
+        ta.style.height = `${clamped}px`
+      }
+      setInputHeight(clamped)
+      setUserSetMinHeight(clamped)
+      saveInputHeight(clamped)
+    }
   }, [])
 
   const autoFitTextarea = useCallback(() => {
