@@ -554,7 +554,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   }, [project])
 
   return (
-    <div className="flex h-full flex-col border-border bg-background">
+    <div className="flex h-full flex-col overflow-hidden border-border bg-background">
       {/* Header with conversation tabs */}
       <div className="flex items-center gap-1 border-b px-2 py-1.5 overflow-x-auto">
         <button
@@ -634,7 +634,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Input */}
-      <div className="border-t px-3 py-2">
+      <div className="shrink-0 border-t px-3 py-2">
         <div className="mb-2 flex flex-wrap gap-1.5">
           {OUTLINE_SECTION_GENERATION_CONFIGS.map((config) => (
             <button
@@ -649,37 +649,39 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       </div>
-      <ChatInput
-        onSend={(text) => void handleSend(text)}
-        onStop={handleStop}
-        isStreaming={isStreaming}
-        placeholder="输入关于大纲的问题..."
-        value={inputValue}
-        onChange={setInputValue}
-        leftControls={
-          <TooltipProvider delay={200}>
-            <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
-              <ChatDockControls />
-            </div>
-          </TooltipProvider>
-        }
-        rightControls={
-          hasAvailableModels ? (
-            <ChatModelSelector
-              value={localModelId}
-              onChange={(value) => {
-                setLocalModelId(value)
-                if (activeConversationId) {
-                  setConversationModel(activeConversationId, value)
-                }
-              }}
-              disabled={isStreaming}
-            />
-          ) : (
-            <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
-          )
-        }
-      />
+      <div className="shrink-0">
+        <ChatInput
+          onSend={(text) => void handleSend(text)}
+          onStop={handleStop}
+          isStreaming={isStreaming}
+          placeholder="输入关于大纲的问题..."
+          value={inputValue}
+          onChange={setInputValue}
+          leftControls={
+            <TooltipProvider delay={200}>
+              <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+                <ChatDockControls />
+              </div>
+            </TooltipProvider>
+          }
+          rightControls={
+            hasAvailableModels ? (
+              <ChatModelSelector
+                value={localModelId}
+                onChange={(value) => {
+                  setLocalModelId(value)
+                  if (activeConversationId) {
+                    setConversationModel(activeConversationId, value)
+                  }
+                }}
+                disabled={isStreaming}
+              />
+            ) : (
+              <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
+            )
+          }
+        />
+      </div>
     </div>
   )
 }

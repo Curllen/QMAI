@@ -302,7 +302,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
       : "拖动调整输入框高度，双击重置"
 
   return (
-    <div ref={rootRef} className="border-t px-3 pt-2 pb-0">
+    <div ref={rootRef} className="border-t px-3 pt-1.5 pb-0">
       <div className="rounded-2xl border bg-background shadow-sm overflow-hidden flex flex-col">
         <div
           role="separator"
@@ -314,7 +314,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
         >
           <span className={`h-0.5 w-10 rounded-full transition-colors ${handleBarColor}`} />
         </div>
-        <div className="px-4 pt-2">
+        <div className="px-3 pt-1.5">
           <textarea
             ref={textareaRef}
             value={value}
@@ -324,11 +324,11 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
             placeholder={placeholder ?? "输入消息，Enter 发送，Shift+Enter 换行"}
             disabled={isStreaming}
             rows={1}
-            className="w-full resize-none bg-transparent px-0 py-2 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full resize-none bg-transparent px-0 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             style={{ height: inputHeight, maxHeight: inputHeight, overflowY: "auto" }}
           />
         </div>
-        <div className="flex items-center justify-between border-t px-3 py-2.5 gap-2">
+        <div className="flex items-center justify-between border-t px-3 py-2 gap-2">
           {leftToolbarContent ? (
             <div className="flex items-center gap-2 min-w-0 overflow-x-auto">
               {leftToolbarContent}
