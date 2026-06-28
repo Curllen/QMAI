@@ -78,6 +78,26 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   },
 }
 
+const TWO_POINT_TWO_TWENTY_NINE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.29",
+  date: "2026-06-28",
+  highlights: {
+    en: [],
+    zh: [
+      "AI 会话与 AI 大纲输入框全面改版：改为圆角容器布局，工具栏整合到输入框内部底部，发送按钮图标改为向上箭头。",
+      "模型选择器移至输入框右侧（发送按钮左侧），视觉更统一，操作更便捷。",
+      "新建大纲输入框重新设计：改为双行布局，第一行输入框占满宽度，第二行右侧放置取消和创建按钮。",
+      "章节默认打开功能：软件启动时自动打开用户最近阅读的最后一个章节，恢复滚动位置，并自动打开 AI 会话窗口。",
+      "深度模式状态记忆：深度模式状态在软件单次运行期间持续有效，不受页面导航影响。",
+      "彻底修复 AI 大纲输入框底部溢出问题：优化容器布局和高度计算逻辑，添加 ResizeObserver 监听容器变化。",
+      "修复侧边栏任务列表高度溢出问题：提取中任务列表展开后限制最大高度 256px，超出时显示纵向滚动条。",
+      "修复输入框拖拽后高度异常变化：用户手动设置高度后保持固定，不随内容自适应。",
+      "AI 会话历史自动保存机制加固：增加关闭前保存、定期兜底保存、重试机制和并发保护。",
+      "导入 UI 全面优化：新增全选/取消全选功能，导入结果详细展示，进度分阶段展示。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.27",
   date: "2026-06-28",
@@ -651,6 +671,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWO_TWENTY_NINE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_NINE_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_SIX_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SIX_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG]
@@ -683,6 +704,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    TWO_POINT_TWO_TWENTY_NINE_CHANGELOG,
     TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG,
     TWO_POINT_TWO_TWENTY_SIX_CHANGELOG,
     TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG,
