@@ -74,7 +74,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate, novelMode,
               ? "bg-primary text-primary-foreground"
               : message.discarded
                 ? "bg-muted/50 text-muted-foreground/50"
-                : "bg-muted text-foreground"
+                : "border bg-background text-foreground"
           }`}
         >
           {message.discarded ? (
@@ -535,7 +535,7 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <Bot className="h-4 w-4" />
       </div>
-      <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted text-foreground">
+      <div className="max-w-[80%] rounded-lg border bg-background px-3 py-2 text-sm text-foreground">
         {isThinking ? (
           <StreamingWorkflowBlock content={thinking} />
         ) : (
