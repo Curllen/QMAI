@@ -22,6 +22,13 @@ import { getNextChatExpanded } from "./chat-layout"
 import { DeAiPreviewDialog } from "@/components/novel/de-ai-preview-dialog"
 import { TextTransformPreviewDialog } from "@/components/novel/text-transform-preview-dialog"
 import { buildDeAiRewriteMessages } from "@/lib/novel/de-ai-adapter"
+import {
+  isDeAiSkillModified,
+  loadDeAiSkillConfig,
+  resolveAvailableDeAiSkills,
+  resolveEffectiveDeAiSkill,
+  type DeAiSkill,
+} from "@/lib/novel/de-ai-skill-library"
 import { startOutlineIngestTask } from "@/lib/novel/outline-generation"
 import { streamChat } from "@/lib/llm-client"
 import { makeChapterFileName, makeDefaultChapterTitle } from "@/lib/wiki-filename"
@@ -183,11 +190,18 @@ export function PreviewPanel() {
   const [deAiPreviewOpen, setDeAiPreviewOpen] = useState(false)
   const [deAiSourceContent, setDeAiSourceContent] = useState("")
   const [deAiCandidateContent, setDeAiCandidateContent] = useState("")
+  const [deAiSkillName, setDeAiSkillName] = useState("")
   const [selectionTransformOpen, setSelectionTransformOpen] = useState(false)
   const [selectionTransformAction, setSelectionTransformAction] = useState<ChapterSelectionAction | null>(null)
   const [selectionTransformSelection, setSelectionTransformSelection] = useState<ChapterBodySelection | null>(null)
   const [selectionTransformSourceContent, setSelectionTransformSourceContent] = useState("")
   const [selectionTransformCandidateContent, setSelectionTransformCandidateContent] = useState("")
+  const [selectionTransformSkillName, setSelectionTransformSkillName] = useState("")
+  const [deAiSkillPickerOpen, setDeAiSkillPickerOpen] = useState(false)
+  const [deAiSkillPickerLoading, setDeAiSkillPickerLoading] = useState(false)
+  const [deAiSkillPickerSkills, setDeAiSkillPickerSkills] = useState<DeAiSkill[]>([])
+  const [deAiSkillPickerModifiedIds, setDeAiSkillPickerModifiedIds] = useState<string[]>([])
+  const [pendingSelectionForDeAi, setPendingSelectionForDeAi] = useState<ChapterBodySelection | null>(null)
   const [chapterTitleDraft, setChapterTitleDraft] = useState("")
   const [chapterTitleEditing, setChapterTitleEditing] = useState(false)
   const [chapterTitleWidthPx, setChapterTitleWidthPx] = useState(CHAPTER_TITLE_MIN_WIDTH_PX)
@@ -266,6 +280,8 @@ export function PreviewPanel() {
     selectedFileRef.current = selectedFile
     setSelectionTransformOpen(false)
     setDeAiPreviewOpen(false)
+    setDeAiSkillName("")
+    setSelectionTransformSkillName("")
     setLoadedFilePath(null)
 
     if (!selectedFile) {
@@ -750,23 +766,24 @@ export function PreviewPanel() {
     startOutlineIngestTask(project.path, selectedFile)
   }, [canIngestOutline, isOutlineIngesting, project, selectedFile])
 
-  const handleDeAiProcess = useCallback(async () => {
+  const runWholeChapterDeAi = useCallback(async (skillContent: string, skillName: string) => {
     if (!fileContent.trim()) return
     setDeAiProcessing(true)
+    setDeAiSkillName(skillName)
     const state = useWikiStore.getState()
     const llmConfig = resolveDefaultModel(state.llmConfig)
     if (!hasUsableLlm(llmConfig, state.providerConfigs)) {
       setDeAiProcessing(false)
+      setSaveStatus("未配置可用的 AI 模型，无法去AI味")
       return
     }
-    const { loadSmartDeAiSkill } = await import("@/lib/novel/de-ai-adapter")
-    const customDeAiSkill = await loadSmartDeAiSkill(project?.path ?? null, "去AI味润色", undefined)
+    setSaveStatus(`去AI味处理中，使用 Skill：${skillName}...`)
     const source = fileContent
     let result = ""
     try {
       await streamChat(
         llmConfig,
-        buildDeAiRewriteMessages(source, customDeAiSkill || undefined),
+        buildDeAiRewriteMessages(source, skillContent),
         {
           onToken: (token) => {
             result += token
@@ -776,6 +793,7 @@ export function PreviewPanel() {
             setDeAiCandidateContent(result)
             setDeAiPreviewOpen(true)
             setDeAiProcessing(false)
+            setSaveStatus(`本次使用 Skill：${skillName}`)
           },
           onError: (error) => {
             console.error("去AI味处理失败:", error)
@@ -791,6 +809,7 @@ export function PreviewPanel() {
 
   const handleDeAiApply = useCallback(() => {
     setDeAiPreviewOpen(false)
+    setDeAiSkillName("")
     handleSave(replaceWholeChapterBody(fileContent, deAiCandidateContent))
   }, [deAiCandidateContent, fileContent, handleSave])
 
@@ -814,9 +833,15 @@ export function PreviewPanel() {
 
   const handleDeAiClose = useCallback(() => {
     setDeAiPreviewOpen(false)
+    setDeAiSkillName("")
   }, [])
 
-  const handleSelectionAction = useCallback(async (action: ChapterSelectionAction, selection: ChapterBodySelection) => {
+  const runSelectionTransform = useCallback(async (
+    action: ChapterSelectionAction,
+    selection: ChapterBodySelection,
+    skillContent?: string,
+    skillName?: string,
+  ) => {
     if (!selection.text.trim()) return
     const state = useWikiStore.getState()
     const llmConfig = resolveDefaultModel(state.llmConfig)
@@ -827,14 +852,10 @@ export function PreviewPanel() {
 
     const actionFile = selectedFileRef.current
     const actionLabel = action === "polish" ? "AI润色" : "去AI味"
-    setSaveStatus(`${actionLabel}处理中...`)
-
-    const { loadSmartDeAiSkill } = await import("@/lib/novel/de-ai-adapter")
-    const customDeAiSkill = await loadSmartDeAiSkill(
-      project?.path ?? null,
-      action === "de-ai" ? "去AI味" : "润色",
-      undefined
-    )
+    setSelectionTransformSkillName(action === "de-ai" ? skillName ?? "" : "")
+    setSaveStatus(action === "de-ai" && skillName
+      ? `${actionLabel}处理中，使用 Skill：${skillName}...`
+      : `${actionLabel}处理中...`)
 
     let result = ""
     try {
@@ -842,7 +863,7 @@ export function PreviewPanel() {
         llmConfig,
         action === "polish"
           ? buildPolishSelectionMessages(selection.text)
-          : buildDeAiRewriteMessages(selection.text, customDeAiSkill || undefined),
+          : buildDeAiRewriteMessages(selection.text, skillContent),
         {
           onToken: (token) => {
             result += token
@@ -853,6 +874,7 @@ export function PreviewPanel() {
             setSelectionTransformSelection(selection)
             setSelectionTransformSourceContent(selection.text)
             setSelectionTransformCandidateContent(result)
+            setSelectionTransformSkillName(action === "de-ai" ? skillName ?? "" : "")
             setSelectionTransformOpen(true)
             setSaveStatus("")
           },
@@ -870,6 +892,60 @@ export function PreviewPanel() {
       setSaveStatus(`${actionLabel}失败：${message}`)
     }
   }, [])
+
+  const openDeAiSkillPicker = useCallback(async (selection: ChapterBodySelection | null) => {
+    if (deAiProcessing) return
+    setPendingSelectionForDeAi(selection)
+    setDeAiSkillPickerOpen(true)
+    setDeAiSkillPickerLoading(true)
+    setSaveStatus("")
+    try {
+      const config = await loadDeAiSkillConfig(project?.path ?? null)
+      const skills = resolveAvailableDeAiSkills(config)
+      setDeAiSkillPickerSkills(skills)
+      setDeAiSkillPickerModifiedIds(skills.filter((skill) => isDeAiSkillModified(config, skill.id)).map((skill) => skill.id))
+      if (skills.length === 0) {
+        setSaveStatus("暂无可用去AI味技能")
+      }
+    } catch (err) {
+      console.error("读取去AI味技能失败:", err)
+      setDeAiSkillPickerSkills([])
+      setDeAiSkillPickerModifiedIds([])
+      setSaveStatus("读取去AI味技能失败")
+    } finally {
+      setDeAiSkillPickerLoading(false)
+    }
+  }, [deAiProcessing, project?.path])
+
+  const handlePickedDeAiSkill = useCallback(async (skillId: string) => {
+    const selection = pendingSelectionForDeAi
+    setDeAiSkillPickerOpen(false)
+    setPendingSelectionForDeAi(null)
+
+    let skill = deAiSkillPickerSkills.find((item) => item.id === skillId) ?? null
+    if (!skill) {
+      const config = await loadDeAiSkillConfig(project?.path ?? null)
+      skill = resolveEffectiveDeAiSkill(config, skillId)
+    }
+    if (!skill) {
+      setSaveStatus("暂无可用去AI味技能")
+      return
+    }
+
+    if (selection) {
+      await runSelectionTransform("de-ai", selection, skill.content, skill.name)
+      return
+    }
+    await runWholeChapterDeAi(skill.content, skill.name)
+  }, [deAiSkillPickerSkills, pendingSelectionForDeAi, project?.path, runSelectionTransform, runWholeChapterDeAi])
+
+  const handleSelectionAction = useCallback((action: ChapterSelectionAction, selection: ChapterBodySelection) => {
+    if (action === "de-ai") {
+      void openDeAiSkillPicker(selection)
+      return
+    }
+    void runSelectionTransform(action, selection)
+  }, [openDeAiSkillPicker, runSelectionTransform])
 
   const handleApplySelectionTransform = useCallback(() => {
     if (!selectionTransformSelection || !selectionTransformCandidateContent) return
@@ -894,6 +970,7 @@ export function PreviewPanel() {
     setSelectionTransformSelection(null)
     setSelectionTransformSourceContent("")
     setSelectionTransformCandidateContent("")
+    setSelectionTransformSkillName("")
     setSaveStatus("")
   }, [fileContent, handleSave, selectionTransformCandidateContent, selectionTransformSelection])
 
@@ -903,6 +980,7 @@ export function PreviewPanel() {
     setSelectionTransformSelection(null)
     setSelectionTransformSourceContent("")
     setSelectionTransformCandidateContent("")
+    setSelectionTransformSkillName("")
   }, [])
 
   useEffect(() => {
@@ -1065,7 +1143,7 @@ export function PreviewPanel() {
                       type="button"
                       onClick={() => {
                         setChapterToolbarMoreOpen(false)
-                        void handleDeAiProcess()
+                        void openDeAiSkillPicker(null)
                       }}
                       disabled={deAiProcessing}
                       className="block w-full rounded px-2 py-1.5 text-left hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -1180,7 +1258,7 @@ export function PreviewPanel() {
             <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => void handleDeAiProcess()}
+                onClick={() => void openDeAiSkillPicker(null)}
                 disabled={deAiProcessing}
                 className="shrink-0 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1329,10 +1407,60 @@ export function PreviewPanel() {
           />
         </div>
       ) : null}
+      {deAiSkillPickerOpen ? (
+        <div className="fixed right-6 top-20 z-50 w-72 rounded-md border bg-popover p-2 text-sm text-popover-foreground shadow-lg">
+          <div className="mb-1 flex items-center justify-between gap-2 px-1">
+            <div className="truncate text-sm font-medium">
+              {pendingSelectionForDeAi ? "选择选中文本去AI味技能" : "选择去AI味技能"}
+            </div>
+            <button
+              type="button"
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => {
+                setDeAiSkillPickerOpen(false)
+                setPendingSelectionForDeAi(null)
+              }}
+              aria-label="关闭技能选择"
+              title="关闭技能选择"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {deAiSkillPickerLoading ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground">正在读取技能...</div>
+          ) : deAiSkillPickerSkills.length === 0 ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground">暂无可用去AI味技能</div>
+          ) : (
+            <div className="max-h-72 overflow-y-auto">
+              {deAiSkillPickerSkills.map((skill) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  className="block w-full rounded px-2 py-2 text-left hover:bg-accent"
+                  onClick={() => void handlePickedDeAiSkill(skill.id)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm">{skill.name}</span>
+                    {deAiSkillPickerModifiedIds.includes(skill.id) ? (
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+                        已修改
+                      </span>
+                    ) : null}
+                  </div>
+                  {skill.description ? (
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{skill.description}</div>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
       <DeAiPreviewDialog
         open={deAiPreviewOpen}
         sourceContent={deAiSourceContent}
         candidateContent={deAiCandidateContent}
+        skillName={deAiSkillName}
         onApply={handleDeAiApply}
         onSaveDraft={() => void handleDeAiSaveDraft()}
         onClose={handleDeAiClose}
@@ -1340,7 +1468,9 @@ export function PreviewPanel() {
       <TextTransformPreviewDialog
         open={selectionTransformOpen}
         title={selectionTransformAction === "polish" ? "AI润色预览" : "去AI味预览"}
-        description="确认后会替换当前选中的正文片段。"
+        description={selectionTransformAction === "de-ai" && selectionTransformSkillName
+          ? `本次使用 Skill：${selectionTransformSkillName}。确认后会替换当前选中的正文片段。`
+          : "确认后会替换当前选中的正文片段。"}
         sourceLabel="原文片段"
         candidateLabel={selectionTransformAction === "polish" ? "润色结果" : "去AI味结果"}
         sourceContent={selectionTransformSourceContent}

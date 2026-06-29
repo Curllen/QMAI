@@ -8,6 +8,7 @@ export interface Conversation {
   createdAt: number
   updatedAt: number
   deAiMode: boolean
+  selectedDeAiSkillId?: string | null
   inputDraft?: string
 }
 
@@ -42,6 +43,7 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void
   renameConversation: (id: string, title: string) => void
   setConversationDeAiMode: (id: string, deAiMode: boolean) => void
+  setConversationDeAiSkillId: (id: string, skillId: string | null | undefined) => void
   setConversationInputDraft: (id: string, draft: string) => void
 
   // Message management
@@ -102,6 +104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       deAiMode: false,
+      selectedDeAiSkillId: undefined,
       inputDraft: "",
     }
     set((state) => ({
@@ -141,6 +144,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       conversations: state.conversations.map((c) =>
         c.id === id ? { ...c, deAiMode, updatedAt: Date.now() } : c
+      ),
+    })),
+
+  setConversationDeAiSkillId: (id, selectedDeAiSkillId) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, selectedDeAiSkillId, updatedAt: Date.now() } : c
       ),
     })),
 

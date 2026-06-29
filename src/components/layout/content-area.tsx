@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { WritingWorkspace } from "./writing-workspace"
 import { SearchView } from "@/components/search/search-view"
+import { SkillLibraryView } from "@/components/skill-library/skill-library-view"
 
 const ChatPanel = lazy(async () => {
   const mod = await import("@/components/chat/chat-panel")
@@ -92,6 +93,13 @@ export function ContentArea() {
         content = (
           <Suspense fallback={<LoadingView />}>
             <SoulView />
+          </Suspense>
+        )
+        break
+      case "skillLibrary":
+        content = (
+          <Suspense fallback={<LoadingView />}>
+            <SkillLibraryView />
           </Suspense>
         )
         break
