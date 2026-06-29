@@ -6,6 +6,7 @@ import type { WikiProject } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { useWikiStore } from "@/stores/wiki-store"
 import { importBackup } from "@/lib/backup/import"
+import logoImg from "@/assets/QM-LOGO.png"
 
 interface WelcomeScreenProps {
   onCreateProject: () => void
@@ -57,25 +58,36 @@ export function WelcomeScreen({
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background">
+    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-background">
       <div className="flex flex-col items-center gap-8 px-4">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">{t(novelMode ? "novel.app.title" : "app.title")}</h1>
-          <p className="mt-2 text-muted-foreground">
-            {t(novelMode ? "novel.app.subtitle" : "app.subtitle")}
-          </p>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 p-3">
+            <img
+              src={logoImg}
+              alt={t(novelMode ? "novel.app.title" : "app.title")}
+              className="h-10 w-10 rounded-[22%]"
+            />
+          </div>
+          <div>
+            <h1 className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-4xl font-bold text-transparent">
+              {t(novelMode ? "novel.app.title" : "app.title")}
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              {t(novelMode ? "novel.app.subtitle" : "app.subtitle")}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
-          <Button onClick={onCreateProject}>
+          <Button size="lg" onClick={onCreateProject}>
             <Plus className="mr-2 h-4 w-4" />
             {t("welcome.newProject")}
           </Button>
-          <Button variant="outline" onClick={onOpenProject}>
+          <Button variant="outline" size="lg" onClick={onOpenProject}>
             <FolderOpen className="mr-2 h-4 w-4" />
             {t("welcome.openProject")}
           </Button>
-          <Button variant="secondary" onClick={handleRestoreBackup} disabled={isRestoring}>
+          <Button variant="secondary" size="lg" onClick={handleRestoreBackup} disabled={isRestoring}>
             <Database className="mr-2 h-4 w-4" />
             {isRestoring ? "恢复中..." : "恢复数据"}
           </Button>
@@ -87,12 +99,12 @@ export function WelcomeScreen({
               <Clock className="h-3.5 w-3.5" />
               {t("welcome.recentProjects")}
             </div>
-            <div className="rounded-lg border">
+            <div className="space-y-2">
               {recentProjects.map((proj) => (
                 <button
                   key={proj.path}
                   onClick={() => onSelectProject(proj)}
-                  className="group flex w-full items-center justify-between border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent"
+                  className="group flex w-full items-center justify-between rounded-xl border bg-card px-4 py-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-accent hover:shadow-md"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{proj.name}</div>
