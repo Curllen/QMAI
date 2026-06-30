@@ -15,6 +15,12 @@ import {
   normalizeUiFontFamily,
   type UiFontFamily,
 } from "@/lib/font-settings"
+import {
+  DEFAULT_VISUAL_STYLE,
+  VISUAL_STYLE_STORAGE_KEY,
+  normalizeVisualStyle,
+  type VisualStyle,
+} from "@/lib/visual-style-settings"
 
 const GRAPH_LABEL_MODE_KEY = "lk-graph-label-display-mode"
 const GRAPH_EDGE_COLOR_KEY = "lk-graph-edge-color"
@@ -56,6 +62,11 @@ const readStoredUiFontSizeScale = (): number => {
 const readStoredUiFontFamily = (): UiFontFamily => {
   if (typeof localStorage === "undefined") return DEFAULT_UI_FONT_FAMILY
   return normalizeUiFontFamily(localStorage.getItem(UI_FONT_FAMILY_KEY))
+}
+
+const readStoredVisualStyle = (): VisualStyle => {
+  if (typeof localStorage === "undefined") return DEFAULT_VISUAL_STYLE
+  return normalizeVisualStyle(localStorage.getItem(VISUAL_STYLE_STORAGE_KEY))
 }
 
 const readStoredSidebarNavConfig = (): SidebarNavConfig => {
@@ -568,6 +579,7 @@ interface WikiState {
   theme: "light" | "dark" | "deep-blue" | "system"
   uiFontSizeScale: number
   uiFontFamily: UiFontFamily
+  visualStyle: VisualStyle
   sidebarNavConfig: SidebarNavConfig
   dataVersion: number
   bindingVersion: number
@@ -635,6 +647,7 @@ interface WikiState {
   setTheme: (theme: "light" | "dark" | "deep-blue" | "system") => void
   setUiFontSizeScale: (scale: number) => void
   setUiFontFamily: (fontFamily: UiFontFamily) => void
+  setVisualStyle: (visualStyle: VisualStyle) => void
   setSidebarNavConfig: (config: Partial<SidebarNavConfig>) => void
   bumpDataVersion: () => void
   bumpBindingVersion: () => void
@@ -825,6 +838,7 @@ export const useWikiStore = create<WikiState>((set) => ({
   theme: "system",
   uiFontSizeScale: readStoredUiFontSizeScale(),
   uiFontFamily: readStoredUiFontFamily(),
+  visualStyle: readStoredVisualStyle(),
   sidebarNavConfig: readStoredSidebarNavConfig(),
 
   setLlmConfig: (llmConfig) => set({ llmConfig }),
@@ -875,6 +889,13 @@ export const useWikiStore = create<WikiState>((set) => ({
     }
     set({ uiFontFamily: normalized })
   },
+  setVisualStyle: (visualStyle) => {
+    const normalized = normalizeVisualStyle(visualStyle)
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(VISUAL_STYLE_STORAGE_KEY, normalized)
+    }
+    set({ visualStyle: normalized })
+  },
   setSidebarNavConfig: (config) => {
     const normalized = normalizeSidebarNavConfig(config)
     if (typeof localStorage !== "undefined") {
@@ -886,4 +907,4 @@ export const useWikiStore = create<WikiState>((set) => ({
   bumpBindingVersion: () => set((state) => ({ bindingVersion: state.bindingVersion + 1 })),
 }))
 
-export type { WikiState, LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProxyConfig, ScheduledImportConfig, SourceWatchConfig }
+export type { WikiState, LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProxyConfig, ScheduledImportConfig, SourceWatchConfig, VisualStyle }

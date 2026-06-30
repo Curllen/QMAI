@@ -114,6 +114,85 @@ describe("ChatInput resize interaction", () => {
     expect(releasePointerCapture).toHaveBeenCalledWith(17)
   })
 
+  it("keeps the manually resized height after sending a message", async () => {
+    const onSend = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <div
+          ref={(node) => {
+            if (!node) return
+            node.getBoundingClientRect = () => ({
+              x: 0,
+              y: 0,
+              top: 0,
+              right: 360,
+              bottom: 480,
+              left: 0,
+              width: 360,
+              height: 480,
+              toJSON: () => ({}),
+            })
+          }}
+        >
+          <ChatInput onSend={onSend} onStop={() => {}} isStreaming={false} />
+        </div>,
+      )
+    })
+
+    const resizeHandle = host.querySelector<HTMLElement>('[role="separator"]')
+    const textarea = host.querySelector<HTMLTextAreaElement>("textarea")
+    const sendButton = host.querySelector<HTMLButtonElement>("button")
+    if (!resizeHandle || !textarea || !sendButton) throw new Error("chat input elements not found")
+
+    resizeHandle.setPointerCapture = vi.fn()
+    resizeHandle.releasePointerCapture = vi.fn()
+
+    await act(async () => {
+      resizeHandle.dispatchEvent(createPointerEvent("pointerdown", {
+        button: 0,
+        buttons: 1,
+        clientY: 220,
+        pointerId: 20,
+      }))
+    })
+    await act(async () => {
+      window.dispatchEvent(createPointerEvent("pointermove", {
+        buttons: 1,
+        clientY: 120,
+        pointerId: 20,
+      }))
+    })
+    await act(async () => {
+      window.dispatchEvent(createPointerEvent("pointerup", { pointerId: 20 }))
+    })
+    await flush()
+
+    expect(textarea.style.height).toBe("144px")
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set
+      valueSetter?.call(textarea, "测试")
+      textarea.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        data: "测试",
+        inputType: "insertText",
+      }))
+    })
+    await flush()
+
+    await act(async () => {
+      sendButton.click()
+    })
+    await flush()
+
+    expect(onSend).toHaveBeenCalledWith("测试")
+    expect(textarea.style.height).toBe("144px")
+  })
+
   it("uses the nearest usable panel height when the chat input is wrapped in a short footer", async () => {
     await act(async () => {
       root.render(

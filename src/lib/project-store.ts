@@ -4,6 +4,7 @@ import type { LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, Out
 import { DEFAULT_NOVEL_CONFIG, DEFAULT_RERANK_CONFIG } from "@/stores/wiki-store"
 import { normalizeSourceWatchConfig } from "@/lib/source-watch-config"
 import { normalizeUiFontFamily, type UiFontFamily } from "@/lib/font-settings"
+import { normalizeVisualStyle, type VisualStyle } from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 
@@ -578,6 +579,7 @@ export async function loadRerankConfig(projectId?: string, projectPath?: string)
 }
 
 const THEME_KEY = "theme"
+const VISUAL_STYLE_KEY = "visualStyle"
 
 export async function saveTheme(theme: "light" | "dark" | "deep-blue" | "system"): Promise<void> {
   const store = await getStore()
@@ -588,6 +590,18 @@ export async function loadTheme(): Promise<"light" | "dark" | "deep-blue" | "sys
   const store = await getStore()
   const savedTheme = await store.get<"light" | "dark" | "deep-blue" | "system">(THEME_KEY)
   return savedTheme ?? null
+}
+
+export async function saveVisualStyle(style: VisualStyle): Promise<void> {
+  const store = await getStore()
+  await store.set(VISUAL_STYLE_KEY, normalizeVisualStyle(style))
+  await store.save()
+}
+
+export async function loadVisualStyle(): Promise<VisualStyle | null> {
+  const store = await getStore()
+  const saved = await store.get<string>(VISUAL_STYLE_KEY)
+  return saved ? normalizeVisualStyle(saved) : null
 }
 
 const UI_FONT_SIZE_SCALE_KEY = "uiFontSizeScale"

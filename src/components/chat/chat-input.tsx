@@ -303,12 +303,6 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
     if (!trimmed || isStreaming) return
     onSend(trimmed)
     setValue("")
-    setUserSetMinHeight(null)
-    setInputHeight(DEFAULT_RESIZABLE_INPUT_HEIGHT)
-    const ta = textareaRef.current
-    if (ta) {
-      ta.style.height = `${DEFAULT_RESIZABLE_INPUT_HEIGHT}px`
-    }
   }, [value, isStreaming, onSend, setValue])
 
   const handleKeyDown = useCallback(

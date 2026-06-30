@@ -91,6 +91,7 @@ function initialDraft(
   uiLanguage: string,
   uiFontSizeScale: number,
   uiFontFamily: UiFontFamily,
+  visualStyle: SettingsDraft["visualStyle"],
   sidebarNavConfig: SidebarNavConfig,
   projectPath?: string,
 ): SettingsDraft {
@@ -150,6 +151,7 @@ function initialDraft(
     uiLanguage,
     uiFontSizeScale,
     uiFontFamily,
+    visualStyle,
     sidebarNavConfig,
   }
 }
@@ -185,6 +187,8 @@ export function SettingsView() {
   const setUiFontSizeScale = useWikiStore((s) => s.setUiFontSizeScale)
   const uiFontFamily = useWikiStore((s) => s.uiFontFamily)
   const setUiFontFamily = useWikiStore((s) => s.setUiFontFamily)
+  const visualStyle = useWikiStore((s) => s.visualStyle)
+  const setVisualStyle = useWikiStore((s) => s.setVisualStyle)
   const sidebarNavConfig = useWikiStore((s) => s.sidebarNavConfig)
   const setSidebarNavConfig = useWikiStore((s) => s.setSidebarNavConfig)
 
@@ -206,6 +210,7 @@ export function SettingsView() {
       i18n.language,
       uiFontSizeScale,
       uiFontFamily,
+      visualStyle,
       sidebarNavConfig,
       project?.path,
     ),
@@ -286,6 +291,7 @@ export function SettingsView() {
         prev.uiLanguage,
         uiFontSizeScale,
         uiFontFamily,
+        visualStyle,
         sidebarNavConfig,
         project?.path,
       ),
@@ -304,6 +310,7 @@ export function SettingsView() {
     maxHistoryMessages,
     uiFontSizeScale,
     uiFontFamily,
+    visualStyle,
     sidebarNavConfig,
     project,
   ])
@@ -327,6 +334,7 @@ export function SettingsView() {
       saveMaxHistoryMessages,
       saveUiFontSizeScale,
       saveUiFontFamily,
+      saveVisualStyle,
     } = await import("@/lib/project-store")
 
     const newLlm = {
@@ -453,6 +461,10 @@ export function SettingsView() {
     await saveUiFontSizeScale(draft.uiFontSizeScale, project?.id, project?.path)
     setUiFontFamily(draft.uiFontFamily)
     await saveUiFontFamily(draft.uiFontFamily)
+    setVisualStyle(draft.visualStyle)
+    await saveVisualStyle(draft.visualStyle)
+    const { applyVisualStyle } = await import("@/lib/visual-style-settings")
+    applyVisualStyle(draft.visualStyle)
     setSidebarNavConfig(draft.sidebarNavConfig)
 
     if (draft.uiLanguage !== i18n.language) {
@@ -479,6 +491,7 @@ export function SettingsView() {
     outputLanguage,
     setUiFontSizeScale,
     setUiFontFamily,
+    setVisualStyle,
     setSidebarNavConfig,
   ])
 
