@@ -28,7 +28,7 @@ const VISUAL_STYLE_OPTIONS = [
   {
     value: "classic",
     label: "经典原版",
-    description: "保留当前浅色、深色、深蓝护眼配色。",
+    description: "保留当前浅色、深色配色。",
     colors: ["#ffffff", "#171717", "#e5e5e5"],
   },
   {

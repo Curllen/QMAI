@@ -204,7 +204,9 @@ export function DeAiSkillPicker({
       >
         <WandSparkles className="h-4 w-4" />
         {iconOnly ? null : (
-          <span className="max-w-[10rem] truncate">{buttonLabel ?? `去AI味：${effectiveName}`}</span>
+          <span className="max-w-[10rem] truncate">
+            {buttonLabel ?? (effectiveName === "未启用" ? "去AI味" : `去AI味：${effectiveName}`)}
+          </span>
         )}
       </button>
       {open ? (

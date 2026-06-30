@@ -118,6 +118,40 @@ describe("SkillLibraryView", () => {
     cleanup(root, container)
   })
 
+  it("creates a blank project skill from the sidebar and hides the copy action", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1234)
+    const { container, root } = await renderLibrary()
+
+    expect(container.querySelector('[data-testid="skill-copy-button"]')).toBeNull()
+
+    const createButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "新建技能")
+    expect(createButton).not.toBeUndefined()
+
+    await act(async () => {
+      createButton?.click()
+    })
+    await flushEffects()
+
+    const saved = JSON.parse(savedConfigContent)
+    expect(saved.projectSkills[0]).toMatchObject({
+      id: "project:1234",
+      name: "新建去AI味 Skill",
+      description: "",
+      templateId: "custom",
+      source: "project",
+    })
+    expect(saved.projectSkills[0].content).toContain("在这里填写这个 Skill")
+    expect(saved.projectSkills[0].content).not.toContain("综合去AI味规则")
+    expect(container.querySelector<HTMLInputElement>('[data-testid="skill-name-input"]')?.value).toBe("新建去AI味 Skill")
+    expect(container.querySelector<HTMLTextAreaElement>('[data-testid="skill-content-input"]')?.value).toContain(
+      "在这里填写这个 Skill",
+    )
+
+    nowSpy.mockRestore()
+    cleanup(root, container)
+  })
+
   it("allows editing a built-in skill and restoring its default content", async () => {
     const { container, root } = await renderView()
     const nameInput = container.querySelector<HTMLInputElement>('[data-testid="skill-name-input"]')

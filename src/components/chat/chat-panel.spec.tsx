@@ -17,4 +17,10 @@ describe("chat-panel de-AI skill handling", () => {
     expect(source).toContain("<DeAiSkillPicker")
     expect(source).toContain("iconOnly")
   })
+
+  it("uses an icon-only accent new conversation button", () => {
+    expect(source).toContain("qmai-new-conversation-button")
+    expect(source).toContain('aria-label={t(novelMode ? "novel.chat.newChat" : "chat.newChat")}')
+    expect(source).not.toContain('          {t(novelMode ? "novel.chat.newChat" : "chat.newChat")}')
+  })
 })

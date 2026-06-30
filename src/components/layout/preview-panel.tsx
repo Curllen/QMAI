@@ -323,6 +323,7 @@ export function PreviewPanel() {
     let cancelled = false
     const previousFile = selectedFileRef.current
     const previousContent = fileContentRef.current
+    console.log("[PreviewPanel][debug] useEffect triggered", { selectedFile, previousFile, previousContentLength: previousContent?.length })
     if (previousFile && previousFile !== selectedFile && isChapterPath(previousFile)) {
       void flushChapterBeforeLeave(previousFile, previousContent)
     }
@@ -363,6 +364,7 @@ export function PreviewPanel() {
 
     readFile(selectedFile)
       .then((content) => {
+        console.log("[PreviewPanel][debug] readFile success", { selectedFile, contentLength: content?.length, cancelled, storeSelectedFile: useWikiStore.getState().selectedFile })
         if (cancelled || useWikiStore.getState().selectedFile !== selectedFile) return
         lastLoadedRef.current = content
         setFileContent(content)
@@ -370,6 +372,7 @@ export function PreviewPanel() {
         setLoadedFilePath(selectedFile)
       })
       .catch((err) => {
+        console.log("[PreviewPanel][debug] readFile error", { selectedFile, err, cancelled, storeSelectedFile: useWikiStore.getState().selectedFile })
         if (cancelled || useWikiStore.getState().selectedFile !== selectedFile) return
         lastLoadedRef.current = ""
         setFileContent(`Error loading file: ${err}`)
@@ -377,6 +380,7 @@ export function PreviewPanel() {
         setLoadedFilePath(selectedFile)
       })
     return () => {
+      console.log("[PreviewPanel][debug] useEffect cleanup", { selectedFile })
       cancelled = true
     }
   }, [selectedFile, setFileContent, flushChapterBeforeLeave])
@@ -542,7 +546,7 @@ export function PreviewPanel() {
     </div>
   ) : null
   const chapterDeAiSkillName = chapterHeader ? chapterDeAiOptions.effectiveName : "未启用"
-  const chapterDeAiButtonLabel = deAiProcessing ? "处理中" : `去AI味：${chapterDeAiSkillName}`
+  const chapterDeAiButtonLabel = deAiProcessing ? "处理中" : (chapterDeAiSkillName === "未启用" ? "去AI味" : `去AI味：${chapterDeAiSkillName}`)
   const chapterDeAiButtonTitle = `当前去AI味 Skill：${chapterDeAiSkillName}`
 
   useEffect(() => {

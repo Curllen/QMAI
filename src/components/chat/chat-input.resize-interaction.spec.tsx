@@ -52,6 +52,50 @@ describe("ChatInput resize interaction", () => {
     vi.restoreAllMocks()
   })
 
+  it("places left toolbar controls above the textarea", async () => {
+    await act(async () => {
+      root.render(
+        <ChatInput
+          onSend={() => {}}
+          onStop={() => {}}
+          isStreaming={false}
+          leftControls={<span data-testid="left-toolbar">left tools</span>}
+          rightControls={<span data-testid="right-toolbar">right tools</span>}
+        />,
+      )
+    })
+
+    const leftToolbar = host.querySelector<HTMLElement>('[data-testid="left-toolbar"]')
+    const textarea = host.querySelector<HTMLTextAreaElement>("textarea")
+    const rightToolbar = host.querySelector<HTMLElement>('[data-testid="right-toolbar"]')
+    if (!leftToolbar || !textarea || !rightToolbar) throw new Error("chat input toolbar elements not found")
+
+    expect(Boolean(leftToolbar.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(textarea.compareDocumentPosition(rightToolbar) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  it("places bottom left controls in the footer before right controls", async () => {
+    await act(async () => {
+      root.render(
+        <ChatInput
+          onSend={() => {}}
+          onStop={() => {}}
+          isStreaming={false}
+          bottomLeftControls={<span data-testid="bottom-left-toolbar">bottom left</span>}
+          rightControls={<span data-testid="right-toolbar">right tools</span>}
+        />,
+      )
+    })
+
+    const bottomLeftToolbar = host.querySelector<HTMLElement>('[data-testid="bottom-left-toolbar"]')
+    const textarea = host.querySelector<HTMLTextAreaElement>("textarea")
+    const rightToolbar = host.querySelector<HTMLElement>('[data-testid="right-toolbar"]')
+    if (!bottomLeftToolbar || !textarea || !rightToolbar) throw new Error("chat input footer elements not found")
+
+    expect(Boolean(textarea.compareDocumentPosition(bottomLeftToolbar) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(bottomLeftToolbar.compareDocumentPosition(rightToolbar) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
   it("captures the pointer and resizes while dragging the height handle", async () => {
     await act(async () => {
       root.render(

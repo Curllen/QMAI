@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   BUILT_IN_DE_AI_SKILLS,
   DEFAULT_DE_AI_SKILL_ID,
-  createProjectDeAiSkillFromTemplate,
+  createBlankProjectDeAiSkill,
   deleteProjectDeAiSkill,
   getAllDeAiSkills,
   isDeAiSkillModified,
@@ -142,23 +142,28 @@ describe("de-ai skill library", () => {
     expect(skill?.id).toBe("built-in:reduce-explanation")
   })
 
-  it("creates a project skill from a built-in template", () => {
+  it("creates a blank project skill without copying a built-in prompt", () => {
     const config = normalizeDeAiSkillConfig(null)
 
-    const next = createProjectDeAiSkillFromTemplate(config, "built-in:reduce-explanation", 1000)
+    const next = createBlankProjectDeAiSkill(config, 1000)
 
     expect(next.projectSkills).toHaveLength(1)
-    expect(next.projectSkills[0].source).toBe("project")
-    expect(next.projectSkills[0].name).toContain("减少解释腔")
-    expect(next.defaultSkillId).toBe(next.projectSkills[0].id)
+    expect(next.projectSkills[0]).toMatchObject({
+      id: "project:1000",
+      name: "新建去AI味 Skill",
+      description: "",
+      templateId: "custom",
+      source: "project",
+      createdAt: 1000,
+      updatedAt: 1000,
+    })
+    expect(next.projectSkills[0].content).toContain("在这里填写这个 Skill")
+    expect(next.projectSkills[0].content).not.toContain("综合去AI味规则")
+    expect(next.defaultSkillId).toBe("project:1000")
   })
 
   it("updates and deletes project skills without deleting built-ins", () => {
-    const created = createProjectDeAiSkillFromTemplate(
-      normalizeDeAiSkillConfig(null),
-      "built-in:dialogue-natural",
-      1000,
-    )
+    const created = createBlankProjectDeAiSkill(normalizeDeAiSkillConfig(null), 1000)
     const id = created.projectSkills[0].id
 
     const updated = updateProjectDeAiSkill(created, id, { name: "对话规则", content: "只输出正文" }, 2000)
@@ -205,7 +210,7 @@ describe("de-ai skill library", () => {
       name: "综合去AI味-项目版",
       content: "项目覆盖规则",
     }, 2000)
-    const projectCreated = createProjectDeAiSkillFromTemplate(builtInUpdated, "built-in:dialogue-natural", 3000)
+    const projectCreated = createBlankProjectDeAiSkill(builtInUpdated, 3000)
     const projectId = projectCreated.projectSkills[0].id
     const projectUpdated = updateDeAiSkill(projectCreated, projectId, {
       name: "对话规则",

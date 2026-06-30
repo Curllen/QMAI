@@ -30,8 +30,8 @@ describe("sidebar nav preferences", () => {
     } as unknown as SidebarNavConfig)
 
     expect(config.order).toEqual([
-      "search",
       "wiki",
+      "search",
       "trash",
       "sources",
       "graph",
@@ -53,10 +53,14 @@ describe("sidebar nav preferences", () => {
     expect(config.hidden).toEqual(["graph", "trash"])
   })
 
-  it("moves a feature id relative to another feature id", () => {
-    const order = reorderSidebarNavOrder(DEFAULT_SIDEBAR_NAV_ORDER, "trash", "wiki")
+  it("moves a feature id relative to another feature id while keeping wiki first", () => {
+    const order = reorderSidebarNavOrder(DEFAULT_SIDEBAR_NAV_ORDER, "trash", "sources")
+    expect(order.slice(0, 3)).toEqual(["wiki", "trash", "sources"])
+  })
 
-    expect(order.slice(0, 3)).toEqual(["trash", "wiki", "sources"])
+  it("always keeps wiki in first position after normalization", () => {
+    const config = normalizeSidebarNavConfig({ order: ["trash", "sources", "wiki", "graph"] })
+    expect(config.order[0]).toBe("wiki")
   })
 
   it("includes skill library in the configurable sidebar order", () => {

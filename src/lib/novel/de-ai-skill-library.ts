@@ -619,18 +619,19 @@ export function isDeAiSkillModified(config: DeAiSkillConfig, skillId: string): b
     && projectSkill.updatedAt > projectSkill.createdAt
 }
 
-export function createProjectDeAiSkillFromTemplate(
-  config: DeAiSkillConfig,
-  templateId: string,
-  now = Date.now(),
-): DeAiSkillConfig {
-  const template = getAllDeAiSkills(config).find((skill) => skill.id === templateId) ?? BUILT_IN_DE_AI_SKILLS[0]
+export function createBlankProjectDeAiSkill(config: DeAiSkillConfig, now = Date.now()): DeAiSkillConfig {
   const skill: DeAiSkill = {
     id: `project:${now}`,
-    name: `${template.name}副本`,
-    description: template.description,
-    templateId: template.templateId,
-    content: template.content,
+    name: "新建去AI味 Skill",
+    description: "",
+    templateId: "custom",
+    content: `# de-AI-writing
+
+## 自定义去AI味规则
+
+在这里填写这个 Skill 的适用场景、AI味识别标准、改写步骤和输出要求。
+
+默认只输出处理后的正文。不要输出解释、分析或修改说明。`,
     source: "project",
     createdAt: now,
     updatedAt: now,

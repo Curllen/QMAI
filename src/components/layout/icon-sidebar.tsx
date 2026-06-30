@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import {
-  FileText, FolderOpen, Search, Network, Brain, Settings, ArrowLeftRight, Sun, Moon, Eye, SunMoon, Check, Trash2, Sparkles, LayoutDashboard, BookOpen, Drama, WandSparkles,
+  FileText, FolderOpen, Search, Network, Brain, Settings, ArrowLeftRight, Sun, Moon, SunMoon, Check, Trash2, Sparkles, LayoutDashboard, BookOpen, Drama, WandSparkles,
 } from "lucide-react"
 import { createPortal } from "react-dom"
 import {
@@ -63,7 +63,6 @@ interface IconSidebarProps {
 const THEME_OPTIONS: { value: ThemeMode; icon: typeof Sun; labelKey: string }[] = [
   { value: "light", icon: Sun, labelKey: "theme.light" },
   { value: "dark", icon: Moon, labelKey: "theme.dark" },
-  { value: "deep-blue", icon: Eye, labelKey: "theme.deepBlue" },
   { value: "system", icon: SunMoon, labelKey: "theme.system" },
 ]
 
@@ -197,12 +196,25 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
   const handleNavClick = (view: NavView) => {
     setSearchPanelOpen(false)
     const normalizedSelectedFile = selectedFile?.replace(/\\/g, "/") ?? ""
+
+    // 离开wiki视图时，保存当前章节路径到sessionStorage，以便切回时恢复
+    if (activeView === "wiki" && view !== "wiki" && normalizedSelectedFile.includes("/wiki/chapters/")) {
+      try {
+        sessionStorage.setItem("lk-last-chapter-path", selectedFile!)
+      } catch { /* ignore quota errors */ }
+    }
+
+    // 离开sources视图时，如果当前选中的是大纲文件，保存到sessionStorage（仅章节用chapter key，大纲暂不做持久化）
+
+    // 切换视图时清空不属于目标视图的选中文件
+    let needsRestoreChapter = false
     if (
       view === "wiki" &&
       normalizedSelectedFile &&
       !normalizedSelectedFile.includes("/wiki/chapters/")
     ) {
       setSelectedFile(null)
+      needsRestoreChapter = true
     }
     if (
       view === "sources" &&
@@ -211,6 +223,15 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
     ) {
       setSelectedFile(null)
     }
+
+    // 切换回wiki时，如果selectedFile为空或已被清空，尝试从sessionStorage恢复章节
+    if (view === "wiki" && (!normalizedSelectedFile || needsRestoreChapter)) {
+      const savedPath = sessionStorage.getItem("lk-last-chapter-path")
+      if (savedPath) {
+        setSelectedFile(savedPath)
+      }
+    }
+
     setActiveView(view)
   }
 

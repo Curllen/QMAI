@@ -899,8 +899,16 @@ export function KnowledgeTree({
     setArmedPath(null)
     if (renamingPath === pagePath) return
     setSelectedFile(pagePath)
-    // 保存最后阅读的章节路径，用于启动时自动打开
-    saveLastReadChapter(pagePath).catch(() => {})
+    // 保存最后阅读的章节路径，用于启动时自动打开（仅章节保存，大纲不保存）
+    if (pagePath.replace(/\\/g, "/").includes("/wiki/chapters/")) {
+      saveLastReadChapter(pagePath).catch(() => {})
+    }
+    // 同时保存到sessionStorage，用于视图切换时恢复章节定位
+    if (pagePath.replace(/\\/g, "/").includes("/wiki/chapters/")) {
+      try {
+        sessionStorage.setItem("lk-last-chapter-path", pagePath)
+      } catch { /* ignore quota errors */ }
+    }
   }, [renamingPath, setSelectedFile])
 
   const toggleFolder = useCallback((folderPath: string) => {

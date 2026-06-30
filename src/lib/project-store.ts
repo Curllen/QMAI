@@ -581,14 +581,14 @@ export async function loadRerankConfig(projectId?: string, projectPath?: string)
 const THEME_KEY = "theme"
 const VISUAL_STYLE_KEY = "visualStyle"
 
-export async function saveTheme(theme: "light" | "dark" | "deep-blue" | "system"): Promise<void> {
+export async function saveTheme(theme: "light" | "dark" | "system"): Promise<void> {
   const store = await getStore()
   await store.set(THEME_KEY, theme)
 }
 
-export async function loadTheme(): Promise<"light" | "dark" | "deep-blue" | "system" | null> {
+export async function loadTheme(): Promise<"light" | "dark" | "system" | null> {
   const store = await getStore()
-  const savedTheme = await store.get<"light" | "dark" | "deep-blue" | "system">(THEME_KEY)
+  const savedTheme = await store.get<"light" | "dark" | "system">(THEME_KEY)
   return savedTheme ?? null
 }
 

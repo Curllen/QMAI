@@ -250,9 +250,12 @@ function App() {
     try {
       const lastChapterPath = await loadLastReadChapter()
       if (lastChapterPath) {
-        const exists = await fileExists(lastChapterPath)
-        if (exists) {
-          setSelectedFile(lastChapterPath)
+        const normalizedPath = lastChapterPath.replace(/\\/g, "/")
+        if (normalizedPath.includes("/wiki/chapters/")) {
+          const exists = await fileExists(lastChapterPath)
+          if (exists) {
+            setSelectedFile(lastChapterPath)
+          }
         }
       }
     } catch (err) {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import {
-  BUILT_IN_DE_AI_SKILLS,
-  createProjectDeAiSkillFromTemplate,
+  createBlankProjectDeAiSkill,
   deleteProjectDeAiSkill,
   getAllDeAiSkills,
   isDeAiSkillModified,
@@ -131,7 +130,7 @@ export function SkillLibrarySidebarPanel() {
     if (draftDirty && !confirmDiscardSkillLibraryDraft()) return
     if (draftDirty) setDraftDirty(false)
     const now = Date.now()
-    const next = createProjectDeAiSkillFromTemplate(config, BUILT_IN_DE_AI_SKILLS[0].id, now)
+    const next = createBlankProjectDeAiSkill(config, now)
     await persist(next, `project:${now}`)
   }
 
@@ -310,15 +309,6 @@ export function SkillLibraryView() {
     }
   }
 
-  async function handleCopySkill() {
-    if (!config || !project || !selectedSkill) return
-    if (draftDirty && !confirmDiscardSkillLibraryDraft()) return
-    if (draftDirty) setDraftDirty(false)
-    const now = Date.now()
-    const next = createProjectDeAiSkillFromTemplate(config, selectedSkill.id, now)
-    await persist(next, `project:${now}`)
-  }
-
   async function handleSaveSkill() {
     if (!config || !selectedSkill || !canSaveDraft) return
     const name = normalizeDraftText(draftName)
@@ -482,15 +472,6 @@ export function SkillLibraryView() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  data-testid="skill-copy-button"
-                  type="button"
-                  onClick={() => void handleCopySkill()}
-                  className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
-                  disabled={!project || saving}
-                >
-                  复制为项目技能
-                </button>
                 <button
                   data-testid="skill-default-button"
                   type="button"

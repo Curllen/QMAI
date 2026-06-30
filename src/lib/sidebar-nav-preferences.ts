@@ -49,6 +49,11 @@ export function normalizeSidebarNavConfig(config?: Partial<SidebarNavConfig> | n
       order.push(id)
     }
   }
+  const wikiIndex = order.indexOf("wiki")
+  if (wikiIndex > 0) {
+    order.splice(wikiIndex, 1)
+    order.unshift("wiki")
+  }
   return {
     order,
     hidden: normalizeIdList(config?.hidden),

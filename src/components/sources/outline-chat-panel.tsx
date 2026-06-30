@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from "react"
-import { X, Save, Copy, RefreshCw, FileText, Plus, Trash2 } from "lucide-react"
+import { X, Save, Copy, RefreshCw, FileText, Plus, Trash2, ListPlus } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useOutlineChatStore, type OutlineChatMessage } from "@/stores/outline-chat-store"
 import { normalizePath } from "@/lib/path-utils"
@@ -186,6 +186,91 @@ function OutlineAssistantMessage({ msg, index, isStreaming, streamingContent, ac
         </div>
       ) : null}
     </>
+  )
+}
+
+function OutlineGenerationMenu({
+  disabled,
+  onGenerate,
+}: {
+  disabled: boolean
+  onGenerate: (title: string, requestHint: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 })
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const menuWidth = 224
+          const gap = 8
+          const viewportWidth = window.innerWidth || menuWidth
+          setMenuPosition({
+            left: Math.min(Math.max(rect.left, gap), Math.max(gap, viewportWidth - menuWidth - gap)),
+            top: rect.top,
+          })
+          setOpen((value) => !value)
+        }}
+        disabled={disabled}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-accent/50 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+        title="生成大纲模块"
+        aria-label="生成大纲模块"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <ListPlus className="h-4 w-4" />
+      </button>
+      {open ? (
+        <div
+          ref={menuRef}
+          className="qmai-outline-generation-menu fixed z-50 w-56 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+          style={{ left: menuPosition.left, top: menuPosition.top, transform: "translateY(calc(-100% - 8px))" }}
+          role="menu"
+        >
+          {OUTLINE_SECTION_GENERATION_CONFIGS.map((config) => (
+            <button
+              key={config.key}
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onGenerate(config.title, config.requestHint)
+              }}
+              disabled={disabled}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              title={config.requestHint}
+              role="menuitem"
+            >
+              <ListPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate">{config.title}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -558,9 +643,11 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       {/* Header with conversation tabs */}
       <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5 overflow-x-auto">
         <button
+          type="button"
           onClick={() => { createConversation() }}
-          className="shrink-0 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+          className="qmai-new-conversation-button flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-accent/60 text-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
           title="新建大纲对话"
+          aria-label="新建大纲对话"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -634,21 +721,6 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t px-3 py-2">
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {OUTLINE_SECTION_GENERATION_CONFIGS.map((config) => (
-            <button
-              key={config.key}
-              type="button"
-              onClick={() => handleGenerateSection(config.title, config.requestHint)}
-              disabled={isStreaming}
-              className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent disabled:opacity-50"
-            >
-              {config.title}
-            </button>
-          ))}
-        </div>
-      </div>
       <div className="shrink-0">
         <ChatInput
           onSend={(text) => void handleSend(text)}
@@ -657,10 +729,14 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
           placeholder="输入关于大纲的问题..."
           value={inputValue}
           onChange={setInputValue}
-          leftControls={
+          bottomLeftControls={
             <TooltipProvider delay={200}>
-              <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+              <div className="qmai-outline-bottom-left-controls flex min-w-0 items-center gap-2">
                 <ChatDockControls />
+                <OutlineGenerationMenu
+                  disabled={isStreaming}
+                  onGenerate={handleGenerateSection}
+                />
               </div>
             </TooltipProvider>
           }
@@ -677,7 +753,9 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                 disabled={isStreaming}
               />
             ) : (
-              <p className="text-xs text-destructive">请先在「设置 → 大语言模型」中添加并启用一个模型。</p>
+              <p className="max-w-48 truncate text-xs text-destructive" title="请先在设置中添加并启用一个模型">
+                请先在设置中添加并启用一个模型
+              </p>
             )
           }
         />

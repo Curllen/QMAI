@@ -2,7 +2,7 @@
  * 主题工具函数：检测系统主题、应用主题、监听系统主题变化
  */
 
-export type ThemeMode = "light" | "dark" | "deep-blue" | "system"
+export type ThemeMode = "light" | "dark" | "system"
 
 /**
  * 检测系统是否为深色模式
@@ -26,7 +26,7 @@ export function applyTheme(theme: ThemeMode): void {
   if (typeof document === "undefined") return
 
   const html = document.documentElement
-  html.classList.remove("dark", "deep-blue")
+  html.classList.remove("dark")
 
   let actualTheme = theme
   if (theme === "system") {
@@ -35,8 +35,6 @@ export function applyTheme(theme: ThemeMode): void {
 
   if (actualTheme === "dark") {
     html.classList.add("dark")
-  } else if (actualTheme === "deep-blue") {
-    html.classList.add("deep-blue")
   }
 }
 

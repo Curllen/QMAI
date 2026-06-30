@@ -105,13 +105,14 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
     <div className="shrink-0 border-b bg-muted/20 px-2 py-2">
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-2 rounded-full"
+          variant="ghost"
+          size="icon-sm"
+          className="qmai-new-conversation-button shrink-0 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm hover:bg-emerald-100 hover:text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
           onClick={() => createConversation()}
+          title={t(novelMode ? "novel.chat.newChat" : "chat.newChat")}
+          aria-label={t(novelMode ? "novel.chat.newChat" : "chat.newChat")}
         >
           <Plus className="h-3.5 w-3.5" />
-          {t(novelMode ? "novel.chat.newChat" : "chat.newChat")}
         </Button>
 
         {sorted.length === 0 ? (

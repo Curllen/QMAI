@@ -37,6 +37,7 @@ interface ChatInputProps {
   isStreaming: boolean
   placeholder?: string
   leftControls?: ReactNode
+  bottomLeftControls?: ReactNode
   rightControls?: ReactNode
   /** @deprecated 请使用 leftControls 代替 */
   leadingControls?: ReactNode
@@ -46,8 +47,9 @@ interface ChatInputProps {
   onChange?: (value: string) => void
 }
 
-export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftControls, rightControls, leadingControls, footerControls, value: controlledValue, onChange }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftControls, bottomLeftControls, rightControls, leadingControls, footerControls, value: controlledValue, onChange }: ChatInputProps) {
   const leftToolbarContent = leftControls ?? leadingControls ?? footerControls
+  const bottomLeftToolbarContent = bottomLeftControls
   const rightToolbarContent = rightControls
   const activeConversationId = useChatStore((state) => state.activeConversationId)
   const setConversationInputDraft = useChatStore((state) => state.setConversationInputDraft)
@@ -345,6 +347,13 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
         >
           <span className={`h-0.5 w-10 rounded-full transition-colors ${handleBarColor}`} />
         </div>
+        {leftToolbarContent ? (
+          <div className="flex items-center border-b bg-muted/10 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+              {leftToolbarContent}
+            </div>
+          </div>
+        ) : null}
         <div className="px-3 pt-1.5">
           <textarea
             ref={textareaRef}
@@ -360,14 +369,12 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder, leftContro
           />
         </div>
         <div className="flex items-center justify-between border-t px-3 py-2 gap-2">
-          {leftToolbarContent ? (
-            <div className="flex items-center gap-2 min-w-0 overflow-x-auto">
-              {leftToolbarContent}
+          {bottomLeftToolbarContent ? (
+            <div className="flex min-w-0 items-center gap-2 shrink-0">
+              {bottomLeftToolbarContent}
             </div>
-          ) : (
-            <div className="flex-1" />
-          )}
-          <div className="flex items-center gap-2 shrink-0">
+          ) : null}
+          <div className="ml-auto flex items-center gap-2 shrink-0">
             {rightToolbarContent}
             {isStreaming ? (
               <Button
