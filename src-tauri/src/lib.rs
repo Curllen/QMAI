@@ -3,15 +3,6 @@ mod panic_guard;
 mod proxy;
 mod types;
 
-/// Apply a proxy configuration to the process env immediately, so the
-/// next outbound HTTP request picks it up without needing the user to
-/// restart the app. tauri-plugin-http builds a fresh
-/// `reqwest::ClientBuilder` per fetch and reqwest's `auto_sys_proxy`
-/// re-reads HTTP_PROXY / HTTPS_PROXY / NO_PROXY each time, so updating
-/// these env vars is sufficient to flip the proxy on/off live.
-///
-/// Returns the same human-readable summary `apply_proxy_env` produces
-/// for logging.
 #[tauri::command]
 fn set_proxy_env(config: proxy::ProxyConfig) -> String {
     let summary = proxy::apply_proxy_env(&config);
@@ -19,7 +10,6 @@ fn set_proxy_env(config: proxy::ProxyConfig) -> String {
     summary
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -33,26 +23,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        // Rust-backed fetch so third-party LLM APIs that reject
-        // browser-origin headers via CORS preflight (MiniMax, Volcengine
-        // Ark's api/coding/v3, etc.) still work. Requests leave the app
-        // from Rust, never the webview.
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // Let the PDF extractor find the bundled pdfium dynamic
-            // library via Tauri's platform-correct resource path.
             use tauri::Manager;
             if let Ok(dir) = app.path().resource_dir() {
                 commands::fs::set_resource_dir_hint(dir);
             }
-            // Apply user-configured global HTTP proxy by setting
-            // HTTP_PROXY / HTTPS_PROXY / NO_PROXY env vars BEFORE
-            // any HTTP request is made. tauri-plugin-http's reqwest
-            // client reads these on first construction. Lives next
-            // to the resource-dir hint so the proxy applies to
-            // everything: LLM, embedding, update check, deep
-            // research, captioning. See src-tauri/src/proxy.rs.
             if let Ok(dir) = app.path().app_data_dir() {
                 let store_path = dir.join("app-state.json");
                 eprintln!("[proxy] reading from {}", store_path.display());
@@ -61,9 +38,6 @@ pub fn run() {
             } else {
                 eprintln!("[proxy] could not resolve app_data_dir");
             }
-            // Registry of running `claude` subprocesses, keyed by the
-            // frontend-generated stream id. Populated by claude_cli_spawn,
-            // drained on process exit or by claude_cli_kill.
             app.manage(commands::claude_cli::ClaudeCliState::default());
             app.manage(commands::codex_cli::CodexCliState::default());
             app.manage(commands::file_sync::FileSyncState::default());
@@ -154,10 +128,8 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            // 启动失败时显示友好的错误信息，而非裸 panic
             let msg = format!("应用程序启动失败: {e}");
             eprintln!("{msg}");
-            // 尝试弹出 Windows 消息框（不依赖 Tauri 运行时）
             #[cfg(windows)]
             {
                 use std::ffi::OsStr;
@@ -180,7 +152,7 @@ pub fn run() {
                         std::ptr::null_mut(),
                         text.as_ptr(),
                         caption.as_ptr(),
-                        0x10, // MB_ICONERROR
+                        0x10,
                     );
                 }
             }
@@ -197,6 +169,6 @@ pub fn run() {
                     }
                 }
             }
-            let _ = (app, event); // suppress unused warnings on non-macOS
+            let _ = (app, event);
         });
 }

@@ -24,6 +24,7 @@ import { loadSourceWatchConfig, saveLanguage, loadNovelConfig, loadRerankConfig 
 import type { SettingsDraft, DraftSetter } from "./settings-types"
 import { normalizeSourceWatchConfig } from "@/lib/source-watch-config"
 import type { SidebarNavConfig } from "@/lib/sidebar-nav-preferences"
+import type { UiFontFamily } from "@/lib/font-settings"
 import { LlmProviderSection } from "./sections/llm-provider-section"
 import { EmbeddingSection } from "./sections/embedding-section"
 import { RerankSection } from "./sections/rerank-section"
@@ -89,6 +90,7 @@ function initialDraft(
   maxHistoryMessages: number,
   uiLanguage: string,
   uiFontSizeScale: number,
+  uiFontFamily: UiFontFamily,
   sidebarNavConfig: SidebarNavConfig,
   projectPath?: string,
 ): SettingsDraft {
@@ -147,6 +149,7 @@ function initialDraft(
     novelConfig,
     uiLanguage,
     uiFontSizeScale,
+    uiFontFamily,
     sidebarNavConfig,
   }
 }
@@ -180,6 +183,8 @@ export function SettingsView() {
   const setMaxHistoryMessages = useChatStore((s) => s.setMaxHistoryMessages)
   const uiFontSizeScale = useWikiStore((s) => s.uiFontSizeScale)
   const setUiFontSizeScale = useWikiStore((s) => s.setUiFontSizeScale)
+  const uiFontFamily = useWikiStore((s) => s.uiFontFamily)
+  const setUiFontFamily = useWikiStore((s) => s.setUiFontFamily)
   const sidebarNavConfig = useWikiStore((s) => s.sidebarNavConfig)
   const setSidebarNavConfig = useWikiStore((s) => s.setSidebarNavConfig)
 
@@ -200,6 +205,7 @@ export function SettingsView() {
       maxHistoryMessages,
       i18n.language,
       uiFontSizeScale,
+      uiFontFamily,
       sidebarNavConfig,
       project?.path,
     ),
@@ -279,6 +285,7 @@ export function SettingsView() {
         maxHistoryMessages,
         prev.uiLanguage,
         uiFontSizeScale,
+        uiFontFamily,
         sidebarNavConfig,
         project?.path,
       ),
@@ -296,6 +303,7 @@ export function SettingsView() {
     novelConfig,
     maxHistoryMessages,
     uiFontSizeScale,
+    uiFontFamily,
     sidebarNavConfig,
     project,
   ])
@@ -318,6 +326,7 @@ export function SettingsView() {
       saveOutputLanguage,
       saveMaxHistoryMessages,
       saveUiFontSizeScale,
+      saveUiFontFamily,
     } = await import("@/lib/project-store")
 
     const newLlm = {
@@ -442,6 +451,8 @@ export function SettingsView() {
     await saveMaxHistoryMessages(draft.maxHistoryMessages, project?.id, project?.path)
     setUiFontSizeScale(draft.uiFontSizeScale)
     await saveUiFontSizeScale(draft.uiFontSizeScale, project?.id, project?.path)
+    setUiFontFamily(draft.uiFontFamily)
+    await saveUiFontFamily(draft.uiFontFamily)
     setSidebarNavConfig(draft.sidebarNavConfig)
 
     if (draft.uiLanguage !== i18n.language) {
@@ -467,6 +478,7 @@ export function SettingsView() {
     setMaxHistoryMessages,
     outputLanguage,
     setUiFontSizeScale,
+    setUiFontFamily,
     setSidebarNavConfig,
   ])
 

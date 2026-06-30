@@ -2,6 +2,7 @@ export const DEFAULT_RESIZABLE_INPUT_HEIGHT = 44
 const INPUT_BOTTOM_RESERVED = 80
 const MIN_MESSAGE_AREA_MIN = 80
 const MIN_MESSAGE_AREA_RATIO = 0.15
+const MIN_USABLE_CONTAINER_HEIGHT = DEFAULT_RESIZABLE_INPUT_HEIGHT + MIN_MESSAGE_AREA_MIN + 80
 
 export interface ResizableInputBounds {
   minHeight: number
@@ -21,15 +22,24 @@ function computeMinMessageAreaHeight(containerHeight: number): number {
   return Math.max(MIN_MESSAGE_AREA_MIN, Math.floor(containerHeight * MIN_MESSAGE_AREA_RATIO))
 }
 
+function getEffectiveRootRect(rootEl: HTMLDivElement): DOMRect {
+  const rootRect = rootEl.getBoundingClientRect()
+  if (rootRect.height > 0) return rootRect
+  const parentRect = rootEl.parentElement?.getBoundingClientRect()
+  return parentRect && parentRect.height > 0 && parentRect.height < MIN_USABLE_CONTAINER_HEIGHT
+    ? parentRect
+    : rootRect
+}
+
 export function createResizeContext(rootEl: HTMLDivElement | null, currentInputHeight: number): ResizeContext | null {
   if (!rootEl) return null
-  const rootRect = rootEl.getBoundingClientRect()
+  const rootRect = getEffectiveRootRect(rootEl)
   const containerEl = findChatContainer(rootEl)
   const containerRect = containerEl?.getBoundingClientRect()
   const containerHeight = containerRect?.height ?? window.innerHeight
   const textareaEl = rootEl.querySelector("textarea")
   const textareaRect = textareaEl?.getBoundingClientRect()
-  const actualTextareaHeight = textareaRect?.height ?? currentInputHeight
+  const actualTextareaHeight = textareaRect && textareaRect.height > 0 ? textareaRect.height : currentInputHeight
   const chatInputOverhead = Math.max(0, rootRect.height - actualTextareaHeight)
   const siblingOverhead = computeSiblingOverhead(rootEl, containerEl)
   return {
@@ -45,24 +55,30 @@ export function createResizeContext(rootEl: HTMLDivElement | null, currentInputH
 export function findChatContainer(root: HTMLDivElement): HTMLElement | null {
   let current: HTMLElement | null = root.parentElement
   let fallback: HTMLElement | null = null
+  let sizeFallback: HTMLElement | null = null
   for (let i = 0; i < 8 && current; i++) {
     const tag = current.tagName
     if (tag === "BODY" || tag === "HTML") break
+    const rect = current.getBoundingClientRect()
+    const hasUsableHeight = rect.height >= MIN_USABLE_CONTAINER_HEIGHT
+    if (!sizeFallback && hasUsableHeight) {
+      sizeFallback = current
+    }
     const style = window.getComputedStyle(current)
     const isFlexColumn = style.display === "flex" && style.flexDirection === "column"
     if (isFlexColumn) {
       const hasConstrainedHeight = style.height !== "auto" && style.height !== ""
       const hasOverflowClip = style.overflowY === "hidden" || style.overflowY === "auto" || style.overflowY === "scroll"
-      if (hasConstrainedHeight || hasOverflowClip) {
+      if ((hasConstrainedHeight || hasOverflowClip) && hasUsableHeight) {
         return current
       }
-      if (!fallback) {
+      if (!fallback && hasUsableHeight) {
         fallback = current
       }
     }
     current = current.parentElement
   }
-  return fallback ?? root.parentElement
+  return fallback ?? sizeFallback ?? root.parentElement
 }
 
 /**
@@ -108,9 +124,10 @@ export function getResizeBoundsForElement(rootEl: HTMLDivElement | null): Resiza
   const containerEl = findChatContainer(rootEl)
   const containerRect = containerEl?.getBoundingClientRect()
   const containerHeight = containerRect?.height ?? window.innerHeight
-  const rootRect = rootEl.getBoundingClientRect()
+  const rootRect = getEffectiveRootRect(rootEl)
   const textareaEl = rootEl.querySelector("textarea")
-  const textareaHeight = textareaEl?.getBoundingClientRect().height ?? DEFAULT_RESIZABLE_INPUT_HEIGHT
+  const measuredTextareaHeight = textareaEl?.getBoundingClientRect().height ?? 0
+  const textareaHeight = measuredTextareaHeight > 0 ? measuredTextareaHeight : DEFAULT_RESIZABLE_INPUT_HEIGHT
   const chatInputOverhead = Math.max(0, rootRect.height - textareaHeight)
   const siblingOverhead = computeSiblingOverhead(rootEl, containerEl)
   const minMessageArea = computeMinMessageAreaHeight(containerHeight)
@@ -128,7 +145,9 @@ export function clampResizableInputHeight(
 ): number {
   const minHeight = Math.max(1, Math.floor(bounds.minHeight))
   const maxHeight = Math.max(minHeight, Math.floor(bounds.maxHeight))
-  if (!Number.isFinite(nextHeight)) return minHeight
+  if (Number.isNaN(nextHeight)) return minHeight
+  if (nextHeight === Number.POSITIVE_INFINITY) return maxHeight
+  if (nextHeight === Number.NEGATIVE_INFINITY) return minHeight
   return Math.min(maxHeight, Math.max(minHeight, Math.round(nextHeight)))
 }
 

@@ -8,10 +8,6 @@ default-run = "qmai"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-name = "llm_wiki_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
 [[bin]]
 name = "qmai"
 path = "src/main.rs"
@@ -71,7 +67,7 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "s"
+opt-level = "z"
 # Unwind (not abort) so third-party parser panics can be caught at the
 # Tauri command boundary via panic_guard and turned into errors. Slightly
 # larger binary, but prevents single-file corruption from killing the app.

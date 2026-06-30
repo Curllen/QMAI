@@ -78,6 +78,25 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   },
 }
 
+const TWO_POINT_TWO_THIRTY_CHANGELOG: ChangelogEntry = {
+  version: "2.2.30",
+  date: "2026-06-30",
+  highlights: {
+    en: [
+      "Fixed the Windows portable build opening the development localhost URL by restoring the Tauri CLI production build path.",
+      "Reduced portable package size by moving unused bundled font files out of public assets.",
+      "Kept only the actually used Geist and KaTeX font assets in the production frontend bundle.",
+      "Archived old portable executables under QMdelete so users do not accidentally open a stale build.",
+    ],
+    zh: [
+      "修复 Windows 便携版打开后访问 localhost:1420 被拒绝的问题，便携版重新改为通过 Tauri CLI 生成生产运行入口。",
+      "移出 public/fonts 中未被实际引用的大体积字体资源，避免未使用字体被 Vite 复制并嵌入便携版。",
+      "生产前端包仅保留当前实际使用的 Geist 字体和 KaTeX 小字体资源。",
+      "旧便携版 exe 已归档到 QMdelete，避免用户误打开旧包。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_TWENTY_NINE_CHANGELOG: ChangelogEntry = {
   version: "2.2.29",
   date: "2026-06-28",
@@ -671,6 +690,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWO_THIRTY_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_NINE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_NINE_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_SIX_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SIX_CHANGELOG]
@@ -704,6 +724,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    TWO_POINT_TWO_THIRTY_CHANGELOG,
     TWO_POINT_TWO_TWENTY_NINE_CHANGELOG,
     TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG,
     TWO_POINT_TWO_TWENTY_SIX_CHANGELOG,

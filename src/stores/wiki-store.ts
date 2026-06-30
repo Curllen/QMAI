@@ -10,6 +10,11 @@ import {
   normalizeSidebarNavConfig,
   type SidebarNavConfig,
 } from "@/lib/sidebar-nav-preferences"
+import {
+  DEFAULT_UI_FONT_FAMILY,
+  normalizeUiFontFamily,
+  type UiFontFamily,
+} from "@/lib/font-settings"
 
 const GRAPH_LABEL_MODE_KEY = "lk-graph-label-display-mode"
 const GRAPH_EDGE_COLOR_KEY = "lk-graph-edge-color"
@@ -18,6 +23,7 @@ const GRAPH_EDGE_STYLE_KEY = "lk-graph-edge-style"
 const GRAPH_EDGE_LABELS_ALWAYS_KEY = "lk-graph-edge-labels-always"
 const CHAT_DOCK_POSITION_KEY = "qmai-chat-dock-position"
 const UI_FONT_SIZE_SCALE_KEY = "qmai-ui-font-size-scale"
+const UI_FONT_FAMILY_KEY = "qmai-ui-font-family"
 const SIDEBAR_NAV_CONFIG_KEY = "qmai-sidebar-nav-config"
 
 export type ChatDockPosition = "bottom" | "right"
@@ -45,6 +51,11 @@ const readStoredUiFontSizeScale = (): number => {
   if (typeof localStorage === "undefined") return 1
   const saved = Number(localStorage.getItem(UI_FONT_SIZE_SCALE_KEY) ?? "1")
   return Number.isFinite(saved) ? Math.max(0.85, Math.min(1.3, Number(saved.toFixed(2)))) : 1
+}
+
+const readStoredUiFontFamily = (): UiFontFamily => {
+  if (typeof localStorage === "undefined") return DEFAULT_UI_FONT_FAMILY
+  return normalizeUiFontFamily(localStorage.getItem(UI_FONT_FAMILY_KEY))
 }
 
 const readStoredSidebarNavConfig = (): SidebarNavConfig => {
@@ -556,6 +567,7 @@ interface WikiState {
   reviewRun: ReviewRunState | null
   theme: "light" | "dark" | "deep-blue" | "system"
   uiFontSizeScale: number
+  uiFontFamily: UiFontFamily
   sidebarNavConfig: SidebarNavConfig
   dataVersion: number
   bindingVersion: number
@@ -622,6 +634,7 @@ interface WikiState {
   clearTransientTaskState: () => void
   setTheme: (theme: "light" | "dark" | "deep-blue" | "system") => void
   setUiFontSizeScale: (scale: number) => void
+  setUiFontFamily: (fontFamily: UiFontFamily) => void
   setSidebarNavConfig: (config: Partial<SidebarNavConfig>) => void
   bumpDataVersion: () => void
   bumpBindingVersion: () => void
@@ -811,6 +824,7 @@ export const useWikiStore = create<WikiState>((set) => ({
   reviewRun: null,
   theme: "system",
   uiFontSizeScale: readStoredUiFontSizeScale(),
+  uiFontFamily: readStoredUiFontFamily(),
   sidebarNavConfig: readStoredSidebarNavConfig(),
 
   setLlmConfig: (llmConfig) => set({ llmConfig }),
@@ -853,6 +867,13 @@ export const useWikiStore = create<WikiState>((set) => ({
       localStorage.setItem(UI_FONT_SIZE_SCALE_KEY, String(clamped))
     }
     set({ uiFontSizeScale: clamped })
+  },
+  setUiFontFamily: (fontFamily) => {
+    const normalized = normalizeUiFontFamily(fontFamily)
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(UI_FONT_FAMILY_KEY, normalized)
+    }
+    set({ uiFontFamily: normalized })
   },
   setSidebarNavConfig: (config) => {
     const normalized = normalizeSidebarNavConfig(config)

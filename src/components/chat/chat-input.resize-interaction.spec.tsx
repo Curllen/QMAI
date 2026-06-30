@@ -41,6 +41,7 @@ describe("ChatInput resize interaction", () => {
     document.body.appendChild(host)
     root = createRoot(host)
     window.innerHeight = 800
+    window.localStorage.removeItem("lk-chat-input-height")
   })
 
   afterEach(() => {
@@ -248,6 +249,6 @@ describe("ChatInput resize interaction", () => {
     })
     await flush()
 
-    expect(textarea.style.height).toBe("240px")
+    expect(textarea.style.height).toBe("324px")
   })
 })

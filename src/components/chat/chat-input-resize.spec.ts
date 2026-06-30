@@ -29,7 +29,7 @@ describe("chat input resize bounds", () => {
       fixedOverhead: 76,
     }
     const initialMax = resolveMaxHeightFromContext(ctx, 44)
-    expect(initialMax).toBeGreaterThan(44)
+    expect(initialMax).toBe(44)
     const expandedMax = resolveMaxHeightFromContext(ctx, 200)
     expect(expandedMax).toBeGreaterThan(initialMax)
   })

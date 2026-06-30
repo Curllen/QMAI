@@ -3,6 +3,7 @@ import type { WikiProject } from "@/types/wiki"
 import type { LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProviderConfigs, ProxyConfig, ScheduledImportConfig, SourceWatchConfig, NovelConfig, RerankConfig } from "@/stores/wiki-store"
 import { DEFAULT_NOVEL_CONFIG, DEFAULT_RERANK_CONFIG } from "@/stores/wiki-store"
 import { normalizeSourceWatchConfig } from "@/lib/source-watch-config"
+import { normalizeUiFontFamily, type UiFontFamily } from "@/lib/font-settings"
 import { normalizePath } from "@/lib/path-utils"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 
@@ -590,12 +591,25 @@ export async function loadTheme(): Promise<"light" | "dark" | "deep-blue" | "sys
 }
 
 const UI_FONT_SIZE_SCALE_KEY = "uiFontSizeScale"
+const UI_FONT_FAMILY_KEY = "uiFontFamily"
 const MAX_HISTORY_MESSAGES_KEY = "maxHistoryMessages"
 
 export async function saveUiFontSizeScale(scale: number, _projectId?: string, _projectPath?: string): Promise<void> {
   const store = await getStore()
   await store.set(UI_FONT_SIZE_SCALE_KEY, scale)
   await store.save()
+}
+
+export async function saveUiFontFamily(fontFamily: UiFontFamily): Promise<void> {
+  const store = await getStore()
+  await store.set(UI_FONT_FAMILY_KEY, normalizeUiFontFamily(fontFamily))
+  await store.save()
+}
+
+export async function loadUiFontFamily(): Promise<UiFontFamily | null> {
+  const store = await getStore()
+  const saved = await store.get<string>(UI_FONT_FAMILY_KEY)
+  return saved ? normalizeUiFontFamily(saved) : null
 }
 
 export async function saveMaxHistoryMessages(max: number, _projectId?: string, _projectPath?: string): Promise<void> {

@@ -5,6 +5,7 @@ import {
   normalizeSidebarNavConfig,
   type SidebarNavItemId,
 } from "@/lib/sidebar-nav-preferences"
+import { UI_FONT_OPTIONS } from "@/lib/font-settings"
 
 interface Props {
   draft: SettingsDraft
@@ -118,6 +119,27 @@ export function InterfaceSection({ draft, setDraft }: Props) {
         <p className="text-xs text-muted-foreground">
           {t("settings.sections.interface.sidebarNavOrderHint")}
         </p>
+      </div>
+
+      <div className="space-y-3 rounded-lg border p-4">
+        <div>
+          <Label>界面字体</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            默认使用本机系统字体，也可以切换为本机已安装的常见字体。
+          </p>
+        </div>
+        <select
+          value={draft.uiFontFamily}
+          onChange={(e) => setDraft("uiFontFamily", e.target.value as SettingsDraft["uiFontFamily"])}
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
+          aria-label="界面字体"
+        >
+          {UI_FONT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="space-y-3 rounded-lg border p-4">

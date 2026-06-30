@@ -5,7 +5,7 @@ import { useReviewStore } from "@/stores/review-store"
 import { isTauri, pickDirectory } from "@/lib/platform"
 import { useChatStore } from "@/stores/chat-store"
 import { listDirectory, openProject, fileExists } from "@/commands/fs"
-import { getLastProject, saveLastProject, loadLlmConfig, loadAiChatModel, loadDefaultLlmModel, loadLanguage, loadEmbeddingConfig, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadNovelMode, loadNovelConfig, loadRevisionFeedbackWindowConfig, loadTheme, loadMaxHistoryMessages, saveLlmConfig, loadLastReadChapter } from "@/lib/project-store"
+import { getLastProject, saveLastProject, loadLlmConfig, loadAiChatModel, loadDefaultLlmModel, loadLanguage, loadEmbeddingConfig, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadNovelMode, loadNovelConfig, loadRevisionFeedbackWindowConfig, loadTheme, loadMaxHistoryMessages, loadUiFontFamily, saveLlmConfig, loadLastReadChapter } from "@/lib/project-store"
 import { loadReviewItems, loadChatHistory, saveChatHistory, saveReviewItems } from "@/lib/persist"
 import { setupAutoSave, teardownAutoSave } from "@/lib/auto-save"
 import { checkForAppUpdate } from "@/lib/app-updater"
@@ -21,6 +21,7 @@ import { resolveConfig } from "@/components/settings/preset-resolver"
 import { toast } from "@/lib/toast"
 import type { WikiProject } from "@/types/wiki"
 import { applyTheme, watchSystemTheme } from "@/lib/theme-utils"
+import { applyUiFontFamily } from "@/lib/font-settings"
 
 function App() {
   const project = useWikiStore((s) => s.project)
@@ -29,6 +30,7 @@ function App() {
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const uiFontSizeScale = useWikiStore((s) => s.uiFontSizeScale)
+  const uiFontFamily = useWikiStore((s) => s.uiFontFamily)
   const communitySummaryError = useWikiStore((s) => s.communitySummaryError)
   const setCommunitySummaryError = useWikiStore((s) => s.setCommunitySummaryError)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -37,6 +39,10 @@ function App() {
   useEffect(() => {
     document.documentElement.style.fontSize = `${Math.round(uiFontSizeScale * 100)}%`
   }, [uiFontSizeScale])
+
+  useEffect(() => {
+    applyUiFontFamily(uiFontFamily)
+  }, [uiFontFamily])
 
   // 监听社区摘要生成错误，弹窗提示
   useEffect(() => {
@@ -105,6 +111,11 @@ function App() {
         const themeToUse = savedTheme ?? "system"
         useWikiStore.getState().setTheme(themeToUse)
         applyTheme(themeToUse)
+        const savedUiFontFamily = await loadUiFontFamily()
+        if (savedUiFontFamily) {
+          useWikiStore.getState().setUiFontFamily(savedUiFontFamily)
+          applyUiFontFamily(savedUiFontFamily)
+        }
 
         const savedConfig = await loadLlmConfig()
         if (savedConfig) {
