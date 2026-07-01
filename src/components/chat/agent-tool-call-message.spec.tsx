@@ -89,6 +89,29 @@ describe("AgentToolCallMessage", () => {
     expect(html).toContain("text-red-500")
   })
 
+  it("shows approval-required tool calls as pending confirmation", async () => {
+    await act(async () => {
+      root.render(
+        <AgentToolCallMessage
+          toolCalls={[
+            {
+              id: "call-approval",
+              name: "write_chapter",
+              params: { name: "第1章", content: "正文" },
+              result: "写入工具需要用户确认后才能执行。",
+              status: "approval_required",
+              startedAt: 100,
+              finishedAt: 100,
+            },
+          ]}
+        />,
+      )
+    })
+
+    expect(host.textContent).toContain("待确认")
+    expect(host.textContent).toContain("写入章节《第1章》")
+  })
+
   it("returns null when toolCalls is empty or undefined", async () => {
     await act(async () => {
       root.render(<AgentToolCallMessage toolCalls={[]} />)

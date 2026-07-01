@@ -2,6 +2,7 @@ import { streamChat } from "../llm-client"
 import type { StreamCallbacks } from "../llm-client"
 import { accumulateToolCalls } from "./tool-call-parser"
 import { toOpenAITools } from "./tools-schema"
+import { formatToolResultForModel } from "./tool-result"
 import type { ToolRegistry } from "./registry"
 import type { AgentConfig, AgentMessage, AgentRunCallbacks, AgentRunRecord, ToolCall, ToolCallDelta } from "./types"
 import { DEFAULT_MAX_ROUNDS, TOOL_EXECUTE_TIMEOUT_MS } from "./types"
@@ -95,26 +96,25 @@ export class AgentRunner {
           catch { return {} }
         })()
 
-        const toolCallRecord: {
-          id: string
-          name: string
-          params: Record<string, unknown>
-          result: string
-          status: "done" | "error"
-          startedAt: number
-          finishedAt: number
-        } = {
+        const toolCallRecord: AgentRunRecord["toolCalls"][number] = {
           id: tc.id,
           name: toolName,
           params,
           result: "",
-          status: "done",
+          status: "running",
           startedAt: Date.now(),
           finishedAt: Date.now(),
         }
 
         const callbackToolCall: ToolCall = { id: tc.id, name: toolName, arguments: params }
         callbacks.onToolCall(callbackToolCall)
+        callbacks.onToolEvent?.({
+          type: "call_started",
+          callId: tc.id,
+          name: toolName,
+          params,
+          timestamp: toolCallRecord.startedAt,
+        })
 
         if (!tool) {
           const errorMsg = `错误: 未知工具 ${toolName}`
@@ -123,7 +123,38 @@ export class AgentRunner {
           toolCallRecord.result = errorMsg
           toolCallRecord.finishedAt = Date.now()
           record.toolCalls.push(toolCallRecord)
+          callbacks.onToolEvent?.({
+            type: "error",
+            callId: tc.id,
+            name: toolName,
+            params,
+            result: errorMsg,
+            timestamp: toolCallRecord.finishedAt,
+          })
           workingMessages.push({ role: "tool", content: toolCallRecord.result, tool_call_id: tc.id, name: toolName })
+          continue
+        }
+
+        const permission = tool.permission ?? (tool.category === "write" ? "confirm" : "auto")
+        if (permission === "confirm") {
+          const approvalMessage = [
+            `写入工具 ${toolName} 需要用户确认后才能执行。`,
+            "本次没有执行写入操作。",
+            "请根据用户指令生成可审核的写入预览，并等待用户明确确认后再写入。",
+          ].join("\n")
+          toolCallRecord.status = "approval_required"
+          toolCallRecord.result = approvalMessage
+          toolCallRecord.finishedAt = Date.now()
+          record.toolCalls.push(toolCallRecord)
+          callbacks.onToolEvent?.({
+            type: "approval_required",
+            callId: tc.id,
+            name: toolName,
+            params,
+            result: approvalMessage,
+            timestamp: toolCallRecord.finishedAt,
+          })
+          workingMessages.push({ role: "tool", content: approvalMessage, tool_call_id: tc.id, name: toolName })
           continue
         }
 
@@ -135,15 +166,36 @@ export class AgentRunner {
           toolCallRecord.result = result
           toolCallRecord.finishedAt = Date.now()
           callbacks.onToolResult(tc.id, result)
+          callbacks.onToolEvent?.({
+            type: "result",
+            callId: tc.id,
+            name: toolName,
+            params,
+            result,
+            timestamp: toolCallRecord.finishedAt,
+          })
         } catch (err) {
           toolCallRecord.status = "error"
           toolCallRecord.result = `错误: ${err instanceof Error ? err.message : String(err)}`
           toolCallRecord.finishedAt = Date.now()
           callbacks.onToolError(tc.id, toolCallRecord.result)
+          callbacks.onToolEvent?.({
+            type: "error",
+            callId: tc.id,
+            name: toolName,
+            params,
+            result: toolCallRecord.result,
+            timestamp: toolCallRecord.finishedAt,
+          })
         }
 
         record.toolCalls.push(toolCallRecord)
-        workingMessages.push({ role: "tool", content: toolCallRecord.result, tool_call_id: tc.id, name: toolName })
+        workingMessages.push({
+          role: "tool",
+          content: formatToolResultForModel(toolName, toolCallRecord.result, config.toolResultContextLimit),
+          tool_call_id: tc.id,
+          name: toolName,
+        })
       }
 
       // Continue loop

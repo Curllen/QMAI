@@ -25,7 +25,8 @@ import {
 } from "@/lib/reference/providers"
 import type { ReferenceToken } from "@/lib/reference/types"
 import { AgentRunner } from "@/lib/agent/runner"
-import type { AgentMessage, AgentRunRecord, ToolCall } from "@/lib/agent/types"
+import type { AgentMessage, AgentRunRecord } from "@/lib/agent/types"
+import { applyAgentToolEvent } from "@/lib/agent/tool-events"
 import { useAgentConfig } from "@/hooks/use-agent-config"
 import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
 import { streamChat } from "@/lib/llm-client"
@@ -858,48 +859,14 @@ export function ChatPanel() {
                 content: message.content + chunk,
               }))
             },
-            onToolCall: (call: ToolCall) => {
-              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-              updateAgentAssistantMessage(assistantMessage.id, (message) => {
-                const existing = message.agentToolCalls ?? []
-                if (existing.some((item) => item.id === call.id)) return message
-                return {
-                  ...message,
-                  agentToolCalls: [
-                    ...existing,
-                    {
-                      id: call.id,
-                      name: call.name,
-                      params: call.arguments,
-                      result: "",
-                      status: "done",
-                      startedAt: Date.now(),
-                      finishedAt: 0,
-                    },
-                  ],
-                }
-              })
-            },
-            onToolResult: (callId: string, result: string) => {
+            onToolCall: () => {},
+            onToolResult: () => {},
+            onToolError: () => {},
+            onToolEvent: (event) => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
               updateAgentAssistantMessage(assistantMessage.id, (message) => ({
                 ...message,
-                agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                  item.id === callId
-                    ? { ...item, result, status: "done", finishedAt: Date.now() }
-                    : item,
-                ),
-              }))
-            },
-            onToolError: (callId: string, error: string) => {
-              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
-                ...message,
-                agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                  item.id === callId
-                    ? { ...item, result: error, status: "error", finishedAt: Date.now() }
-                    : item,
-                ),
+                agentToolCalls: applyAgentToolEvent(message.agentToolCalls, event),
               }))
             },
             onDone: () => {

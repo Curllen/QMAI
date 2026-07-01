@@ -71,4 +71,12 @@ describe("OutlineChatPanel controls", () => {
     expect(source).toContain("请优先使用工具读取引用内容")
     expect(source).not.toContain("loadReferenceTokenContext(tokens)")
   })
+
+  it("forces outline chat through a dedicated list-read-analyze-generate workflow", () => {
+    expect(source).toContain("## AI大纲固定分析流程")
+    expect(source).toContain("先调用 list_outlines、list_chapters、list_memories、list_deductions")
+    expect(source).toContain("再调用 read_outline、read_chapter、read_memory、read_deduction")
+    expect(source).toContain("分析冲突、缺口、伏笔、角色动机和章节承接")
+    expect(source).toContain("最后再生成大纲建议")
+  })
 })

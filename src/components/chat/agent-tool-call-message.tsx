@@ -115,6 +115,7 @@ function ToolCallRow({ call }: { call: ToolCallRecord }) {
   const [expanded, setExpanded] = useState(false)
   const category = useMemo(() => getToolCategory(call.name), [call.name])
   const hasError = call.status === "error"
+  const needsApproval = call.status === "approval_required"
   const description = useMemo(
     () => getToolCallDescription(call.name, call.params),
     [call.name, call.params],
@@ -123,6 +124,8 @@ function ToolCallRow({ call }: { call: ToolCallRecord }) {
 
   const rowClass = hasError
     ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300 dark:hover:bg-red-950/30"
+    : needsApproval
+      ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-950/30"
     : "border-border/60 bg-background hover:bg-accent/40"
 
   return (
@@ -139,6 +142,11 @@ function ToolCallRow({ call }: { call: ToolCallRecord }) {
           {description}
           {duration && <span className="ml-1 text-[10px] opacity-70">{duration}</span>}
         </span>
+        {needsApproval ? (
+          <span className="rounded border border-amber-300/70 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/50 dark:text-amber-300">
+            待确认
+          </span>
+        ) : null}
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         ) : (
@@ -150,6 +158,8 @@ function ToolCallRow({ call }: { call: ToolCallRecord }) {
           className={`max-h-40 overflow-y-auto border-t px-2 py-1.5 text-[11px] whitespace-pre-wrap break-words leading-relaxed ${
             hasError
               ? "border-red-200/60 text-red-700 dark:border-red-900/30 dark:text-red-300/80"
+              : needsApproval
+                ? "border-amber-200/60 text-amber-800 dark:border-amber-900/30 dark:text-amber-300/80"
               : "border-border/50 text-muted-foreground"
           }`}
         >

@@ -8,11 +8,14 @@ export interface ToolParameter {
 }
 
 export type ToolCategory = "read" | "write" | "action"
+export type ToolPermission = "auto" | "confirm"
+export type ToolCallStatus = "running" | "done" | "error" | "approval_required"
 
 export interface Tool {
   name: string
   description: string
   category: ToolCategory
+  permission?: ToolPermission
   parameters: Record<string, ToolParameter>
   execute(params: Record<string, unknown>, signal?: AbortSignal): Promise<string>
 }
@@ -35,8 +38,18 @@ export interface AgentConfig {
   tools: Tool[]
   systemPrompt: string
   llmConfig: LlmConfig
+  toolResultContextLimit?: number
   /** 模型标识，用于上层识别当前使用的模型 */
   modelId?: string
+}
+
+export interface AgentToolEvent {
+  type: "call_started" | "result" | "error" | "approval_required"
+  callId: string
+  name: string
+  params: Record<string, unknown>
+  result?: string
+  timestamp: number
 }
 
 export interface AgentRunCallbacks {
@@ -44,6 +57,7 @@ export interface AgentRunCallbacks {
   onToolCall: (call: ToolCall) => void
   onToolResult: (callId: string, result: string) => void
   onToolError: (callId: string, error: string) => void
+  onToolEvent?: (event: AgentToolEvent) => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -62,7 +76,7 @@ export interface AgentRunRecord {
     name: string
     params: Record<string, unknown>
     result: string
-    status: "done" | "error"
+    status: ToolCallStatus
     startedAt: number
     finishedAt: number
   }[]

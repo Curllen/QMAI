@@ -30,7 +30,8 @@ import { useChatStore } from "@/stores/chat-store"
 import { AgentRunner } from "@/lib/agent/runner"
 import { ToolRegistry } from "@/lib/agent/registry"
 import { buildAgentConfig, modelSupportsTools } from "@/lib/agent/config"
-import type { AgentMessage, AgentRunRecord, ToolCall } from "@/lib/agent/types"
+import type { AgentMessage, AgentRunRecord } from "@/lib/agent/types"
+import { applyAgentToolEvent } from "@/lib/agent/tool-events"
 import { loadDeAiSkillConfig, type DeAiSkillConfig } from "@/lib/novel/de-ai-skill-library"
 import {
   buildWebResearchContext,
@@ -88,6 +89,11 @@ function buildOutlineAgentSystemPrompt(options: { projectName?: string; webResea
     "如果用户提供 @ 引用，必须优先按路径、标题或会话ID调用对应读取工具获取正文内容。",
     "不要假设引用内容已经注入上下文；不要跳过工具直接空泛回答。",
     "回答必须基于已读取内容进行分析，说明关键判断依据；需要写入大纲节点时使用 write_outline_node。",
+    "## AI大纲固定分析流程",
+    "1. 先调用 list_outlines、list_chapters、list_memories、list_deductions 确认可用资料范围。",
+    "2. 再调用 read_outline、read_chapter、read_memory、read_deduction 读取用户 @ 引用和相关项目内容。",
+    "3. 分析冲突、缺口、伏笔、角色动机和章节承接，明确哪些判断来自已读取资料。",
+    "4. 最后再生成大纲建议；没有完成读取和分析前，不要直接给出结论。",
     "所有面向用户的回复必须使用中文。",
     options.projectName ? `当前项目：${options.projectName}` : "",
     options.webResearchContext?.trim()
@@ -577,45 +583,13 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             result += chunk
             setStreamingContent(result)
           },
-          onToolCall: (call: ToolCall) => {
-            updateOutlineAssistantMessage(convId, assistantId, (message) => {
-              const existing = message.agentToolCalls ?? []
-              if (existing.some((item) => item.id === call.id)) return message
-              return {
-                ...message,
-                agentToolCalls: [
-                  ...existing,
-                  {
-                    id: call.id,
-                    name: call.name,
-                    params: call.arguments,
-                    result: "",
-                    status: "done",
-                    startedAt: Date.now(),
-                    finishedAt: 0,
-                  },
-                ],
-              }
-            })
-          },
-          onToolResult: (callId, toolResult) => {
+          onToolCall: () => {},
+          onToolResult: () => {},
+          onToolError: () => {},
+          onToolEvent: (event) => {
             updateOutlineAssistantMessage(convId, assistantId, (message) => ({
               ...message,
-              agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                item.id === callId
-                  ? { ...item, result: toolResult, status: "done", finishedAt: Date.now() }
-                  : item,
-              ),
-            }))
-          },
-          onToolError: (callId, error) => {
-            updateOutlineAssistantMessage(convId, assistantId, (message) => ({
-              ...message,
-              agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                item.id === callId
-                  ? { ...item, result: error, status: "error", finishedAt: Date.now() }
-                  : item,
-              ),
+              agentToolCalls: applyAgentToolEvent(message.agentToolCalls, event),
             }))
           },
           onDone: () => {
@@ -794,45 +768,13 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             result += chunk
             setStreamingContent(result)
           },
-          onToolCall: (call: ToolCall) => {
-            updateOutlineAssistantMessage(activeConversationId, assistantId, (message) => {
-              const existing = message.agentToolCalls ?? []
-              if (existing.some((item) => item.id === call.id)) return message
-              return {
-                ...message,
-                agentToolCalls: [
-                  ...existing,
-                  {
-                    id: call.id,
-                    name: call.name,
-                    params: call.arguments,
-                    result: "",
-                    status: "done",
-                    startedAt: Date.now(),
-                    finishedAt: 0,
-                  },
-                ],
-              }
-            })
-          },
-          onToolResult: (callId, toolResult) => {
+          onToolCall: () => {},
+          onToolResult: () => {},
+          onToolError: () => {},
+          onToolEvent: (event) => {
             updateOutlineAssistantMessage(activeConversationId, assistantId, (message) => ({
               ...message,
-              agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                item.id === callId
-                  ? { ...item, result: toolResult, status: "done", finishedAt: Date.now() }
-                  : item,
-              ),
-            }))
-          },
-          onToolError: (callId, error) => {
-            updateOutlineAssistantMessage(activeConversationId, assistantId, (message) => ({
-              ...message,
-              agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
-                item.id === callId
-                  ? { ...item, result: error, status: "error", finishedAt: Date.now() }
-                  : item,
-              ),
+              agentToolCalls: applyAgentToolEvent(message.agentToolCalls, event),
             }))
           },
           onDone: () => {
