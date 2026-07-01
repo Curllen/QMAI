@@ -4,6 +4,7 @@ import { useChatStore } from "@/stores/chat-store"
 import { useOutlineChatStore } from "@/stores/outline-chat-store"
 import { loadDeAiSkillConfig, type DeAiSkillConfig } from "@/lib/novel/de-ai-skill-library"
 import { resolveModelConfig } from "@/lib/novel/model-resolver"
+import { normalizePath } from "@/lib/path-utils"
 import { ToolRegistry } from "@/lib/agent/registry"
 import { buildAgentConfig, modelSupportsTools } from "@/lib/agent/config"
 import type { AgentConfig } from "@/lib/agent/types"
@@ -13,6 +14,7 @@ export interface UseAgentConfigResult {
   registry: ToolRegistry
   supportsTools: boolean
   skillConfigLoaded: boolean
+  skillConfig: DeAiSkillConfig | null
 }
 
 export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
@@ -90,13 +92,15 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
         registry: new ToolRegistry(),
         supportsTools,
         skillConfigLoaded: false,
+        skillConfig,
       }
     }
 
     const llmConfig = resolveModelConfig(aiChatModel, baseLlmConfig, providerConfigs)
     const registry = new ToolRegistry()
+    const wikiPath = `${normalizePath(projectPath)}/wiki`
     const config = buildAgentConfig(aiChatModel, systemPrompt, registry, {
-      wikiPath: projectPath,
+      wikiPath,
       getSkillConfig,
       getChatConversations,
       getOutlineConversations,
@@ -108,6 +112,7 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
       registry,
       supportsTools: true,
       skillConfigLoaded: true,
+      skillConfig,
     }
   }, [
     aiChatModel,

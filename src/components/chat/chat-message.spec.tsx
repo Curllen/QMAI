@@ -2,8 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
-import { StreamingMessage } from "./chat-message"
+import { ChatMessage, StreamingMessage } from "./chat-message"
 import { getDeepChapterToggleButtonClass } from "./chat-panel"
+import type { DisplayMessage } from "@/stores/chat-store"
 
 function tenThinkingLines(): string {
   return Array.from({ length: 10 }, (_value, index) => `stage line ${index + 1}`).join("\n")
@@ -44,6 +45,32 @@ describe("deep chapter thinking toggle style", () => {
     expect(activeClassName).toContain("text-primary-foreground")
     expect(activeClassName).toContain("border-primary")
     expect(inactiveClassName).not.toContain("bg-primary")
+  })
+})
+
+describe("chat message references", () => {
+  it("renders attached reference chips on user messages", () => {
+    const message: DisplayMessage = {
+      id: "msg-1",
+      role: "user",
+      content: "请参考这一章",
+      timestamp: 1,
+      conversationId: "conv-1",
+      attachedReferences: [{
+        id: "ref-1",
+        category: "chapter",
+        title: "第一章",
+        path: "C:/Novel/wiki/chapters/第一章.md",
+        displayTitle: "第一章",
+      }],
+    }
+
+    const html = renderToStaticMarkup(<ChatMessage message={message} />)
+
+    expect(html).toContain("请参考这一章")
+    expect(html).toContain("@第一章")
+    expect(html).toContain('data-reference-id="ref-1"')
+    expect(html).not.toContain("移除引用")
   })
 })
 

@@ -24,3 +24,22 @@ describe("chat-panel de-AI skill handling", () => {
     expect(source).not.toContain('          {t(novelMode ? "novel.chat.newChat" : "chat.newChat")}')
   })
 })
+
+describe("chat-panel agent reference integration", () => {
+  it("replaces the legacy chat input with the reference input and picker", () => {
+    expect(source).toContain("<ReferenceInput")
+    expect(source).toContain("<ReferencePickerDialog")
+    expect(source).toContain("insertTokensRef")
+    expect(source).not.toContain("<ChatInput")
+    expect(source).not.toContain('from "./chat-input"')
+  })
+
+  it("routes sends through AgentRunner and stores reference/tool metadata", () => {
+    expect(source).toContain("useAgentConfig")
+    expect(source).toContain("new AgentRunner()")
+    expect(source).toContain("attachedReferences")
+    expect(source).toContain("isAgentRunning")
+    expect(source).toContain("agentToolCalls")
+    expect(source).toContain("当前模型不支持Agent功能，请更换模型")
+  })
+})

@@ -179,6 +179,7 @@ describe("useAgentConfig", () => {
     expect(result.supportsTools).toBe(true)
     expect(result.skillConfigLoaded).toBe(true)
     expect(result.config).not.toBeNull()
+    expect(result.skillConfig?.defaultSkillId).toBe("built-in:comprehensive")
     expect(result.config?.tools.length).toBeGreaterThan(0)
     expect(result.registry.list().some((tool) => tool.name === "read_chapter")).toBe(true)
     expect(result.registry.list().some((tool) => tool.name === "apply_skill")).toBe(true)

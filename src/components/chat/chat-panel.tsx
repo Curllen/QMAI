@@ -1,32 +1,49 @@
-import { useRef, useEffect, useCallback, useState } from "react"
+import { useRef, useEffect, useCallback, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { BookOpen, Brain, Plus, Trash2, MessageSquare, FileEdit, Drama } from "lucide-react"
+import { BookOpen, Brain, Plus, Trash2, MessageSquare, FileEdit, Drama, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatMessage, StreamingMessage } from "./chat-message"
 import { ChatDockControls } from "./chat-dock-controls"
-import { setLastQueryPages, useSourceFiles } from "./chat-shared"
-import { ChatInput } from "./chat-input"
+import { useSourceFiles } from "./chat-shared"
 import { ChatModelSelector } from "./chat-model-selector"
-import { useChatStore, chatMessagesToLLM, type DisplayMessage } from "@/stores/chat-store"
+import { useChatStore, type DisplayMessage } from "@/stores/chat-store"
+import { useOutlineChatStore } from "@/stores/outline-chat-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { DeAiSkillPicker } from "@/components/skill-library/de-ai-skill-picker"
+import { ReferenceInput, type InsertReferenceTokens } from "@/components/reference/ReferenceInput"
+import { ReferencePickerDialog } from "@/components/reference/ReferencePickerDialog"
+import {
+  chapterProvider,
+  createChatHistoryProvider,
+  createOutlineHistoryProvider,
+  createSkillProvider,
+  deductionProvider,
+  memoryProvider,
+  outlineProvider,
+} from "@/lib/reference/providers"
+import type { ReferenceToken } from "@/lib/reference/types"
+import { AgentRunner } from "@/lib/agent/runner"
+import type { AgentMessage, AgentRunRecord, ToolCall } from "@/lib/agent/types"
+import { useAgentConfig } from "@/hooks/use-agent-config"
 import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
-import { streamChat, type ChatMessage as LLMMessage } from "@/lib/llm-client"
+import { streamChat } from "@/lib/llm-client"
 import { executeIngestWrites } from "@/lib/ingest"
 import { routeTask, buildTaskDirective } from "@/lib/novel/task-router"
-import { readFile, writeFile, createDirectory, deleteFile } from "@/commands/fs"
-import { searchWiki, tokenizeQuery } from "@/lib/search"
-import { detectLastGeneratedChapterNumber, findChapterFileByNumber, getNextChapterNumber, readSelectedChapterNumberForFile, resolveTargetChapterNumberForChat } from "@/lib/novel/chapter-utils"
+import { writeFile, createDirectory, deleteFile } from "@/commands/fs"
+import {
+  detectLastGeneratedChapterNumber,
+  findChapterFileByNumber,
+  getNextChapterNumber,
+  readSelectedChapterNumberForFile,
+  resolveTargetChapterNumberForChat,
+} from "@/lib/novel/chapter-utils"
 import { buildDeAiSkillSystemPrompt, buildQmQuaiSystemPrompt, injectDeAiDirective } from "@/lib/novel/de-ai-adapter"
-import { loadEffectiveDeAiSkillSafely } from "@/lib/novel/de-ai-skill-library"
+import { loadEffectiveDeAiSkillSafely, resolveAvailableDeAiSkills } from "@/lib/novel/de-ai-skill-library"
 import { cleanGeneratedChapterContentWithTitle } from "@/lib/novel/chapter-content-cleanup"
-import { normalizePath, getFileName, getRelativePath } from "@/lib/path-utils"
+import { normalizePath } from "@/lib/path-utils"
 import { refreshProjectState } from "@/lib/project-refresh"
-import { getOutputLanguage, buildLanguageReminder } from "@/lib/output-language"
-import { isGreeting } from "@/lib/greeting-detector"
-import { computeContextBudget } from "@/lib/context-budget"
 import { getConversationTabTitle, sortConversationsByUpdatedAt } from "@/lib/workspace-layout"
 import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
 import { createDeepThinkingStreamRenderer } from "@/lib/deep-thinking-stream"
@@ -46,10 +63,7 @@ import {
   stripContinueUnfinishedDeepChapterContext,
 } from "./chat-resume"
 import { getCopyableAssistantContent } from "@/lib/chat-copy-content"
-import { isChatEditRequest, resolveChatEditTarget, validateStructuredChapterEditResult } from "@/lib/novel/chat-edit-mode"
-import { backupChapterFile } from "@/lib/novel/chapter-backup"
 import { decideChapterSaveStrategy, detectGeneratedTargetChapterNumber } from "@/lib/novel/chapter-save-strategy"
-import { normalizeChapterEditFile } from "@/lib/novel/chapter-edit-file"
 import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
 import type { FrameworkBinding, StoryFramework } from "@/lib/novel/story-simulation/types"
@@ -80,6 +94,123 @@ function findPreviousUserRequest(messages: DisplayMessage[], assistantMessageId:
 async function loadEnabledDismantlingDirective(projectPath: string): Promise<string> {
   void projectPath
   return ""
+}
+
+function createLocalMessageId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function buildChatAgentSystemPrompt(options: {
+  novelMode: boolean
+  mode: "chat" | "ingest"
+  deepChapterEnabled: boolean
+  chatEditModeEnabled: boolean
+  projectName?: string
+  bindingTitle?: string
+}): string {
+  const lines = [
+    options.novelMode
+      ? "你是专业小说写作助手。请通过可用工具读取项目资料、章节、记忆、大纲、推演结果和历史对话，再完成用户要求。"
+      : "你是专业资料库问答助手。请通过可用工具读取项目资料、记忆、大纲、推演结果和历史对话，再回答用户问题。",
+    "不要假设 @ 引用内容已经注入上下文；用户提供引用时，必须优先使用对应工具读取具体内容。",
+    "如果需要修改或写入项目内容，先确认目标文件和用户意图，再使用写入类工具。",
+    "所有面向用户的回复必须使用中文，除非用户明确要求其他语言。",
+  ]
+
+  if (options.projectName) {
+    lines.push(`当前项目：${options.projectName}`)
+  }
+  if (options.mode === "ingest") {
+    lines.push("当前处于资料写入模式，用户可能希望把对话内容整理写入资料库。")
+  }
+  if (options.novelMode) {
+    lines.push("小说模式下，如果用户要求生成、续写或改写章节，只输出可直接放入章节库的正文或明确的执行结果。")
+  }
+  if (options.deepChapterEnabled) {
+    lines.push("用户已开启深度模式，请在必要时进行更完整的章节规划和资料读取。")
+  }
+  if (options.chatEditModeEnabled) {
+    lines.push("用户已开启编辑章节模式，如涉及章节修改，请优先定位目标章节并使用章节读写工具。")
+  }
+  if (options.bindingTitle) {
+    lines.push(`当前绑定故事框架：${options.bindingTitle}`)
+  }
+
+  return lines.join("\n")
+}
+
+function describeReferenceForAgent(token: ReferenceToken, index: number): string {
+  const parts = [
+    `${index + 1}. 类型：${token.category}`,
+    `标题：${token.title}`,
+  ]
+  if (token.path) parts.push(`路径：${token.path}`)
+  if (token.skillId) parts.push(`技能ID：${token.skillId}`)
+  if (token.conversationId) parts.push(`会话ID：${token.conversationId}`)
+  return parts.join("；")
+}
+
+function buildAgentUserContent(text: string, tokens: ReferenceToken[]): string {
+  if (tokens.length === 0) return text
+  return [
+    text,
+    "",
+    "## 本条消息附带的 @ 引用",
+    "用户希望你参考下列内容。请不要臆测引用正文；如需具体内容，请使用可用工具按路径、标题、技能ID或会话ID读取。",
+    ...tokens.map(describeReferenceForAgent),
+  ].join("\n")
+}
+
+function appendAgentChatMessages(conversationId: string, content: string, tokens: ReferenceToken[]) {
+  const now = Date.now()
+  const userMessage: DisplayMessage = {
+    id: createLocalMessageId("user"),
+    role: "user",
+    content,
+    timestamp: now,
+    conversationId,
+    attachedReferences: tokens,
+  }
+  const assistantMessage: DisplayMessage = {
+    id: createLocalMessageId("assistant"),
+    role: "assistant",
+    content: "",
+    timestamp: now,
+    conversationId,
+    agentToolCalls: [],
+    isAgentRunning: true,
+  }
+
+  useChatStore.setState((state) => {
+    const existingUserCount = state.messages.filter(
+      (message) => message.conversationId === conversationId && message.role === "user",
+    ).length
+    return {
+      messages: [...state.messages, userMessage, assistantMessage],
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              title: existingUserCount === 0 ? content.slice(0, 50) : conversation.title,
+              updatedAt: now,
+            }
+          : conversation,
+      ),
+    }
+  })
+
+  return { userMessage, assistantMessage }
+}
+
+function updateAgentAssistantMessage(
+  messageId: string,
+  updater: (message: DisplayMessage) => DisplayMessage,
+): void {
+  useChatStore.setState((state) => ({
+    messages: state.messages.map((message) =>
+      message.id === messageId ? updater(message) : message,
+    ),
+  }))
 }
 
 function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) => void }) {
@@ -179,14 +310,15 @@ export function ChatPanel() {
   const addMessage = useChatStore((s) => s.addMessage)
   const startStreaming = useChatStore((s) => s.startStreaming)
   const setStreamingContent = useChatStore((s) => s.setStreamingContent)
-  const appendStreamToken = useChatStore((s) => s.appendStreamToken)
   const finalizeStream = useChatStore((s) => s.finalizeStream)
+  const clearStreaming = useChatStore((s) => s.clearStreaming)
   const createConversation = useChatStore((s) => s.createConversation)
   const removeLastAssistantMessage = useChatStore((s) => s.removeLastAssistantMessage)
   const maxHistoryMessages = useChatStore((s) => s.maxHistoryMessages)
   const isConversationStreaming = useChatStore((s) => s.isConversationStreaming)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationDeAiSkillId = useChatStore((s) => s.setConversationDeAiSkillId)
+  const outlineConversations = useOutlineChatStore((s) => s.conversations)
   // Derive active messages via selector to re-render on message changes
   const allMessages = useChatStore((s) => s.messages)
   const activeMessages = activeConversationId
@@ -230,6 +362,56 @@ export function ChatPanel() {
   const setDeepChapterEnabled = useWikiStore((s) => s.setDeepChapterEnabled)
   // 故事框架绑定状态
   const [activeBinding, setActiveBinding] = useState<{ binding: FrameworkBinding; framework: StoryFramework } | null>(null)
+  const [referenceText, setReferenceText] = useState("")
+  const [currentTokens, setCurrentTokens] = useState<ReferenceToken[]>([])
+  const [referencePickerOpen, setReferencePickerOpen] = useState(false)
+  const insertReferenceTokensRef = useRef<InsertReferenceTokens>(null)
+  const agentSystemPrompt = useMemo(
+    () =>
+      buildChatAgentSystemPrompt({
+        novelMode,
+        mode,
+        deepChapterEnabled,
+        chatEditModeEnabled,
+        projectName: project?.name,
+        bindingTitle: activeBinding?.framework.title,
+      }),
+    [
+      activeBinding?.framework.title,
+      chatEditModeEnabled,
+      deepChapterEnabled,
+      mode,
+      novelMode,
+      project?.name,
+    ],
+  )
+  const {
+    config: agentConfig,
+    registry: agentRegistry,
+    supportsTools: agentSupportsTools,
+    skillConfigLoaded: agentSkillConfigLoaded,
+    skillConfig: agentSkillConfig,
+  } = useAgentConfig(agentSystemPrompt)
+  const referenceProviders = useMemo(
+    () => [
+      chapterProvider,
+      memoryProvider,
+      outlineProvider,
+      deductionProvider,
+      createSkillProvider(() =>
+        agentSkillConfig
+          ? resolveAvailableDeAiSkills(agentSkillConfig).map((skill) => ({ id: skill.id, name: skill.name }))
+          : [],
+      ),
+      createChatHistoryProvider(() =>
+        conversations.map((conversation) => ({ id: conversation.id, title: conversation.title })),
+      ),
+      createOutlineHistoryProvider(() =>
+        outlineConversations.map((conversation) => ({ id: conversation.id, title: conversation.title })),
+      ),
+    ],
+    [agentSkillConfig, conversations, outlineConversations],
+  )
   const closeSoulDialog = useCallback((confirmed: boolean) => {
     const resolver = soulDialogResolverRef.current
     soulDialogResolverRef.current = null
@@ -385,746 +567,307 @@ export function ChatPanel() {
   // 切换会话时不再中断后台生成——每个会话独立运行
 
   const handleSend = useCallback(
-    async (text: string) => {
-      // Auto-create a conversation if none is active
+    async (text: string, tokens: ReferenceToken[] = []) => {
+      const plainText = text.trim()
       setDeAiSkillWarningMessage("")
+
+      if (!plainText) {
+        setDeAiSkillWarningMessage("请输入提示词")
+        return
+      }
+      if (!project) {
+        setDeAiSkillWarningMessage("请先打开一个项目")
+        return
+      }
+      if (!agentSupportsTools) {
+        setDeAiSkillWarningMessage("当前模型不支持Agent功能，请更换模型")
+        return
+      }
+      if (!agentSkillConfigLoaded || !agentConfig) {
+        setDeAiSkillWarningMessage("Agent配置仍在加载，请稍后重试")
+        return
+      }
+
       let convId = useChatStore.getState().activeConversationId
       if (!convId) {
         convId = createConversation()
       }
-      // 捕获当前会话 ID，确保 finalizeStream 保存到正确的会话
       const capturedConvId = convId
-
-      addMessage("user", text)
-      startStreaming(capturedConvId)
-      const sessionId = streamSessionGuardRef.current.start(capturedConvId)
-      activeStreamSessionsRef.current[capturedConvId] = sessionId
-
-      // Build system prompt with wiki context using graph-enhanced retrieval
-      const systemMessages: LLMMessage[] = []
-      let queryRefs: { title: string; path: string }[] = []
-      let langReminder: string | undefined
-      const taskRoute = novelMode ? routeTask(text) : null
-      const pp = project ? normalizePath(project.path) : ""
-      // 会话内上次生成的章节号：未保存到章节库时也能正确推进“下一章”
-      const lastGeneratedChapterNumber = novelMode && project
+      const storeState = useChatStore.getState()
+      const activeConv = storeState.conversations.find((conversation) => conversation.id === capturedConvId)
+      const activeConvMessages = storeState.messages
+        .filter((message) => (
+          message.conversationId === capturedConvId &&
+          (message.role === "user" || message.role === "assistant") &&
+          !message.discarded &&
+          !message.isAgentRunning
+        ))
+        .slice(-maxHistoryMessages)
+      const pp = normalizePath(project.path)
+      const taskRoute = novelMode ? routeTask(plainText) : null
+      const lastGeneratedChapterNumber = novelMode
         ? detectLastGeneratedChapterNumber(
-          useChatStore.getState().getActiveMessages()
-            .filter((m) => m.role === "assistant" && !m.discarded)
-            .map((m) => m.content),
-        )
+            activeConvMessages
+              .filter((message) => message.role === "assistant")
+              .map((message) => message.content),
+          )
         : undefined
-      const targetChapterNumber = novelMode && project && taskRoute
+      const targetChapterNumber = novelMode && taskRoute
         ? await resolveTargetChapterNumberForChat({
-          projectPath: pp,
-          userRequest: text,
-          routeIntent: taskRoute.intent,
-          routeChapterNumber: taskRoute.chapterNumber,
-          selectedFile,
-          lastGeneratedChapterNumber,
-        })
+            projectPath: pp,
+            userRequest: plainText,
+            routeIntent: taskRoute.intent,
+            routeChapterNumber: taskRoute.chapterNumber,
+            selectedFile,
+            lastGeneratedChapterNumber,
+          })
         : undefined
       const effectiveTaskRoute = taskRoute && targetChapterNumber
         ? {
-          ...taskRoute,
-          chapterNumber: targetChapterNumber,
-          extractedParams: {
-            ...taskRoute.extractedParams,
-            chapterNumber: String(targetChapterNumber),
-          },
-        }
+            ...taskRoute,
+            chapterNumber: targetChapterNumber,
+            extractedParams: {
+              ...taskRoute.extractedParams,
+              chapterNumber: String(targetChapterNumber),
+            },
+          }
         : taskRoute
-      // AI 会话选中的 model 名（如 "deepseek-v3"）需要找到它所属的 provider
-      // 重新计算 baseUrl/apiKey/apiMode，否则会沿用 activePresetId 的配置
-      // 导致跨 provider 调用失败
-      let effectiveChatLlmConfig = llmConfig
-      if (aiChatModel.trim()) {
-        const targetModel = aiChatModel.trim()
-        // 优先按 "providerId/modelId" 格式精确匹配
-        const slashIdx = targetModel.indexOf("/")
-        if (slashIdx > 0) {
-          const providerId = targetModel.slice(0, slashIdx)
-          const modelId = targetModel.slice(slashIdx + 1)
-          const override = providerConfigs[providerId]
-          if (override?.savedModels?.some((m) => m.model === modelId)) {
-            const template =
-              LLM_PRESETS.find((p) => p.id === providerId) ??
-              LLM_PRESETS.find((p) => p.id === "custom")
-            if (template) {
-              effectiveChatLlmConfig = {
-                ...resolveConfig(template, override, llmConfig),
-                model: modelId,
-              }
-            }
-          } else {
-            effectiveChatLlmConfig = { ...llmConfig, model: modelId }
-          }
-        } else {
-          // 回退：按纯模型名匹配（兼容旧数据）
-          let matched = false
-          for (const [providerId, override] of Object.entries(providerConfigs)) {
-            if (override.savedModels?.some((m) => m.model === targetModel)) {
-              const template =
-                LLM_PRESETS.find((p) => p.id === providerId) ??
-                LLM_PRESETS.find((p) => p.id === "custom")
-              if (template) {
-                effectiveChatLlmConfig = {
-                  ...resolveConfig(template, override, llmConfig),
-                  model: targetModel,
-                }
-              }
-              matched = true
-              break
-            }
-          }
-          if (!matched) {
-            effectiveChatLlmConfig = { ...llmConfig, model: targetModel }
-          }
-        }
-      }
-      const shouldUseEditMode = novelMode && chatEditModeEnabled && isChatEditRequest(text)
-      const goldenThreeChapter = novelMode
-        ? detectGoldenThreeChapterRequest(text, effectiveTaskRoute?.chapterNumber)
-        : undefined
-      const dismantlingDirective = novelMode && project
-        ? await loadEnabledDismantlingDirective(pp).catch(() => "")
-        : ""
-      if (shouldUseEditMode) {
-        const resolvedTarget = resolveChatEditTarget({
-          userRequest: text,
-          selectedChapterNumber: await readSelectedChapterNumberForFile(selectedFile) ?? null,
-        })
-        if (!resolvedTarget.ok) {
-          finalizeStream(resolvedTarget.message, [], capturedConvId)
-          delete activeStreamSessionsRef.current[capturedConvId]
-          return
-        }
-
-        const chapterPayloads = await Promise.all(
-          resolvedTarget.target.chapterNumbers.map(async (chapterNumber) => {
-            const chapterPath = await findChapterFileByNumber(pp, chapterNumber)
-            if (!chapterPath) {
-              return { chapterNumber, chapterPath: null, content: "" }
-            }
-            const original = await readFile(chapterPath).catch(() => "")
-            return { chapterNumber, chapterPath, content: original }
-          }),
-        )
-
-        if (chapterPayloads.some((item) => !item.chapterPath)) {
-          const missing = chapterPayloads.filter((item) => !item.chapterPath).map((item) => item.chapterNumber).join("、")
-          finalizeStream(`未找到以下章节，暂时无法执行修改：第${missing}章`, [], capturedConvId)
-          delete activeStreamSessionsRef.current[capturedConvId]
-          return
-        }
-
-        const editPrompt = [
-          "你正在执行小说章节修改任务。",
-          "请严格按照用户要求修改指定章节内容。",
-          "如果是多章修改，必须逐章返回完整修改稿。",
-          "输出格式必须严格如下：",
-          "【第11章】",
-          "修改后的完整正文",
-          "",
-          "【第12章】",
-          "修改后的完整正文",
-          "",
-          "不要解释，不要补充说明。",
-          "",
-          `用户要求：${text}`,
-          "",
-          "待修改章节如下：",
-          ...chapterPayloads.map((item) => `【第${item.chapterNumber}章原文】\n${item.content}`),
-        ].join("\n")
-
-        const controller = new AbortController()
-        abortControllersRef.current[capturedConvId] = controller
-        let editResult = ""
-        let editError: Error | null = null
-
-        await streamChat(
-          effectiveChatLlmConfig,
-          [{ role: "user", content: editPrompt }],
-          {
-            onToken: (token) => {
-              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-              editResult += token
-              appendStreamToken(token, capturedConvId)
-            },
-            onDone: () => {},
-            onError: (error) => {
-              editError = error
-            },
-          },
-          controller.signal,
-          { reasoning: resolveUserVisibleReasoning(effectiveChatLlmConfig.reasoning) },
-        )
-
-        if (editError) {
-          const editErrorMessage = String(editError)
-          finalizeStream(`修改失败：${editErrorMessage}`, [], capturedConvId)
-          delete activeStreamSessionsRef.current[capturedConvId]
-          delete abortControllersRef.current[capturedConvId]
-          return
-        }
-
-        const validatedEdits = resolvedTarget.target.mode === "single"
-          ? {
-            ok: true as const,
-            files: [{
-              chapterNumber: resolvedTarget.target.chapterNumbers[0],
-              content: editResult,
-            }],
-          }
-          : validateStructuredChapterEditResult({
-            content: editResult,
-            targetChapterNumbers: resolvedTarget.target.chapterNumbers,
-          })
-
-        if (!validatedEdits.ok) {
-          finalizeStream(validatedEdits.message, [], capturedConvId)
-          delete activeStreamSessionsRef.current[capturedConvId]
-          delete abortControllersRef.current[capturedConvId]
-          return
-        }
-
-        for (const chapter of chapterPayloads) {
-          if (!chapter.chapterPath) continue
-          const rawResult = validatedEdits.files.find((item) => item.chapterNumber === chapter.chapterNumber)?.content
-          if (!rawResult) {
-            finalizeStream(`第${chapter.chapterNumber}章缺少修改结果，已停止写回。`, [], capturedConvId)
-            delete activeStreamSessionsRef.current[capturedConvId]
-            delete abortControllersRef.current[capturedConvId]
-            return
-          }
-          const normalizedResult = normalizeChapterEditFile({
-            targetChapterNumber: chapter.chapterNumber,
-            content: rawResult,
-            originalContent: chapter.content,
-          })
-          if (!normalizedResult.ok) {
-            finalizeStream(normalizedResult.message, [], capturedConvId)
-            delete activeStreamSessionsRef.current[capturedConvId]
-            delete abortControllersRef.current[capturedConvId]
-            return
-          }
-          await backupChapterFile({
-            projectPath: pp,
-            chapterPath: chapter.chapterPath,
-            chapterNumber: chapter.chapterNumber,
-            content: chapter.content,
-          })
-          await writeFile(chapter.chapterPath, normalizedResult.content)
-        }
-
-        await refreshProjectState(pp)
-        if (chapterPayloads[0]?.chapterPath) {
-          useWikiStore.getState().setSelectedFile(chapterPayloads[0].chapterPath)
-        }
-        finalizeStream(
-          resolvedTarget.target.mode === "single"
-            ? `已完成第${resolvedTarget.target.chapterNumbers[0]}章修改，并已自动备份原内容。`
-            : `已完成 ${resolvedTarget.target.chapterNumbers.length} 个章节的批量修改，并已分别备份原内容。`,
-          [],
-          capturedConvId,
-        )
-        delete activeStreamSessionsRef.current[capturedConvId]
-        delete abortControllersRef.current[capturedConvId]
-        return
-      }
-      if (novelMode && project && deepChapterEnabled) {
-        const { runDeepChapterGeneration } = await import("@/lib/novel/deep-chapter-generation")
-        const controller = new AbortController()
-        abortControllersRef.current[capturedConvId] = controller
-        const deepStream = createDeepThinkingStreamRenderer()
-        let accumulated = ""
-        let latestCheckpoint: import("@/lib/novel/deep-chapter-generation").DeepChapterGenerationResumeCheckpoint | undefined
-        const appendThinkingBlock = (content: string) => {
-          if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-          accumulated = deepStream.updateThinking(content)
-          setStreamingContent(accumulated, capturedConvId)
-        }
-
-        try {
-          await runDeepChapterGeneration(
-            {
-              projectPath: pp,
-              userRequest: text,
-              chapterNumber: effectiveTaskRoute?.chapterNumber,
-              goldenThreeChapter: goldenThreeChapter?.enabled ? goldenThreeChapter : undefined,
-              dismantlingReferenceDirective: dismantlingDirective,
-              llmConfig: effectiveChatLlmConfig,
-            },
-            {
-              onThinking: appendThinkingBlock,
-              onFinalContent: (content) => {
-                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-                accumulated = deepStream.appendFinal(content)
-                setStreamingContent(accumulated, capturedConvId)
-              },
-              onCheckpoint: (checkpoint) => {
-                latestCheckpoint = checkpoint
-              },
-            },
-            undefined,
-            controller.signal,
-          )
-          streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-            finalizeStream(accumulated, [], capturedConvId)
-            delete activeStreamSessionsRef.current[capturedConvId]
-          })
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err)
-          const existing = deepStream.getContent()
-          if (controller.signal.aborted || message === "已停止生成") {
-            streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-              finalizeStream(`${existing ? `${existing}\n\n` : ""}已停止生成。`, [], capturedConvId)
-              delete activeStreamSessionsRef.current[capturedConvId]
-            })
-          } else {
-            streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-              const visibleFailure = `${existing ? `${existing}\n\n` : ""}出错：深度生成章节失败：${message}`
-              finalizeStream(
-                appendContinueUnfinishedDeepChapterContext(visibleFailure, {
-                  originalRequest: text,
-                  resumeContext: visibleFailure,
-                  rootResumeContext: visibleFailure,
-                  checkpoint: latestCheckpoint,
-                }),
-                undefined,
-                capturedConvId,
-              )
-              delete activeStreamSessionsRef.current[capturedConvId]
-            })
-          }
-        } finally {
-          if (activeStreamSessionsRef.current[capturedConvId] === sessionId) {
-            delete activeStreamSessionsRef.current[capturedConvId]
-          }
-          if (abortControllersRef.current[capturedConvId] === controller) {
-            delete abortControllersRef.current[capturedConvId]
-          }
-        }
-        return
-      }
       const shouldUseQmQuaiSkill = effectiveTaskRoute != null && (
         effectiveTaskRoute.intent === "write_chapter" ||
         effectiveTaskRoute.intent === "continue_chapter" ||
         effectiveTaskRoute.intent === "rewrite_chapter"
       )
       const qmQuaiSystemPrompt = shouldUseQmQuaiSkill ? buildQmQuaiSystemPrompt() : ""
-      // Pure greetings ("hi", "你好", "嗨") don't warrant running the whole
-      // retrieval pipeline — it's slow, costs context, and drags in random
-      // wiki pages the user clearly didn't ask about. Short-circuit with a
-      // minimal system prompt and let the model reply conversationally.
-      const greetingOnly = isGreeting(text)
-      if (project && greetingOnly) {
-        const outLang = getOutputLanguage(text)
-        systemMessages.push({
-          role: "system",
-          content: [
-            `你是项目「${project.name}」的资料库问答助手。`,
-            "用户只是打了一个招呼，请用一两句话自然简短地回应。",
-            "不要编造资料库内容，也不要假装已经检索过页面。如果用户想查询资料，请引导用户提出一个具体问题。",
-            "",
-            `请使用 ${outLang} 回复。`,
-          ].join("\n"),
-        })
-        // Skip retrieval; queryRefs stays empty so no "Sources" chip is shown.
-      } else if (project) {
-        const pp = normalizePath(project.path)
-        const dataVersion = useWikiStore.getState().dataVersion
+      let novelContextPrompt = ""
 
-        // ── Budget allocation (see context-budget.ts) ─────────
-        // Page budget scales with the LLM's context window; we now
-        // also reserve ~15% as headroom for the response so the
-        // model isn't truncated mid-sentence on a packed prompt.
-        const {
-          indexBudget: INDEX_BUDGET,
-          pageBudget: PAGE_BUDGET,
-          maxPageSize: MAX_PAGE_SIZE,
-        } = computeContextBudget(llmConfig.maxContextSize)
-
-        const [rawIndex, purpose] = await Promise.all([
-          readFile(`${pp}/wiki/index.md`).catch(() => ""),
-          readFile(`${pp}/purpose.md`).catch(() => ""),
-        ])
-
-        // ── Phase 1: Tokenized search → top 10 ────────────────
-        const searchResults = await searchWiki(pp, text, {
-          rerank: true,
-          topK: 10,
-          rerankPurpose: "用于聊天问答时挑选最值得注入上下文的知识页面。",
-        })
-        const topSearchResults = searchResults.slice(0, 10)
-
-        // ── Trim index by relevance if over budget ─────────────
-        let index = rawIndex
-        if (rawIndex.length > INDEX_BUDGET) {
-          const tokens = tokenizeQuery(text)
-          const lines = rawIndex.split("\n")
-          const keptLines: string[] = []
-          let keptSize = 0
-
-          for (const line of lines) {
-            const isHeader = line.startsWith("##")
-            const lower = line.toLowerCase()
-            const isRelevant = tokens.some((t) => lower.includes(t))
-
-            if (isHeader || isRelevant) {
-              if (keptSize + line.length + 1 <= INDEX_BUDGET) {
-                keptLines.push(line)
-                keptSize += line.length + 1
-              }
-            }
-          }
-          index = keptLines.join("\n")
-          if (index.length < rawIndex.length) {
-            index += "\n\n[...index trimmed to relevant entries...]"
-          }
-        }
-
-        // ── Phase 2: Graph 1-level expansion ───────────────────
-        // Note: Vector search (if enabled) is already merged into searchResults
-        // by searchWiki() in search.ts — no duplicate code needed here.
-        const { buildRetrievalGraph, getRelatedNodes } = await import("@/lib/graph-relevance")
-        const graph = await buildRetrievalGraph(pp, dataVersion)
-        const expandedIds = new Set<string>()
-        const searchHitPaths = new Set(topSearchResults.map((r) => r.path))
-        const graphExpansions: { title: string; path: string; relevance: number }[] = []
-
-        for (const result of topSearchResults) {
-          const fileName = getFileName(result.path)
-          const nodeId = fileName.replace(/\.md$/, "")
-          const related = getRelatedNodes(nodeId, graph, 3)
-          for (const { node, relevance } of related) {
-            if (relevance < 2.0) continue
-            if (searchHitPaths.has(node.path)) continue
-            if (expandedIds.has(node.id)) continue
-            expandedIds.add(node.id)
-            graphExpansions.push({ title: node.title, path: node.path, relevance })
-          }
-        }
-        graphExpansions.sort((a, b) => b.relevance - a.relevance)
-
-        // ── Phase 3 & 4: Page budget control ───────────────────
-        let usedChars = 0
-        type PageEntry = { title: string; path: string; content: string; priority: number }
-        const relevantPages: PageEntry[] = []
-
-        const tryAddPage = async (title: string, filePath: string, priority: number): Promise<boolean> => {
-          if (usedChars >= PAGE_BUDGET) return false
-          try {
-            const raw = await readFile(filePath)
-            const relativePath = getRelativePath(filePath, pp)
-            const truncated = raw.length > MAX_PAGE_SIZE
-              ? raw.slice(0, MAX_PAGE_SIZE) + "\n\n[...truncated...]"
-              : raw
-            if (usedChars + truncated.length > PAGE_BUDGET) return false
-            usedChars += truncated.length
-            relevantPages.push({ title, path: relativePath, content: truncated, priority })
-            return true
-          } catch { return false }
-        }
-
-        // P0: Title matches
-        for (const r of topSearchResults.filter((r) => r.titleMatch)) {
-          await tryAddPage(r.title, r.path, 0)
-        }
-        // P1: Content matches
-        for (const r of topSearchResults.filter((r) => !r.titleMatch)) {
-          await tryAddPage(r.title, r.path, 1)
-        }
-        // P2: Graph expansions
-        for (const exp of graphExpansions) {
-          await tryAddPage(exp.title, exp.path, 2)
-        }
-        // P3: Overview fallback
-        if (relevantPages.length === 0) {
-          await tryAddPage("Overview", `${pp}/wiki/overview.md`, 3)
-        }
-
-        const pagesContext = relevantPages.length > 0
-          ? relevantPages.map((p, i) =>
-              `### [${i + 1}] ${p.title}\nPath: ${p.path}\n\n${p.content}`
-            ).join("\n\n---\n\n")
-          : "(No wiki pages found)"
-
-        const pageList = relevantPages.map((p, i) =>
-          `[${i + 1}] ${p.title} (${p.path})`
-        ).join("\n")
-
-        const outLang = getOutputLanguage(text)
-
-        let novelContextPreamble = ""
-        if (novelMode && project && effectiveTaskRoute) {
-          try {
-            const taskDirective = buildTaskDirective(effectiveTaskRoute)
-            const goldenDirective = buildGoldenThreeChapterDirective(goldenThreeChapter)
-            const { buildContextPack, contextPackToPrompt } = await import("@/lib/novel/context-engine")
-            const contextPack = await buildContextPack(pp, text, effectiveTaskRoute.chapterNumber).catch(() => ({
-              task: text,
-              chapterGoal: "",
-              outline: "",
-              recentSummaries: [],
-              previousChapterEnding: "",
-              characterStates: "",
-              soulDoc: "",
-              characterAuras: "",
-              cognitionStates: "",
-              foreshadowingStates: "",
-              timeline: "",
-              relatedSettings: "",
-              canonRules: "",
-              writingStyle: "",
-              searchResults: "",
-              graphSearchResults: "",
-              mustDo: "",
-              mustAvoid: "",
-              nextChapterAdvice: "",
-              revisionDirectives: "",
-            }))
-            if (contextPack.characterAuras.trim()) {
+      if (novelMode && effectiveTaskRoute) {
+        try {
+          const taskDirective = buildTaskDirective(effectiveTaskRoute)
+          const goldenThreeChapter = detectGoldenThreeChapterRequest(plainText, effectiveTaskRoute.chapterNumber)
+          const goldenDirective = buildGoldenThreeChapterDirective(goldenThreeChapter)
+          const { buildContextPack, contextPackToPrompt } = await import("@/lib/novel/context-engine")
+          const contextPack = await buildContextPack(pp, plainText, effectiveTaskRoute.chapterNumber).catch(() => ({
+            task: plainText,
+            chapterGoal: "",
+            outline: "",
+            recentSummaries: [],
+            previousChapterEnding: "",
+            characterStates: "",
+            soulDoc: "",
+            characterAuras: "",
+            cognitionStates: "",
+            foreshadowingStates: "",
+            timeline: "",
+            relatedSettings: "",
+            canonRules: "",
+            writingStyle: "",
+            searchResults: "",
+            graphSearchResults: "",
+            mustDo: "",
+            mustAvoid: "",
+            nextChapterAdvice: "",
+            revisionDirectives: "",
+          }))
+          if (contextPack.characterAuras.trim()) {
             const confirmed = await requestSoulDialog(contextPack.characterAuras)
             if (!confirmed) {
-              streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-                finalizeStream("已取消本次生成，角色灵魂上下文未发送给模型。", undefined, capturedConvId)
-                delete activeStreamSessionsRef.current[capturedConvId]
-              })
-              delete abortControllersRef.current[capturedConvId]
+              const { assistantMessage } = appendAgentChatMessages(capturedConvId, plainText, tokens)
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                content: "已取消本次生成，角色灵魂上下文未发送给模型。",
+                isAgentRunning: false,
+              }))
               return
             }
-            }
-            const novelConfig = useWikiStore.getState().novelConfig
-            const budget = novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined
-            novelContextPreamble = contextPackToPrompt(contextPack, budget)
-            if (goldenDirective) {
-              novelContextPreamble = goldenDirective + "\n" + novelContextPreamble
-            }
-            if (taskDirective) {
-              novelContextPreamble = taskDirective + "\n" + novelContextPreamble
-            }
-          } catch {}
-        }
-
-        // 固定前缀：技能、角色定位、章节输出规则、规则、Markdown 格式要求。
-        // 这部分在一次会话/配置下稳定，打 cacheControl 让 Anthropic 跨会话命中
-        // prompt cache；OpenAI/Google 等其他 provider 会自动折叠成字符串，不受影响。
-        const stablePrefixParts = [
-          qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
-          novelMode
-            ? "你是一个专业的小说写作助手。请根据提供的小说上下文包和章节内容，协助用户进行小说创作。"
-            : "你是一个专业的资料库问答助手。请基于下方提供的资料内容回答问题。",
-          "",
-          novelMode
-            ? [
-                "## 小说章节输出规则",
-                "- 如果用户要求生成、续写或改写章节，只输出可直接放入章节库的小说正文。",
-                "- 正文第一行必须是章节标题，格式为：# 第X章 标题名（标题4-12字，概括本章核心内容）。",
-                "- 不要输出资料说明、创作说明、免责声明、后续建议、引用列表或隐藏 cited 注释。",
-                "- 不要在小说正文里写 [[资料名]]、[1]、[2] 这类资料引用标记。",
-                "- 资料只作为内部参考，不能把资料库缺失、基于现有资料等元信息写进章节。",
-              ].filter(Boolean).join("\n")
-            : "",
-          "",
-          novelMode
-            ? [
-                "## 规则",
-                "- 只能基于下方小说资料、上下文包和用户要求创作，不要编写解释性回答。",
-                "- 如果资料不足，也要根据已有小说上下文自然续写，不要把“资料不足”写进正文。",
-              ].join("\n")
-            : [
-                "## 规则",
-                "- 只能基于下方编号资料页面回答。",
-                "- 如果资料不足，请直接说明资料不足。",
-                "- 引用资料页面时使用 [[页面名]] 格式。",
-                "- 引用具体信息时使用页码标记，例如 [1]、[2]。",
-                "- 回复末尾必须添加隐藏注释，列出你使用过的资料页码：",
-                "  <!-- cited: 1, 3, 5 -->",
-              ].join("\n"),
-          "",
-          "请使用清晰的 Markdown 格式。",
-        ].filter(Boolean)
-
-        // 动态部分：资料库目标、索引、页面、上下文包、语言规则。
-        // 每次检索结果不同，不缓存。
-        const dynamicParts = [
-          purpose ? `## 资料库目标\n${purpose}` : "",
-          index ? `## 资料库索引\n${index}` : "",
-          relevantPages.length > 0 ? `## 页面列表\n${pageList}` : "",
-          `## 资料页面\n\n${pagesContext}`,
-          novelContextPreamble ? `\n${novelContextPreamble}` : "",
-          dismantlingDirective ? `\n${dismantlingDirective}` : "",
-          "",
-          "---",
-          "",
-          `## ⚠️ 强制输出语言：${outLang}`,
-          "",
-          `你的整段回复必须使用 **${outLang}**。`,
-          "即使上方资料内容使用其他语言，也不能影响你的回复语言。",
-          `请忽略资料原文语言，只使用 ${outLang} 回复。`,
-          `必要时，专有名词也应使用 ${outLang} 的常见译法或音译。`,
-          "不要使用任何其他语言。本规则优先于其他所有指令。",
-        ].filter(Boolean)
-
-        const systemBlocks: { type: "text"; text: string; cacheControl?: boolean }[] = []
-        if (stablePrefixParts.length > 0) {
-          systemBlocks.push({ type: "text", text: stablePrefixParts.join("\n"), cacheControl: true })
-        }
-        if (dynamicParts.length > 0) {
-          systemBlocks.push({ type: "text", text: dynamicParts.join("\n") })
-        }
-
-        systemMessages.push({
-          role: "system",
-          content: systemBlocks,
-        })
-
-        // Reminder injected later, right before the user's current message
-        // (after history so it's the last system instruction the LLM sees).
-        langReminder = buildLanguageReminder(text)
-
-        // ── Agent mode: append file edit instructions if user has edit intent ──
-        if (novelMode && systemMessages.length > 0) {
-          const { detectEditIntent, buildAgentSystemSuffix } = await import("@/lib/novel/agent-parser")
-          if (detectEditIntent(text)) {
-            const lastSys = systemMessages[systemMessages.length - 1]
-            if (lastSys) {
-              const { readScopeFileContents } = await import("@/lib/novel/agent-tools")
-              const filesWithContent = await readScopeFileContents(pp, "chapters")
-              const fileContentStr = filesWithContent.length > 0
-                ? `\n\n## 当前章节文件内容（供修改定位）\n${filesWithContent.map(f => `### ${f.name}\n\`\`\`\n${f.content}\n\`\`\``).join("\n\n")}`
-                : "\n\n## 当前章节文件列表\n(暂无章节文件)"
-              const suffix = buildAgentSystemSuffix("chapters") + fileContentStr
-              if (typeof lastSys.content === "string") {
-                lastSys.content += suffix
-              } else if (Array.isArray(lastSys.content)) {
-                // content 为 ContentBlock[] 时，追加为新的 text block（不缓存，
-                // 因为文件内容动态），避免破坏前面的 cacheControl 断点。
-                lastSys.content.push({ type: "text", text: suffix })
-              }
-            }
           }
+          const novelConfig = useWikiStore.getState().novelConfig
+          const budget = novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined
+          novelContextPrompt = [
+            taskDirective,
+            goldenDirective,
+            "## 小说上下文包",
+            contextPackToPrompt(contextPack, budget),
+          ].filter(Boolean).join("\n\n")
+        } catch (error) {
+          console.warn("构建Agent小说上下文失败:", error)
         }
-
-        const nextQueryPages = relevantPages.map((p) => ({ title: p.title, path: p.path }))
-        setLastQueryPages(nextQueryPages)
-        queryRefs = [...nextQueryPages]
       }
 
-      // ── Conversation history with count limit ────────────────
-      // Only include messages from the active conversation, last N messages
-      const activeConvMessages = useChatStore.getState().getActiveMessages()
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .slice(-maxHistoryMessages)
-      const conversations = useChatStore.getState().conversations
-      // 使用 capturedConvId 而非闭包中的 activeConversationId，防止切换会话后取错会话
-      const activeConv = conversations.find(c => c.id === capturedConvId)
       const {
         skill: effectiveDeAiSkill,
         warning: deAiSkillWarning,
-      } = await loadEffectiveDeAiSkillSafely(project?.path ?? null, activeConv?.selectedDeAiSkillId)
+      } = await loadEffectiveDeAiSkillSafely(project.path, activeConv?.selectedDeAiSkillId)
       if (deAiSkillWarning) {
         setDeAiSkillWarningMessage(deAiSkillWarning)
       }
-      if (effectiveDeAiSkill) {
-        systemMessages.push({
-          role: "system",
-          content: buildDeAiSkillSystemPrompt(effectiveDeAiSkill.content),
-        })
-      }
 
-      // Prepend the language reminder onto the final user turn rather than
-      // inserting a second {role:"system"} between history and the final
-      // user message. vLLM / llama.cpp / Ollama drive their chat templates
-      // from HF Jinja, and Qwen3-family templates enforce "system only at
-      // index 0" — a mid-conversation system message gets rejected with
-      // "System message must be at the beginning." (HTTP 400). OpenAI and
-      // Anthropic are more lenient, but keeping a single system at the top
-      // is the safest shape across every OpenAI-compatible backend.
-      const historyMessages = chatMessagesToLLM(activeConvMessages)
-      let llmMessages: LLMMessage[] = [...systemMessages, ...historyMessages]
-      if (langReminder && historyMessages.length > 0) {
-        const lastIdx = llmMessages.length - 1
-        const last = llmMessages[lastIdx]
-        if (last && last.role === "user") {
-          llmMessages = [
-            ...llmMessages.slice(0, lastIdx),
-            { role: "user", content: `[${langReminder}]\n\n${last.content}` },
-          ]
-        }
-      }
+      const effectiveSystemPrompt = effectiveDeAiSkill
+        ? [
+            agentSystemPrompt,
+            qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
+            novelContextPrompt,
+            "",
+            "## 当前会话去AI味技能",
+            buildDeAiSkillSystemPrompt(effectiveDeAiSkill.content),
+          ].filter(Boolean).join("\n")
+        : [
+            agentSystemPrompt,
+            qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
+            novelContextPrompt,
+          ].filter(Boolean).join("\n")
 
       const deAiMode = activeConv?.deAiMode ?? false
-      if (!effectiveDeAiSkill && deAiMode && llmMessages.length > 0) {
-        const lastIdx = llmMessages.length - 1
-        const last = llmMessages[lastIdx]
-        if (last && last.role === "user" && typeof last.content === "string") {
-          llmMessages = [
-            ...llmMessages.slice(0, lastIdx),
-            { role: "user", content: injectDeAiDirective(last.content, deAiMode) },
-          ]
-        }
-      }
+      const rawUserContent = buildAgentUserContent(plainText, tokens)
+      const userContent = !effectiveDeAiSkill && deAiMode
+        ? injectDeAiDirective(rawUserContent, deAiMode)
+        : rawUserContent
+      const agentMessages: AgentMessage[] = [
+        { role: "system", content: effectiveSystemPrompt },
+        ...activeConvMessages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        } satisfies AgentMessage)),
+        { role: "user", content: userContent },
+      ]
+
+      const { assistantMessage } = appendAgentChatMessages(capturedConvId, plainText, tokens)
+      setReferenceText("")
+      setCurrentTokens([])
+      startStreaming(capturedConvId)
+      const sessionId = streamSessionGuardRef.current.start(capturedConvId)
+      activeStreamSessionsRef.current[capturedConvId] = sessionId
 
       const controller = new AbortController()
       abortControllersRef.current[capturedConvId] = controller
+      let hasAgentError = false
 
-      let accumulated = ""
-      let thinkingOpen = false
-
-      const appendReasoning = (token: string) => {
-        if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-        if (!token) return
-        if (!thinkingOpen) {
-          thinkingOpen = true
-          accumulated += "<think>"
-          appendStreamToken("<think>", capturedConvId)
-        }
-        accumulated += token
-        appendStreamToken(token, capturedConvId)
+      const markDone = (record?: AgentRunRecord) => {
+        updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+          ...message,
+          content: message.content || record?.finalText || "Agent未返回内容。",
+          agentToolCalls: record?.toolCalls.length ? record.toolCalls : message.agentToolCalls,
+          isAgentRunning: false,
+        }))
       }
 
-      const closeReasoning = () => {
-        if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-        if (!thinkingOpen) return
-        thinkingOpen = false
-        accumulated += "</think>"
-        appendStreamToken("</think>", capturedConvId)
+      const markError = (error: Error) => {
+        hasAgentError = true
+        updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+          ...message,
+          content: message.content
+            ? `${message.content}\n\n出错：${error.message}`
+            : `出错：${error.message}`,
+          isAgentRunning: false,
+        }))
       }
 
-      await streamChat(
-        effectiveChatLlmConfig,
-        llmMessages,
-        {
-          onToken: (token) => {
-            if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-            closeReasoning()
-            accumulated += token
-            appendStreamToken(token, capturedConvId)
+      const finishAgentSession = (callback?: () => void) => {
+        streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
+          callback?.()
+          clearStreaming(capturedConvId)
+          delete activeStreamSessionsRef.current[capturedConvId]
+          delete abortControllersRef.current[capturedConvId]
+        })
+      }
+
+      try {
+        const record = await new AgentRunner().run(
+          {
+            ...agentConfig,
+            systemPrompt: effectiveSystemPrompt,
           },
-          onReasoningToken: appendReasoning,
-          onDone: () => {
-            streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-              closeReasoning()
-              finalizeStream(accumulated, queryRefs, capturedConvId)
-              delete activeStreamSessionsRef.current[capturedConvId]
-              delete abortControllersRef.current[capturedConvId]
-            })
+          agentRegistry,
+          agentMessages,
+          {
+            onText: (chunk: string) => {
+              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                content: message.content + chunk,
+              }))
+            },
+            onToolCall: (call: ToolCall) => {
+              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              updateAgentAssistantMessage(assistantMessage.id, (message) => {
+                const existing = message.agentToolCalls ?? []
+                if (existing.some((item) => item.id === call.id)) return message
+                return {
+                  ...message,
+                  agentToolCalls: [
+                    ...existing,
+                    {
+                      id: call.id,
+                      name: call.name,
+                      params: call.arguments,
+                      result: "",
+                      status: "done",
+                      startedAt: Date.now(),
+                      finishedAt: 0,
+                    },
+                  ],
+                }
+              })
+            },
+            onToolResult: (callId: string, result: string) => {
+              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
+                  item.id === callId
+                    ? { ...item, result, status: "done", finishedAt: Date.now() }
+                    : item,
+                ),
+              }))
+            },
+            onToolError: (callId: string, error: string) => {
+              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                agentToolCalls: (message.agentToolCalls ?? []).map((item) =>
+                  item.id === callId
+                    ? { ...item, result: error, status: "error", finishedAt: Date.now() }
+                    : item,
+                ),
+              }))
+            },
+            onDone: () => {
+              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                isAgentRunning: false,
+              }))
+            },
+            onError: markError,
           },
-          onError: (err) => {
-            streamSessionGuardRef.current.finish(capturedConvId, sessionId, () => {
-              finalizeStream(`出错：${err.message}`, undefined, capturedConvId)
-              delete activeStreamSessionsRef.current[capturedConvId]
-              delete abortControllersRef.current[capturedConvId]
-            })
-          },
-        },
-        controller.signal,
-        { reasoning: resolveUserVisibleReasoning(effectiveChatLlmConfig.reasoning) },
-      )
+          controller.signal,
+        )
+
+        if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+        finishAgentSession(() => {
+          if (!hasAgentError) markDone(record)
+        })
+      } catch (error) {
+        if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+        finishAgentSession(() => {
+          markError(error instanceof Error ? error : new Error(String(error)))
+        })
+      }
     },
-    [aiChatModel, llmConfig, providerConfigs, chatEditModeEnabled, addMessage, startStreaming, setStreamingContent, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, requestSoulDialog, deepChapterEnabled, project, novelMode, selectedFile],
+    [
+      agentConfig,
+      agentRegistry,
+      agentSkillConfigLoaded,
+      agentSupportsTools,
+      agentSystemPrompt,
+      clearStreaming,
+      createConversation,
+      maxHistoryMessages,
+      novelMode,
+      project,
+      requestSoulDialog,
+      selectedFile,
+      startStreaming,
+    ],
   )
 
   const handleStop = useCallback(() => {
@@ -1132,15 +875,31 @@ export function ChatPanel() {
     if (!convId) return
     const sessionId = activeStreamSessionsRef.current[convId]
     const currentStreamingContent = useChatStore.getState().getStreamingContent(convId)
+    const runningAssistant = [...useChatStore.getState().messages]
+      .reverse()
+      .find((message) => (
+        message.conversationId === convId &&
+        message.role === "assistant" &&
+        message.isAgentRunning
+      ))
     abortControllersRef.current[convId]?.abort()
     delete abortControllersRef.current[convId]
     if (sessionId !== undefined) {
       streamSessionGuardRef.current.stop(convId, sessionId, () => {
-        finalizeStream(`${currentStreamingContent ? `${currentStreamingContent}\n\n` : ""}已停止生成。`, [], convId)
+        if (runningAssistant) {
+          updateAgentAssistantMessage(runningAssistant.id, (message) => ({
+            ...message,
+            content: message.content ? `${message.content}\n\n已停止生成。` : "已停止生成。",
+            isAgentRunning: false,
+          }))
+          clearStreaming(convId)
+        } else {
+          finalizeStream(`${currentStreamingContent ? `${currentStreamingContent}\n\n` : ""}已停止生成。`, [], convId)
+        }
         delete activeStreamSessionsRef.current[convId]
       })
     }
-  }, [finalizeStream])
+  }, [clearStreaming, finalizeStream])
 
   const handleRegenerate = useCallback(async () => {
     // 直接从 store 获取最新状态，避免闭包旧值
@@ -1161,7 +920,7 @@ export function ChatPanel() {
         messages: s.messages.filter((m) => m.id !== lastUser.id),
       }))
     }
-    handleSend(lastUserMsg.content)
+    handleSend(lastUserMsg.content, lastUserMsg.attachedReferences ?? [])
   }, [removeLastAssistantMessage, handleSend])
 
   const handleContinueNextChapter = useCallback(() => {
@@ -1504,7 +1263,7 @@ export function ChatPanel() {
                     />
                   )
                 })}
-                {isStreaming && <StreamingMessage content={streamingContent} />}
+                {isStreaming && streamingContent && <StreamingMessage content={streamingContent} />}
                 <div ref={bottomRef} />
               </div>
             </div>
@@ -1531,13 +1290,10 @@ export function ChatPanel() {
               {deAiSkillWarningMessage}
             </div>
           ) : null}
-          <ChatInput
-            onSend={handleSend}
-            onStop={handleStop}
-            isStreaming={isStreaming}
-            leftControls={
+          <div className="border-t px-3 py-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <TooltipProvider delay={200}>
-                <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+                <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
                   <ChatDockControls />
                   <DeAiSkillPicker
                     value={activeConversation?.selectedDeAiSkillId}
@@ -1626,21 +1382,56 @@ export function ChatPanel() {
                   )}
                 </div>
               </TooltipProvider>
-            }
-            rightControls={
-              <ChatModelSelector
-                value={aiChatModel}
-                onChange={(model) => {
-                  setAiChatModel(model)
-                  void saveAiChatModel(model)
-                }}
-              />
-            }
-            placeholder={
-              mode === "ingest"
-                ? t(novelMode ? "novel.chat.ingestPlaceholder" : "chat.ingestPlaceholder")
-                : t(novelMode ? "novel.chat.typeAMessage" : "chat.typeAMessage")
-            }
+              <div className="flex shrink-0 items-center gap-2">
+                {isStreaming && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleStop}
+                    title="停止生成"
+                    aria-label="停止生成"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                <ChatModelSelector
+                  value={aiChatModel}
+                  onChange={(model) => {
+                    setAiChatModel(model)
+                    void saveAiChatModel(model)
+                  }}
+                />
+              </div>
+            </div>
+            <ReferenceInput
+              value={referenceText}
+              tokens={currentTokens}
+              disabled={isStreaming}
+              insertTokensRef={insertReferenceTokensRef}
+              onChange={(plainText, tokens) => {
+                setReferenceText(plainText)
+                setCurrentTokens(tokens)
+              }}
+              onTokensChange={setCurrentTokens}
+              onSubmit={handleSend}
+              onAtTrigger={() => setReferencePickerOpen(true)}
+              placeholder={
+                mode === "ingest"
+                  ? t(novelMode ? "novel.chat.ingestPlaceholder" : "chat.ingestPlaceholder")
+                  : t(novelMode ? "novel.chat.typeAMessage" : "chat.typeAMessage")
+              }
+            />
+          </div>
+          <ReferencePickerDialog
+            open={referencePickerOpen}
+            providers={referenceProviders}
+            projectPath={project?.path ? normalizePath(project.path) : ""}
+            onConfirm={(tokens) => {
+              insertReferenceTokensRef.current?.(tokens)
+              setReferencePickerOpen(false)
+            }}
+            onClose={() => setReferencePickerOpen(false)}
           />
         </div>
         <Dialog open={pendingSoulDialog.open} onOpenChange={(open) => { if (!open) closeSoulDialog(false) }}>

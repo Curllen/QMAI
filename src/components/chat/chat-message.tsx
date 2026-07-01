@@ -16,6 +16,7 @@ import { refreshProjectState } from "@/lib/project-refresh"
 import { getLastQueryPages } from "@/components/chat/chat-shared"
 import { FileEditPreview } from "@/components/chat/file-edit-preview"
 import { AgentToolCallMessage } from "@/components/chat/agent-tool-call-message"
+import { ReferenceChip } from "@/components/reference/ReferenceChip"
 import type { DisplayMessage } from "@/stores/chat-store"
 
 import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
@@ -81,7 +82,16 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate, novelMode,
           {message.discarded ? (
             <span className="italic text-xs opacity-60">已废弃</span>
           ) : isUser ? (
-            <p dir="auto" className="whitespace-pre-wrap break-words">{message.content}</p>
+            <>
+              <p dir="auto" className="whitespace-pre-wrap break-words">{message.content}</p>
+              {message.attachedReferences && message.attachedReferences.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {message.attachedReferences.map((token) => (
+                    <ReferenceChip key={token.id} token={token} readonly />
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <>
               {message.agentToolCalls && message.agentToolCalls.length > 0 && (
