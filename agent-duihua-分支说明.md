@@ -14,6 +14,11 @@
 
 ## 本次更新
 
+### 20260701-113111
+
+- 修复 AI 会话按 Enter 发送存在延迟的问题：提交时优先读取 textarea 当前 DOM 值，避免刚输入后 React state 尚未同步导致发送不及时。
+- 新增 `ReferenceInput` 回归测试，覆盖“输入后立刻按 Enter，state 尚未追上时仍提交最新 DOM 输入值”的场景。
+
 ### 20260701-111236
 
 - 修复 AI 会话输入框重复输入、Enter 无法发送和二次删除触发 `removeChild` 异常的问题：引用输入改为 textarea 承载文本，引用 Chip 单独渲染。
@@ -50,6 +55,15 @@
 
 ## 验证记录
 
+- 20260701-113111：
+  - `npm.cmd exec -- vitest run src/components/reference/ReferenceInput.spec.tsx`：1 个测试文件、10 个用例通过。
+  - `npm.cmd exec -- vitest run src/components/reference/ReferenceInput.spec.tsx src/components/reference/ReferencePickerDialog.spec.tsx src/lib/reference/providers.spec.ts src/components/chat/chat-panel.spec.tsx src/components/sources/outline-chat-panel.spec.tsx`：5 个测试文件、36 个用例通过。
+  - `npm.cmd exec -- vitest run src/components/chat/agent-message-metadata.spec.ts src/components/chat/chat-message.spec.tsx src/components/layout/chat-layout.test.ts src/lib/reference/resolve.spec.ts`：4 个测试文件、27 个用例通过。
+  - `npm.cmd run typecheck`：通过。
+  - `npm.cmd run test:mocks`：285 个测试文件、2113 个用例通过。
+  - `npm.cmd run build`：通过，存在既有 Vite chunk/dynamic import 警告。
+  - 源码启动：`npm.cmd run dev -- --host 127.0.0.1 --port 5173` 通过 Job 验证，Vite ready 后已停止。
+  - `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `version-info.json`；Rust 构建存在既有 `file_sync.rs` dead-code 警告。
 - 20260701-111236：
   - `npm.cmd exec -- vitest run src/components/reference/ReferenceInput.spec.tsx src/components/reference/ReferencePickerDialog.spec.tsx src/lib/reference/providers.spec.ts src/components/sources/outline-chat-panel.spec.tsx`：4 个测试文件、26 个用例通过。
   - `npm.cmd exec -- vitest run src/components/reference/ReferenceChip.spec.tsx src/components/reference/ReferenceInput.spec.tsx src/components/reference/ReferencePickerDialog.spec.tsx src/lib/reference/providers.spec.ts src/lib/reference/resolve.spec.ts src/stores/chat-store.test.ts src/components/layout/sidebar-panel.outline-tree.test.tsx src/components/chat/chat-panel.spec.tsx src/lib/agent/tools/read-tools.spec.ts src/components/sources/outline-chat-panel.spec.tsx`：10 个测试文件、59 个用例通过。
@@ -83,6 +97,7 @@
 
 ## Git 状态
 
+- 20260701-113111 Enter 立即发送修复纳入本次提交。
 - 20260701-092043 更新已提交，提交号 `6b08275`。
 - 20260701-095256 优化纳入本次提交。
 - 20260701-103906 回归修复和 @ UI 优化纳入本次提交。

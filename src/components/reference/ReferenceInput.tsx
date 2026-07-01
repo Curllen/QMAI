@@ -116,7 +116,7 @@ export function ReferenceInput({
   )
 
   const handleSubmit = useCallback(() => {
-    const plainText = text.trim()
+    const plainText = (textareaRef.current?.value ?? text).trim()
     if (!plainText || inputDisabled) return
     onSubmit(plainText, tokens)
   }, [inputDisabled, onSubmit, text, tokens])

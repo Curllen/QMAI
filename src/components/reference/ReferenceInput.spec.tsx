@@ -188,6 +188,40 @@ describe("ReferenceInput", () => {
     expect(onSubmit).toHaveBeenCalledWith("发送这一句", [token])
   })
 
+  it("submits the textarea DOM value immediately when Enter is pressed before state catches up", async () => {
+    const onSubmit = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <ReferenceInput
+          value=""
+          tokens={[token]}
+          onChange={vi.fn()}
+          onSubmit={onSubmit}
+        />,
+      )
+    })
+
+    const editor = host.querySelector("textarea") as HTMLTextAreaElement
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )?.set
+    valueSetter?.call(editor, "刚输入马上发送")
+
+    await act(async () => {
+      editor.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith("刚输入马上发送", [token])
+  })
+
   it("uses a weaker placeholder color than normal input text", async () => {
     await act(async () => {
       root.render(
