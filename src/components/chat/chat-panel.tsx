@@ -1095,7 +1095,7 @@ export function ChatPanel() {
                   followupText = buildPlanConfirmMessage(action.modify)
                 }
                 await handleSendRef.current(followupText, [])
-              })()
+              })().catch((err) => console.error("[Stage C] 续写失败:", err))
             },
             onError: markError,
           },
@@ -1701,7 +1701,7 @@ export function ChatPanel() {
             <ReferenceInput
               value={referenceText}
               tokens={currentTokens}
-              disabled={isStreaming}
+              disabled={isStreaming || pendingChapterPlan.open}
               isStreaming={isStreaming}
               onStop={handleStop}
               rightControls={
