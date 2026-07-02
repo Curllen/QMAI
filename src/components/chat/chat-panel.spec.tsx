@@ -40,7 +40,7 @@ describe("chat-panel agent reference integration", () => {
     expect(source).toContain("attachedReferences")
     expect(source).toContain("isAgentRunning")
     expect(source).toContain("agentToolCalls")
-    expect(source).toContain("当前模型不支持Agent功能，请更换模型")
+    expect(source).toContain("当前模型不支持工具调用，已切换为普通对话模式")
   })
 
   it("scopes reference input drafts to the active conversation", () => {
@@ -74,15 +74,188 @@ describe("chat-panel agent reference integration", () => {
     expect(source).toContain("不要输出读取说明、执行总结、完成目标表格、章节结构、后续建议")
   })
 
+  it("uses the three-level AI workflow mode instead of a single deep mode prompt", () => {
+    expect(source).toContain("aiWorkflowMode")
+    expect(source).toContain("setAiWorkflowMode")
+    expect(source).toContain("快速模式")
+    expect(source).toContain("标准模式")
+    expect(source).toContain("严格模式")
+    expect(source).not.toContain("用户已开启深度模式，请在必要时进行更完整的章节规划和资料读取。")
+  })
+
+  it("disables model reasoning and reserves enough output tokens for chapter generation", () => {
+    expect(source).toContain("chapterGenerationRequestOverrides")
+    expect(source).toContain('reasoning: { mode: "off" as const }')
+    expect(source).toContain("max_tokens: chapterGenerationLengthSpec.maxOutputTokens")
+    expect(source).toContain('effectiveTaskRoute.intent === "write_chapter"')
+    expect(source).toContain('effectiveTaskRoute.intent === "continue_chapter"')
+    expect(source).toContain('effectiveTaskRoute.intent === "rewrite_chapter"')
+  })
+
   it("shows the sent chat message before asynchronous chapter context building", () => {
-    const appendIndex = source.indexOf("const { assistantMessage } = appendAgentChatMessages")
-    const resolveIndex = source.indexOf("await resolveTargetChapterNumberForChat")
-    const contextIndex = source.indexOf("await buildContextPack")
+    const appendIndex = source.indexOf("appendAgentChatMessages(capturedConvId, plainText, tokens)")
+    const prePluginIndex = source.indexOf("await runNovelPrePluginChain({")
 
     expect(appendIndex).toBeGreaterThan(-1)
-    expect(resolveIndex).toBeGreaterThan(-1)
-    expect(contextIndex).toBeGreaterThan(-1)
-    expect(appendIndex).toBeLessThan(resolveIndex)
-    expect(appendIndex).toBeLessThan(contextIndex)
+    expect(prePluginIndex).toBeGreaterThan(-1)
+    expect(appendIndex).toBeLessThan(prePluginIndex)
+  })
+
+  it("downgrades low-confidence clarification requests to normal chat without a dialog", () => {
+    expect(source).toContain("let prePluginResult")
+    expect(source).toContain('prePluginResult && prePluginResult.stopReason === "clarification_needed"')
+    expect(source).toContain("effectiveTaskRoute = null")
+    expect(source).toContain("contextPack = prePluginResult.contextPack || null")
+    expect(source).not.toContain("IntentClarificationDialog")
+    expect(source).not.toContain("requestClarification")
+  })
+
+  it("keeps low-information general chat out of the novel context loading chain", () => {
+    expect(source).toContain("shouldRunNovelPrePluginChain")
+    expect(source).toContain('rawTaskRoute.intent !== "general_chat"')
+    expect(source).toContain("const taskRoute = shouldRunNovelPrePluginChain ? rawTaskRoute : null")
+
+    const guardIndex = source.indexOf("const shouldRunNovelPrePluginChain")
+    const runIndex = source.indexOf("await runNovelPrePluginChain({")
+    const virtualRouteIndex = source.indexOf("if (novelMode && effectiveTaskRoute)")
+
+    expect(guardIndex).toBeGreaterThan(-1)
+    expect(runIndex).toBeGreaterThan(-1)
+    expect(virtualRouteIndex).toBeLessThan(runIndex)
+  })
+
+  it("passes workflow mode and available skills into the novel pre-plugin chain", () => {
+    expect(source).toContain("deAiSkillToUserSkill")
+    expect(source).toContain("const availableAgentSkills")
+    expect(source).toContain("agentWritingSkills")
+    expect(source).toContain("aiWorkflowMode,")
+    expect(source).toContain("availableSkills: availableAgentSkills")
+  })
+
+  it("passes MCP capabilities from agent config into the novel pre-plugin chain", () => {
+    expect(source).toContain("mcpCapabilities: _agentMcpCapabilities")
+  })
+
+  it("adds selected skill prompts from the pre-plugin result into the agent system prompt", () => {
+    expect(source).toContain("buildSelectedSkillsPrompt")
+    expect(source).toContain("prePluginResult?.selectedSkills")
+    expect(source).toContain("selectedSkillsPrompt")
+  })
+
+  it("requires external search requests to use web_search instead of pretending", () => {
+    expect(source).toContain("web_search")
+    expect(source).toContain("不得声称已经搜索")
+    expect(source).toContain("未使用联网资料")
+  })
+
+  it("records web_search tool results into context trace", () => {
+    expect(source).toContain("appendWebSearchTrace")
+    expect(source).toContain('event.name !== "web_search"')
+    expect(source).toContain("webSearches")
+  })
+
+  it("records result protocol validation into context trace", () => {
+    expect(source).toContain("buildResultProtocolTrace")
+    expect(source).toContain("resultProtocol:")
+  })
+
+  it("settles running tool calls when the agent session finishes", () => {
+    expect(source).toContain("settleRunningAgentToolCalls")
+    expect(source).toContain("settleRunningAgentToolCalls(record?.toolCalls.length ? record.toolCalls : message.agentToolCalls")
+    expect(source).toContain('settleRunningAgentToolCalls(message.agentToolCalls, "error"')
+  })
+
+  it("routes continue-unfinished normal path through AgentRunner", () => {
+    const continueIndex = source.indexOf("const handleContinueUnfinished")
+    const agentRunnerIndex = source.indexOf("new AgentRunner().run(")
+    const streamChatIndex = source.indexOf("await streamChat(")
+
+    expect(continueIndex).toBeGreaterThan(-1)
+    expect(agentRunnerIndex).toBeGreaterThan(-1)
+    expect(streamChatIndex === -1 || agentRunnerIndex < streamChatIndex).toBe(true)
+  })
+
+  it("routes continue-unfinished context loading through the novel pre-plugin chain", () => {
+    const continueIndex = source.indexOf("const handleContinueUnfinished")
+    const chainIndex = source.indexOf("runNovelPrePluginChain({")
+    const promptIndex = source.indexOf("contextPackToPrompt")
+
+    expect(continueIndex).toBeGreaterThan(-1)
+    expect(chainIndex).toBeGreaterThan(-1)
+    expect(chainIndex).toBeLessThan(promptIndex)
+  })
+
+  it("validates chapter content before confirming draft saves", () => {
+    const confirmIndex = source.indexOf("const handleConfirmToolSave")
+    const validationIndex = source.indexOf("validateChapterBeforeSave", confirmIndex)
+    const confirmDraftIndex = source.indexOf("confirmDraft(project.path", confirmIndex)
+
+    expect(confirmIndex).toBeGreaterThan(-1)
+    expect(validationIndex).toBeGreaterThan(confirmIndex)
+    expect(validationIndex).toBeLessThan(confirmDraftIndex)
+  })
+})
+
+describe("chat-panel chapter plan confirm integration (Stage C)", () => {
+  it("imports ChapterPlanConfirmDialog and helper functions", () => {
+    expect(source).toContain("ChapterPlanConfirmDialog")
+    expect(source).toContain("extractChapterPlan")
+    expect(source).toContain("buildPlanConfirmMessage")
+    expect(source).toContain("buildPlanSkipMessage")
+    expect(source).toContain('from "./chapter-plan-confirm-dialog"')
+  })
+
+  it("declares pendingChapterPlan state with planContent, fullContent and conversationId", () => {
+    expect(source).toContain("pendingChapterPlan")
+    expect(source).toContain("planContent")
+    expect(source).toContain("fullContent")
+    expect(source).toContain("conversationId")
+    expect(source).toContain("chapterPlanResolverRef")
+  })
+
+  it("provides closeChapterPlanDialog and requestChapterPlanConfirm helpers", () => {
+    expect(source).toContain("closeChapterPlanDialog")
+    expect(source).toContain("requestChapterPlanConfirm")
+    expect(source).toContain('new Promise<"confirm" | "skip" | "cancel" | { modify: string }>')
+  })
+
+  it("detects chapter_plan marker inside onDone callback", () => {
+    const onDoneIndex = source.indexOf("onDone: () => {")
+    expect(onDoneIndex).toBeGreaterThan(-1)
+
+    const afterOnDone = source.slice(onDoneIndex)
+    expect(afterOnDone).toContain("extractChapterPlan")
+  })
+
+  it("skips chapter plan confirmation in fast mode", () => {
+    const onDoneIndex = source.indexOf("onDone: () => {")
+    const afterOnDone = source.slice(onDoneIndex)
+    expect(afterOnDone).toContain('"fast"')
+  })
+
+  it("calls requestChapterPlanConfirm when a plan marker is found", () => {
+    const onDoneIndex = source.indexOf("onDone: () => {")
+    const afterOnDone = source.slice(onDoneIndex)
+    expect(afterOnDone).toContain("requestChapterPlanConfirm")
+  })
+
+  it("builds confirm and skip followup messages using the helper functions", () => {
+    const onDoneIndex = source.indexOf("onDone: () => {")
+    const afterOnDone = source.slice(onDoneIndex)
+    expect(afterOnDone).toContain("buildPlanConfirmMessage")
+    expect(afterOnDone).toContain("buildPlanSkipMessage")
+  })
+
+  it("renders ChapterPlanConfirmDialog in JSX bound to pendingChapterPlan", () => {
+    expect(source).toContain("<ChapterPlanConfirmDialog")
+    expect(source).toContain("pendingChapterPlan.open")
+    expect(source).toContain("pendingChapterPlan.planContent")
+  })
+
+  it("wires dialog actions to closeChapterPlanDialog", () => {
+    expect(source).toContain('closeChapterPlanDialog("confirm")')
+    expect(source).toContain('closeChapterPlanDialog("skip")')
+    expect(source).toContain('closeChapterPlanDialog("cancel")')
+    expect(source).toContain('closeChapterPlanDialog({ modify:')
   })
 })

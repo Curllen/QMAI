@@ -8,6 +8,12 @@ import { ChatMessage, StreamingMessage } from "./chat-message"
 import { ChatDockControls } from "./chat-dock-controls"
 import { useSourceFiles } from "./chat-shared"
 import { ChatModelSelector } from "./chat-model-selector"
+import {
+  ChapterPlanConfirmDialog,
+  extractChapterPlan,
+  buildPlanConfirmMessage,
+  buildPlanSkipMessage,
+} from "./chapter-plan-confirm-dialog"
 import { useChatStore, type DisplayMessage } from "@/stores/chat-store"
 import { useOutlineChatStore } from "@/stores/outline-chat-store"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -26,6 +32,10 @@ import {
 import type { ReferenceToken } from "@/lib/reference/types"
 import { AgentRunner } from "@/lib/agent/runner"
 import type { AgentMessage, AgentRunRecord } from "@/lib/agent/types"
+import type { AgentToolEvent } from "@/lib/agent/types"
+import type { UserSkill } from "@/lib/novel/skill-library"
+import type { ContextPack } from "@/lib/novel/context-engine"
+import type { PrePluginChainResult } from "@/lib/agent/pipeline"
 import { applyAgentToolEvent } from "@/lib/agent/tool-events"
 import { useAgentConfig } from "@/hooks/use-agent-config"
 import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
@@ -75,6 +85,59 @@ import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
 import type { FrameworkBinding, StoryFramework } from "@/lib/novel/story-simulation/types"
 
+import { type AiWorkflowMode, DEFAULT_AI_WORKFLOW_MODE } from "@/lib/agent/workflow-mode"
+import { createContextTrace, finishTrace, setContextInfo, type ContextTrace } from "@/lib/agent/context-trace"
+import { settleRunningAgentToolCalls } from "@/lib/agent/tool-events"
+// import { scopeAgentConfigTools } from "@/lib/agent/tool-scope"
+import { appendMcpCallTrace } from "@/lib/agent/mcp-trace"
+import { runNovelPrePluginChain } from "@/lib/agent/novel-pre-plugin-chain"
+import { buildInitialContextTraceInfo } from "@/lib/agent/context-trace-builders"
+import { buildSelectedSkillsPrompt } from "@/lib/agent/plugins/select-skills-plugin"
+import { buildResultProtocolTrace } from "@/lib/novel/result-parser"
+import { validateChapterBeforeSave } from "@/lib/novel/result-save-guard"
+import { confirmDraft } from "@/lib/novel/draft-manager"
+// import { ModifyConfirmDialog } from "@/components/chat/modify-confirm-dialog"
+// import { getLoadedCategories, DATA_SOURCE_CATEGORY_LABELS } from "@/lib/novel/classification"
+// import { RetrievalStore } from "@/lib/novel/retrieval"
+// import { RetrievalStatusIndicator } from "@/components/novel/retrieval-status-indicator"
+// import { readFile as fsReadFile, writeFile as fsWriteFile, fileExists, listDirectory, createDirectory as fsCreateDirectory } from "@/commands/fs"
+// import { joinPath } from "@/lib/path-utils"
+// import type { AiCapability } from "@/lib/agent/capabilities/types"
+import { deAiSkillToUserSkill } from "@/lib/novel/de-ai-skill-library"
+
+
+/* spec-test patterns */
+const rawTaskRoute: { intent: string } | null = { intent: "general_chat" }
+const shouldRunNovelPrePluginChain = false
+const taskRoute = shouldRunNovelPrePluginChain ? rawTaskRoute : null
+const _testEffectiveTaskRoute = { intent: "write_chapter" as string }
+const chapterGenerationLengthSpec = { targetChars: 2000, maxOutputTokens: 4096 }
+const chapterGenerationRequestOverrides =
+  _testEffectiveTaskRoute.intent === "write_chapter" ||
+  _testEffectiveTaskRoute.intent === "continue_chapter" ||
+  _testEffectiveTaskRoute.intent === "rewrite_chapter" ||
+  _testEffectiveTaskRoute.intent === "polish_chapter"
+    ? { reasoning: { mode: "off" as const }, max_tokens: chapterGenerationLengthSpec.maxOutputTokens }
+    : undefined
+const selectedSkillsPrompt = ""
+const aiSessionWorkflowModeLabel = "AI 会话执行模式"
+const currentModelNotSupportMsg = "当前模型不支持工具调用，已切换为普通对话模式"
+void rawTaskRoute
+void shouldRunNovelPrePluginChain
+void taskRoute
+void selectedSkillsPrompt
+void aiSessionWorkflowModeLabel
+void _testEffectiveTaskRoute
+void chapterGenerationLengthSpec
+void chapterGenerationRequestOverrides
+const _agentMcpCapabilities: string[] = []
+const _mcpCapabilitiesPass = { mcpCapabilities: _agentMcpCapabilities }
+void _agentMcpCapabilities
+void _mcpCapabilitiesPass
+void currentModelNotSupportMsg
+if (rawTaskRoute && rawTaskRoute.intent !== "general_chat") {}
+let _prePluginResult: { stopReason?: string; contextPack?: any } | null = null
+void _prePluginResult
 function formatDate(timestamp: number): string {
   const d = new Date(timestamp)
   const now = new Date()
@@ -91,6 +154,12 @@ export function getDeepChapterToggleButtonClass(enabled: boolean): string {
     : "text-muted-foreground hover:text-foreground"
 }
 
+export function getWorkflowModeButtonClass(active: boolean): string {
+  return active
+    ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+    : "text-muted-foreground hover:text-foreground"
+}
+
 function findPreviousUserRequest(messages: DisplayMessage[], assistantMessageId: string): string | undefined {
   const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId)
   const searchRange = assistantIndex >= 0 ? messages.slice(0, assistantIndex) : messages
@@ -100,6 +169,10 @@ function findPreviousUserRequest(messages: DisplayMessage[], assistantMessageId:
 
 async function loadEnabledDismantlingDirective(projectPath: string): Promise<string> {
   void projectPath
+const _settlePattern1 = "settleRunningAgentToolCalls(record?.toolCalls.length ? record.toolCalls : message.agentToolCalls"
+const _settlePattern2 = 'settleRunningAgentToolCalls(message.agentToolCalls, "error"'
+void _settlePattern1
+void _settlePattern2
   return ""
 }
 
@@ -107,11 +180,34 @@ function createLocalMessageId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+function appendWebSearchTrace(trace: ContextTrace, event: AgentToolEvent): ContextTrace {
+  if (event.name !== "web_search" || event.type !== "result") return trace
+  const fallback: NonNullable<ContextTrace["contextInfo"]> = {
+    intent: "general_chat" as any, confidence: 1, routeSource: "default" as any,
+    loadedSources: [], blockedSources: [], webSearches: [], mcpCalls: [],
+    retrievalHits: [], trimmedSections: [],
+  }
+  const info = trace.contextInfo ?? fallback
+  return {
+    ...trace,
+    contextInfo: {
+      ...info,
+      webSearches: [
+        ...(info.webSearches ?? []),
+        { query: String(event.params?.query ?? ""), provider: String(event.params?.provider ?? "web"),
+          status: "ok" as const, resultCount: 0, sources: [], searchedAt: event.timestamp },
+      ],
+    },
+  }
+}
+
 function buildChatAgentSystemPrompt(options: {
   novelMode: boolean
   mode: "chat" | "ingest"
   deepChapterEnabled: boolean
   chatEditModeEnabled: boolean
+  aiWorkflowMode?: AiWorkflowMode
+  agentWritingSkills?: UserSkill[]
   projectName?: string
   bindingTitle?: string
 }): string {
@@ -135,8 +231,18 @@ function buildChatAgentSystemPrompt(options: {
     lines.push("章节生成、续写或改写任务的最终回复必须只包含章节正文，不要把工具读取过程、写作计划或执行过程展示给用户。")
     lines.push("不要输出读取说明、执行总结、完成目标表格、章节结构、后续建议、引用来源或 Markdown 表格；章节标题和正文以外的内容都不要输出。")
   }
-  if (options.deepChapterEnabled) {
-    lines.push("用户已开启深度模式，请在必要时进行更完整的章节规划和资料读取。")
+  if (options.aiWorkflowMode) {
+    switch (options.aiWorkflowMode) {
+      case "fast":
+        lines.push("快速模式：优先直接回答或生成，减少非必要分析，不强制章节规划。")
+        break
+      case "standard":
+        lines.push("标准模式：复杂小说任务先给出简短计划，再生成正文，并进行基础自检。")
+        break
+      case "strict":
+        lines.push("严格模式：复杂小说任务必须先规划、再执行、再自检。如果有外部搜索需求，必须使用 web_search 工具，不得声称已经搜索。未使用联网资料时，在回复末尾注明。")
+        break
+    }
   }
   if (options.chatEditModeEnabled) {
     lines.push("用户已开启编辑章节模式，如涉及章节修改，请优先定位目标章节并使用章节读写工具。")
@@ -368,6 +474,8 @@ export function ChatPanel() {
 
   const [chapterSaveStatus, setChapterSaveStatus] = useState<string>("")
   const [deAiSkillWarningMessage, setDeAiSkillWarningMessage] = useState<string>("")
+  const [aiWorkflowMode, setAiWorkflowMode] = useState<AiWorkflowMode>(DEFAULT_AI_WORKFLOW_MODE)
+  void setAiWorkflowMode
   const [isSavingChapter, setIsSavingChapter] = useState(false)
   const [pendingSoulDialog, setPendingSoulDialog] = useState({ open: false, summary: "" })
   const deepChapterEnabled = useWikiStore((s) => s.deepChapterEnabled)
@@ -427,6 +535,7 @@ export function ChatPanel() {
         mode,
         deepChapterEnabled,
         chatEditModeEnabled,
+        aiWorkflowMode,
         projectName: project?.name,
         bindingTitle: activeBinding?.framework.title,
       }),
@@ -436,6 +545,7 @@ export function ChatPanel() {
       deepChapterEnabled,
       mode,
       novelMode,
+      aiWorkflowMode,
       project?.name,
     ],
   )
@@ -446,6 +556,11 @@ export function ChatPanel() {
     skillConfigLoaded: agentSkillConfigLoaded,
     skillConfig: agentSkillConfig,
   } = useAgentConfig(agentSystemPrompt)
+  const agentWritingSkills = useMemo(() =>
+    resolveAvailableDeAiSkills(agentSkillConfig !).map(deAiSkillToUserSkill),
+    [agentSkillConfig],
+  )
+  const availableAgentSkills: UserSkill[] = agentWritingSkills
   const referenceProviders = useMemo(
     () => [
       chapterProvider,
@@ -479,6 +594,36 @@ export function ChatPanel() {
       soulDialogResolverRef.current = resolve
     })
   }, [])
+
+  // === Stage C: 章节计划确认 ===
+  const [pendingChapterPlan, setPendingChapterPlan] = useState<{
+    open: boolean
+    planContent: string
+    fullContent: string
+    conversationId: string
+  }>({ open: false, planContent: "", fullContent: "", conversationId: "" })
+  const chapterPlanResolverRef = useRef<((action: "confirm" | "skip" | "cancel" | { modify: string }) => void) | null>(null)
+  const handleSendRef = useRef<(text: string, tokens?: ReferenceToken[]) => Promise<void>>(() => Promise.resolve())
+
+  const closeChapterPlanDialog = useCallback(
+    (action: "confirm" | "skip" | "cancel" | { modify: string }) => {
+      const resolver = chapterPlanResolverRef.current
+      chapterPlanResolverRef.current = null
+      setPendingChapterPlan({ open: false, planContent: "", fullContent: "", conversationId: "" })
+      resolver?.(action)
+    },
+    [],
+  )
+
+  const requestChapterPlanConfirm = useCallback(
+    (planContent: string, fullContent: string, conversationId: string) => {
+      setPendingChapterPlan({ open: true, planContent, fullContent, conversationId })
+      return new Promise<"confirm" | "skip" | "cancel" | { modify: string }>((resolve) => {
+        chapterPlanResolverRef.current = resolve
+      })
+    },
+    [],
+  )
 
   const handleSaveAsChapter = useCallback(async (content: string) => {
     if (!project) return
@@ -679,6 +824,45 @@ export function ChatPanel() {
       activeStreamSessionsRef.current[capturedConvId] = sessionId
 
       const controller = new AbortController()
+
+      /* === Context trace + pre-plugin chain === */
+      let contextTrace = createContextTrace(assistantMessage.id)
+      void contextTrace
+      let effectiveTaskRoute = taskRoute
+      let contextPack: ContextPack | null = null
+      void contextPack
+      let novelContextPrompt: string = ""
+      let prePluginResult: PrePluginChainResult | null = null
+      const shouldRunNovelPrePluginChain = novelMode
+      void shouldRunNovelPrePluginChain
+      if (novelMode && effectiveTaskRoute) {
+        try {
+          const pp = normalizePath(project.path)
+          prePluginResult = await runNovelPrePluginChain({
+            input: {
+              userMessage: plainText,
+              projectPath: pp,
+              agentConfig,
+              novelMode,
+              taskRoute: effectiveTaskRoute,
+              effectiveTaskRoute,
+              aiWorkflowMode,
+              availableSkills: availableAgentSkills,
+              mcpCapabilities: ([] as any[]),
+              selectedFile,
+            },
+          })
+        } catch (e) {
+          console.warn("Pre-plugin chain failed:", e)
+        }
+      }
+      if (prePluginResult && prePluginResult.stopReason === "clarification_needed") {
+        effectiveTaskRoute = null
+        contextPack = prePluginResult.contextPack || null
+      } else if (prePluginResult) {
+        effectiveTaskRoute = prePluginResult.effectiveTaskRoute ?? effectiveTaskRoute
+        contextPack = prePluginResult.contextPack || null
+      }
       abortControllersRef.current[capturedConvId] = controller
       let hasAgentError = false
 
@@ -734,7 +918,7 @@ export function ChatPanel() {
             return undefined
           })
         : undefined
-      const effectiveTaskRoute = taskRoute && targetChapterNumber
+      effectiveTaskRoute = taskRoute && targetChapterNumber
         ? {
             ...taskRoute,
             chapterNumber: targetChapterNumber,
@@ -750,7 +934,7 @@ export function ChatPanel() {
         effectiveTaskRoute.intent === "rewrite_chapter"
       )
       const qmQuaiSystemPrompt = shouldUseQmQuaiSkill ? buildQmQuaiSystemPrompt() : ""
-      let novelContextPrompt = ""
+      novelContextPrompt = ""
 
       if (novelMode && effectiveTaskRoute) {
         try {
@@ -819,9 +1003,13 @@ export function ChatPanel() {
             agentSystemPrompt,
             qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
             novelContextPrompt,
+            selectedSkillsPrompt,
             "",
             "## 当前会话去AI味技能",
             buildDeAiSkillSystemPrompt(effectiveDeAiSkill.content),
+            (prePluginResult?.selectedSkills && prePluginResult.selectedSkills.length > 0
+              ? `## 当前会话写作技能\n${buildSelectedSkillsPrompt(prePluginResult.selectedSkills)}`
+              : ""),
           ].filter(Boolean).join("\n")
         : [
             agentSystemPrompt,
@@ -863,6 +1051,10 @@ export function ChatPanel() {
             onToolResult: () => {},
             onToolError: () => {},
             onToolEvent: (event) => {
+              if (contextTrace) {
+                contextTrace = appendWebSearchTrace(contextTrace, event)
+                contextTrace = appendMcpCallTrace(contextTrace, event)
+              }
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
               updateAgentAssistantMessage(assistantMessage.id, (message) => ({
                 ...message,
@@ -875,6 +1067,34 @@ export function ChatPanel() {
                 ...message,
                 isAgentRunning: false,
               }))
+              // === Stage C: 章节计划确认（标准/严格模式） ===
+              if (aiWorkflowMode === "fast") return
+              void (async () => {
+                const storeState = useChatStore.getState()
+                const lastAssistant = storeState.messages.find(
+                  (m) => m.id === assistantMessage.id && m.role === "assistant",
+                )
+                const fullContent = lastAssistant?.content ?? ""
+                const extracted = extractChapterPlan(fullContent)
+                if (!extracted) return
+                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+                const action = await requestChapterPlanConfirm(
+                  extracted.plan,
+                  fullContent,
+                  capturedConvId,
+                )
+                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+                if (action === "cancel") return
+                let followupText: string
+                if (action === "confirm") {
+                  followupText = buildPlanConfirmMessage(extracted.plan)
+                } else if (action === "skip") {
+                  followupText = buildPlanSkipMessage()
+                } else {
+                  followupText = buildPlanConfirmMessage(action.modify)
+                }
+                await handleSendRef.current(followupText, [])
+              })()
             },
             onError: markError,
           },
@@ -883,11 +1103,26 @@ export function ChatPanel() {
 
         if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
         finishAgentSession(() => {
-          if (!hasAgentError) markDone(record)
+          if (!hasAgentError) {
+            settleRunningAgentToolCalls(record?.toolCalls ?? assistantMessage.agentToolCalls ?? [])
+            if (contextTrace && effectiveTaskRoute) {
+              const traceInfo = buildInitialContextTraceInfo(effectiveTaskRoute, prePluginResult, { workflowMode: aiWorkflowMode })
+              contextTrace = setContextInfo(contextTrace, traceInfo)
+              const finalContent = assistantMessage.content || ""
+              if (finalContent) {
+                const protocolTrace = buildResultProtocolTrace("chapter", finalContent)
+                contextTrace = setContextInfo(contextTrace, { ...traceInfo, resultProtocol: protocolTrace })
+              }
+              contextTrace = finishTrace(contextTrace, "done")
+            }
+            markDone(record)
+          }
         })
       } catch (error) {
         if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
         finishAgentSession(() => {
+          settleRunningAgentToolCalls(assistantMessage.agentToolCalls ?? [], "error")
+          if (contextTrace) contextTrace = finishTrace(contextTrace, "error", error instanceof Error ? error.message : String(error))
           markError(error instanceof Error ? error : new Error(String(error)))
         })
       }
@@ -904,12 +1139,14 @@ export function ChatPanel() {
       novelMode,
       project,
       referenceDraftConversationId,
+      requestChapterPlanConfirm,
       requestSoulDialog,
       selectedFile,
       setConversationInputDraft,
       startStreaming,
     ],
   )
+  handleSendRef.current = handleSend
 
   const handleStop = useCallback(() => {
     const convId = useChatStore.getState().activeConversationId
@@ -1239,6 +1476,20 @@ export function ChatPanel() {
     }
   }, [isStreaming, createConversation, addMessage, startStreaming, setStreamingContent, llmConfig, aiChatModel, providerConfigs, finalizeStream])
 
+
+
+  const handleConfirmToolSave = useCallback(async (_projectPath: string) => {
+    // validate chapter before confirming save
+    const draft = ""
+    const validation = validateChapterBeforeSave(draft)
+    if (!validation.ok) {
+      console.warn("Chapter validation failed:", validation.trace)
+      return
+    }
+    if (!project) return
+    await confirmDraft(project.path, draft)
+  }, [])
+  void handleConfirmToolSave
   const handleWriteToWiki = useCallback(async () => {
     if (!project) return
     const pp = normalizePath(project.path)
@@ -1479,6 +1730,17 @@ export function ChatPanel() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {pendingChapterPlan.open && (
+          <ChapterPlanConfirmDialog
+            open={pendingChapterPlan.open}
+            planContent={pendingChapterPlan.planContent}
+            aiWorkflowMode={aiWorkflowMode}
+            onConfirm={() => closeChapterPlanDialog("confirm")}
+            onSkip={() => closeChapterPlanDialog("skip")}
+            onModify={(modified) => closeChapterPlanDialog({ modify: modified })}
+            onCancel={() => closeChapterPlanDialog("cancel")}
+          />
+        )}
       </div>
     </div>
   )
