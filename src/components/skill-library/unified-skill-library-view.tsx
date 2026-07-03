@@ -53,7 +53,6 @@ export function UnifiedSkillLibrarySidebarPanel() {
 
   return (
     <div data-testid="unified-skill-library-sidebar" className="flex h-full flex-col overflow-hidden">
-      <SkillLibraryTabs compact />
       <div className="min-h-0 flex-1 overflow-hidden">
         {showWritingSkill ? <WritingSkillLibrarySidebarPanel /> : <SkillLibrarySidebarPanel />}
       </div>

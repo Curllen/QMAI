@@ -38,6 +38,8 @@ const STRICT_WRITING_SKILL_NAMES = [
 
 const FAST_WRITING_SKILL_NAMES = ["正文输出协议", "去AI味"]
 
+const EXCLUDED_FROM_FALLBACK = ["去AI味"]
+
 export function createSelectSkillsPlugin(): PrePlugin {
   return {
     name: "select_skills",
@@ -119,10 +121,12 @@ function selectPreferredNames(skills: UserSkill[], names: string[], limit: numbe
 
   const fallback = skills
     .filter((skill) => isWritingSkill(skill))
+    .filter((skill) => !EXCLUDED_FROM_FALLBACK.some((name) => skill.name.includes(name)))
+    .sort((a, b) => (a.priority ?? 50) - (b.priority ?? 50))
 
   if (selected.length > 0) {
     if (!fillWithRelevant) return selected.slice(0, limit)
-    for (const skill of fallback.filter((item) => item.source === "uploaded")) {
+    for (const skill of fallback) {
       if (selected.length >= limit) break
       if (!selected.some((item) => item.id === skill.id)) {
         selected.push(skill)
@@ -163,6 +167,7 @@ function scoreSkill(
   score += skill.stages.filter((stage) => options.stages.includes(stage)).length * 2
   if (skill.modes.includes(mode)) score += 1
   if (skill.source === "built-in") score += 0.5
+  score += (100 - (skill.priority ?? 50)) * 0.1
   return score
 }
 

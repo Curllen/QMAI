@@ -51,6 +51,7 @@ describe("SelectSkillsPlugin", () => {
       "冲突升级",
       "剧情自检",
       "正文输出协议",
+      "世界观资料",
     ])
   })
 
@@ -73,6 +74,7 @@ describe("SelectSkillsPlugin", () => {
           modes: ["standard", "strict"],
           content: "三次转折，四次震惊。",
           source: "uploaded",
+          priority: 25,
         }),
       ],
       taskRoute: { intent: "write_chapter", confidence: 0.95, extractedParams: {} },
@@ -124,6 +126,7 @@ describe("SelectSkillsPlugin", () => {
       "伏笔管理",
       "节奏检查",
       "结尾钩子",
+      "世界观资料",
     ])
   })
 
