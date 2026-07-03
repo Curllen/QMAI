@@ -26,6 +26,9 @@ const STANDARD_WRITING_SKILL_NAMES = [
   "冲突升级",
   "剧情自检",
   "正文输出协议",
+  "去AI味",
+  "基础去AI味",
+  "审稿返修",
 ]
 
 const STRICT_WRITING_SKILL_NAMES = [
@@ -37,6 +40,16 @@ const STRICT_WRITING_SKILL_NAMES = [
 ]
 
 const FAST_WRITING_SKILL_NAMES = ["正文输出协议", "去AI味"]
+
+interface SkillSelectionProfile {
+  preferredNames?: string[]
+  kinds: SkillKind[]
+  stages: SkillStage[]
+  keywords: string[]
+  limit: number
+  fastHighImpactOnly?: boolean
+  requireKindOrKeyword?: boolean
+}
 
 export function createSelectSkillsPlugin(): PrePlugin {
   return {
@@ -53,7 +66,7 @@ export function createSelectSkillsPlugin(): PrePlugin {
 
       const mode = input.aiWorkflowMode ?? "standard"
       return {
-        selectedSkills: selectSkillsForRoute(availableSkills, route.intent, mode),
+        selectedSkills: selectSkillsForRoute(availableSkills, route.intent, mode, input.userMessage),
       }
     },
   }
@@ -63,34 +76,38 @@ export function selectSkillsForRoute(
   skills: UserSkill[],
   intent: NovelTaskIntent,
   mode: AiWorkflowMode,
+  userMessage = "",
 ): UserSkill[] {
   const modeSkills = skills.filter((skill) => skill.modes.includes(mode))
   if (modeSkills.length === 0) return []
 
   if (WRITING_INTENTS.has(intent)) {
-    return selectWritingSkills(modeSkills, mode)
+    return selectWritingSkills(modeSkills, mode, userMessage)
   }
 
   if (intent === "generate_outline") {
-    return selectByShape(modeSkills, mode, {
+    return selectByProfile(modeSkills, mode, userMessage, {
       kinds: ["planning", "structure", "output"],
       stages: ["planning", "output"],
+      keywords: ["大纲", "主线", "世界观", "人物", "动机", "冲突", "伏笔", "章节", "计划"],
       limit: mode === "strict" ? 8 : 5,
     })
   }
 
   if (REVIEW_INTENTS.has(intent)) {
-    return selectByShape(modeSkills, mode, {
+    return selectByProfile(modeSkills, mode, userMessage, {
       kinds: ["review", "knowledge", "output"],
       stages: ["review", "output"],
+      keywords: ["审稿", "检查", "问题", "修改", "返修", "节奏", "逻辑", "人物", "伏笔", "去AI"],
       limit: mode === "strict" ? 8 : 5,
     })
   }
 
   if (QUERY_INTENTS.has(intent)) {
-    return selectByShape(modeSkills, mode, {
+    return selectByProfile(modeSkills, mode, userMessage, {
       kinds: ["knowledge", "review", "output"],
       stages: ["planning", "review", "output"],
+      keywords: ["查询", "检索", "资料", "世界观", "人物", "伏笔", "时间线", "设定"],
       limit: mode === "strict" ? 6 : 3,
     })
   }
@@ -98,72 +115,109 @@ export function selectSkillsForRoute(
   return []
 }
 
-function selectWritingSkills(skills: UserSkill[], mode: AiWorkflowMode): UserSkill[] {
+function selectWritingSkills(skills: UserSkill[], mode: AiWorkflowMode, userMessage: string): UserSkill[] {
   if (mode === "fast") {
-    return selectPreferredNames(skills, FAST_WRITING_SKILL_NAMES, 3, false)
+    return selectByProfile(skills, mode, userMessage, {
+      preferredNames: FAST_WRITING_SKILL_NAMES,
+      kinds: ["output", "style", "rewrite"],
+      stages: ["output", "rewrite"],
+      keywords: ["正文", "输出", "去AI", "AI味", "改写"],
+      limit: 3,
+      fastHighImpactOnly: true,
+      requireKindOrKeyword: true,
+    })
   }
   if (mode === "strict") {
-    return selectPreferredNames(skills, STRICT_WRITING_SKILL_NAMES, 12)
+    return selectByProfile(skills, mode, userMessage, {
+      preferredNames: STRICT_WRITING_SKILL_NAMES,
+      kinds: ["planning", "structure", "review", "output", "style", "rewrite"],
+      stages: ["planning", "drafting", "review", "rewrite", "output"],
+      keywords: ["章节", "正文", "剧情", "人物", "动机", "冲突", "伏笔", "节奏", "结尾", "钩子", "审稿", "返修", "去AI", "AI味", "输出"],
+      limit: 12,
+      requireKindOrKeyword: true,
+    })
   }
-  return selectPreferredNames(skills, STANDARD_WRITING_SKILL_NAMES, 8)
+  return selectByProfile(skills, mode, userMessage, {
+    preferredNames: STANDARD_WRITING_SKILL_NAMES,
+    kinds: ["planning", "structure", "review", "output", "style", "rewrite"],
+    stages: ["planning", "drafting", "review", "rewrite", "output"],
+    keywords: ["章节", "正文", "剧情", "人物", "动机", "冲突", "审稿", "返修", "去AI", "AI味", "输出", "承接", "计划"],
+    limit: 8,
+    requireKindOrKeyword: true,
+  })
 }
 
-function selectPreferredNames(skills: UserSkill[], names: string[], limit: number, fillWithRelevant = true): UserSkill[] {
-  const selected: UserSkill[] = []
-  for (const name of names) {
-    const skill = skills.find((item) => item.name.includes(name))
-    if (skill && !selected.some((item) => item.id === skill.id)) {
-      selected.push(skill)
-    }
-  }
-
-  const fallback = skills
-    .filter((skill) => isWritingSkill(skill))
-
-  if (selected.length > 0) {
-    if (!fillWithRelevant) return selected.slice(0, limit)
-    for (const skill of fallback.filter((item) => item.source === "uploaded")) {
-      if (selected.length >= limit) break
-      if (!selected.some((item) => item.id === skill.id)) {
-        selected.push(skill)
-      }
-    }
-    return selected.slice(0, limit)
-  }
-
-  return fallback.slice(0, limit)
-}
-
-function selectByShape(
+function selectByProfile(
   skills: UserSkill[],
   mode: AiWorkflowMode,
-  options: { kinds: SkillKind[]; stages: SkillStage[]; limit: number },
+  userMessage: string,
+  profile: SkillSelectionProfile,
 ): UserSkill[] {
   return skills
-    .filter((skill) =>
-      skill.kind.some((kind) => options.kinds.includes(kind))
-      || skill.stages.some((stage) => options.stages.includes(stage)),
-    )
-    .sort((a, b) => scoreSkill(b, mode, options) - scoreSkill(a, mode, options))
-    .slice(0, options.limit)
-}
-
-function isWritingSkill(skill: UserSkill): boolean {
-  return skill.kind.some((kind) => kind === "planning" || kind === "structure" || kind === "review" || kind === "output" || kind === "style")
-    || skill.stages.some((stage) => stage === "planning" || stage === "drafting" || stage === "review" || stage === "output" || stage === "rewrite")
+    .map((skill, index) => ({
+      skill,
+      index,
+      score: scoreSkill(skill, mode, userMessage, profile),
+    }))
+    .filter((item) => item.score > 0)
+    .filter((item) => !profile.fastHighImpactOnly || isFastHighImpactSkill(item.skill))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, profile.limit)
+    .map((item) => item.skill)
 }
 
 function scoreSkill(
   skill: UserSkill,
   mode: AiWorkflowMode,
-  options: { kinds: SkillKind[]; stages: SkillStage[] },
+  userMessage: string,
+  profile: SkillSelectionProfile,
 ): number {
+  const preferredScore = scorePreferredName(skill, profile.preferredNames ?? [])
+  const kindMatches = skill.kind.filter((kind) => profile.kinds.includes(kind)).length
+  const stageMatches = skill.stages.filter((stage) => profile.stages.includes(stage)).length
+  const keywordHits = countKeywordHits(skill, [...profile.keywords, ...extractMessageKeywords(userMessage)])
+  const relevant = preferredScore > 0
+    || kindMatches > 0
+    || keywordHits > 0
+    || (!profile.requireKindOrKeyword && stageMatches > 0)
+  if (!relevant) return 0
+
   let score = 0
-  score += skill.kind.filter((kind) => options.kinds.includes(kind)).length * 3
-  score += skill.stages.filter((stage) => options.stages.includes(stage)).length * 2
-  if (skill.modes.includes(mode)) score += 1
-  if (skill.source === "built-in") score += 0.5
+  score += preferredScore
+  score += kindMatches * 30
+  score += stageMatches * 20
+  score += keywordHits * 6
+  if (skill.modes.includes(mode)) score += 5
+  if (skill.source === "uploaded" || skill.source === "project") score += 12
+  if (skill.source === "built-in") score += 2
   return score
+}
+
+function scorePreferredName(skill: UserSkill, preferredNames: string[]): number {
+  for (let index = 0; index < preferredNames.length; index += 1) {
+    const preferredName = preferredNames[index]
+    if (skill.name === preferredName) return 10000 - index * 100
+    if (skill.name.includes(preferredName)) return 9000 - index * 100
+  }
+  return 0
+}
+
+function countKeywordHits(skill: UserSkill, keywords: string[]): number {
+  const text = `${skill.name}\n${skill.description}\n${skill.content}`.toLocaleLowerCase()
+  const uniqueKeywords = [...new Set(keywords.map((keyword) => keyword.trim()).filter(Boolean))]
+  return uniqueKeywords.filter((keyword) => text.includes(keyword.toLocaleLowerCase())).length
+}
+
+function extractMessageKeywords(userMessage: string): string[] {
+  return userMessage
+    .split(/[\s,，。！？!?、:：；;（）()《》「」"']+/)
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => keyword.length >= 2)
+}
+
+function isFastHighImpactSkill(skill: UserSkill): boolean {
+  return skill.kind.some((kind) => kind === "output" || kind === "style" || kind === "rewrite")
+    || skill.stages.some((stage) => stage === "output" || stage === "rewrite")
 }
 
 export function buildSelectedSkillsPrompt(skills: UserSkill[] | undefined): string {

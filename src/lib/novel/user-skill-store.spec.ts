@@ -146,6 +146,59 @@ it("ensureBuiltinSkills adds missing built-in skills to empty config", () => {
   expect(names).toContain("结尾钩子")
   expect(names).toContain("剧情自检")
   expect(names).toContain("正文输出协议")
+  expect(names).toContain("基础去AI味")
+  expect(names).toContain("审稿返修")
+  expect(names).toContain("返修后复审")
+})
+
+it("keeps existing built-in IDs stable while adding new writing skills", () => {
+  const result = ensureBuiltinSkills(normalizeUserSkillConfig(null))
+  const builtinIds = result.skills.filter((s) => s.source === "built-in").map((s) => s.id)
+
+  expect(builtinIds).toEqual(expect.arrayContaining([
+    "builtin:chapter-connection",
+    "builtin:next-chapter-plan",
+    "builtin:mainline-check",
+    "builtin:character-motivation",
+    "builtin:conflict-escalation",
+    "builtin:foreshadowing-management",
+    "builtin:rhythm-check",
+    "builtin:ending-hook",
+    "builtin:plot-self-check",
+    "builtin:output-protocol",
+    "builtin:basic-de-ai",
+    "builtin:review-revision",
+    "builtin:post-revision-review",
+  ]))
+})
+
+it("ensureBuiltinSkills preserves uploaded skills when inserting new built-ins", () => {
+  const result = ensureBuiltinSkills(normalizeUserSkillConfig({
+    selectedSkillId: "skill:uploaded",
+    disabledSkillIds: [],
+    skills: [{
+      id: "skill:uploaded",
+      name: "项目专用节奏",
+      description: "只服务当前项目。",
+      kind: ["structure"],
+      stages: ["planning", "drafting"],
+      modes: ["standard", "strict"],
+      content: "保留项目自定义节奏规则。",
+      source: "uploaded",
+    }],
+  }))
+
+  expect(result.selectedSkillId).toBe("skill:uploaded")
+  expect(result.skills.find((s) => s.id === "skill:uploaded")).toMatchObject({
+    name: "项目专用节奏",
+    source: "uploaded",
+  })
+  expect(result.skills.map((s) => s.name)).toEqual(expect.arrayContaining([
+    "基础去AI味",
+    "审稿返修",
+    "返修后复审",
+    "项目专用节奏",
+  ]))
 })
 
 it("ensureBuiltinSkills does not add duplicates if built-in skills already exist", () => {
