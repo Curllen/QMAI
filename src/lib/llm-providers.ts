@@ -555,8 +555,10 @@ function buildAnthropicBodyWithReasoning(
           ? 4096
         : 8192
   const budgetTokens = Math.max(1024, budget)
-  if ((body.max_tokens as number) <= budgetTokens) {
-    body.max_tokens = budgetTokens + 1
+  const minAnswerTokens = 4096
+  const minTotalTokens = budgetTokens + minAnswerTokens
+  if ((body.max_tokens as number) < minTotalTokens) {
+    body.max_tokens = minTotalTokens
   }
   body.thinking = { type: "enabled", budget_tokens: budgetTokens }
   delete body.temperature

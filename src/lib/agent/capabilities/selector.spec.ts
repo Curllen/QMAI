@@ -117,6 +117,23 @@ describe("AI capability selector", () => {
     ]))
   })
 
+  it("selects chapter workflow tool for chapter writing intents", () => {
+    const capabilities = buildAvailableCapabilities({
+      toolNames: ["read_chapter", "run_chapter_workflow"],
+      selectedSkills: [],
+      mcpCapabilities: [],
+    })
+
+    const selected = selectCapabilities({
+      capabilities,
+      intent: "write_chapter",
+      mode: "standard",
+      userMessage: "生成第3章",
+    })
+
+    expect(selected.map((item) => item.toolName)).toContain("run_chapter_workflow")
+  })
+
   it("allows strict knowledge tasks to select future MCP placeholders without executing MCP", () => {
     const capabilities = [
       ...buildBuiltInToolCapabilities(toolNames),

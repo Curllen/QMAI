@@ -35,13 +35,19 @@ describe("chat-panel agent reference integration", () => {
     expect(source).not.toContain('from "./chat-input"')
   })
 
-  it("routes sends through AgentRunner and stores reference/tool metadata", () => {
+  it("routes sends through runAiChatSession and stores reference/tool metadata", () => {
     expect(source).toContain("useAgentConfig")
-    expect(source).toContain("new AgentRunner()")
+    expect(source).toContain("runAiChatSession")
     expect(source).toContain("attachedReferences")
     expect(source).toContain("isAgentRunning")
     expect(source).toContain("agentToolCalls")
     expect(source).toContain("当前模型不支持工具调用，已切换为普通对话模式")
+  })
+
+  it("delegates AI execution to runAiChatSession", () => {
+    expect(source).toContain("runAiChatSession")
+    expect(source).not.toContain("if (novelMode && isChapterGenerationRouteIntent(effectiveTaskRoute?.intent))")
+    expect(source).not.toContain("const result = await runDeepChapterGeneration(")
   })
 
   it("scopes reference input drafts to the active conversation", () => {
@@ -84,17 +90,68 @@ describe("chat-panel agent reference integration", () => {
     expect(source).not.toContain("用户已开启深度模式，请在必要时进行更完整的章节规划和资料读取。")
   })
 
-  it("disables model reasoning and reserves enough output tokens for chapter generation", () => {
-    expect(source).toContain("chapterGenerationRequestOverrides")
-    expect(source).toContain('reasoning: { mode: "off" as const }')
-    expect(source).toContain("max_tokens: chapterGenerationLengthSpec.maxOutputTokens")
+  it("keeps Plan Execute as an independent switch outside fast standard strict modes", () => {
+    expect(source).toContain("planExecuteEnabled")
+    expect(source).toContain("setPlanExecuteEnabled")
+    expect(source).toContain("aiSessionPlanExecuteLabel")
+    expect(source).toContain("计划执行")
+    expect(source).toContain("aria-pressed={planExecuteEnabled}")
+  })
+
+  it("injects Plan Execute policy only when the independent switch is enabled", () => {
+    expect(source).toContain("buildPlanExecutePolicyPrompt")
+    expect(source).toContain("options.planExecuteEnabled")
+    expect(source).toContain("run_chapter_workflow")
+    expect(source).not.toContain("标准模式：复杂小说任务先给出简短计划")
+    expect(source).not.toContain("严格模式：复杂小说任务必须先规划")
+  })
+
+  it("makes standard mode include final simple review and de-AI polish without implying Plan Execute", () => {
+    expect(source).toContain("标准模式：读取必要上下文，生成正文后执行基础自检与简单去AI味。")
+    expect(source).not.toContain("标准模式：复杂小说任务先给出简短计划")
+  })
+
+  it("keeps configured reasoning without imposing an app-side output token cap for chapter generation", () => {
+    expect(source).not.toContain("chapterGenerationRequestOverrides")
+    expect(source).not.toContain('reasoning: { mode: "off" as const }')
+    expect(source).not.toContain("max_tokens: chapterGenerationLengthSpec.maxOutputTokens")
     expect(source).toContain('effectiveTaskRoute.intent === "write_chapter"')
     expect(source).toContain('effectiveTaskRoute.intent === "continue_chapter"')
     expect(source).toContain('effectiveTaskRoute.intent === "rewrite_chapter"')
   })
 
+  it("routes chapter writing tasks through the ReAct session runner", () => {
+    const sessionRunnerIndex = source.indexOf("runAiChatSession({")
+    const directResultIndex = source.indexOf("const result = await runDeepChapterGeneration(")
+
+    expect(sessionRunnerIndex).toBeGreaterThan(-1)
+    expect(directResultIndex).toBe(-1)
+    expect(source).toContain("aiWorkflowMode,")
+  })
+
+  it("does not bypass ReAct for chapter workflow execution", () => {
+    expect(source).toContain("runAiChatSession")
+    expect(source).toContain("run_chapter_workflow")
+    expect(source).not.toContain("const result = await runDeepChapterGeneration(")
+    expect(source).not.toContain("onWorkflowEvent: (event)")
+  })
+
+  it("maps ReAct tool events into visible agent tool calls", () => {
+    expect(source).toContain("onToolEvent: (event)")
+    expect(source).toContain("applyAgentToolEvent(message.agentToolCalls, event)")
+    expect(source).not.toContain("chapterWorkflowEventToAgentToolEvent")
+    expect(source).toContain('settleRunningAgentToolCalls(message.agentToolCalls, "error"')
+  })
+
+  it("settles visible agent stages when a session finishes, errors, or is stopped", () => {
+    expect(source).toContain("settleRunningAgentStages")
+    expect(source).toContain('settleRunningAgentStages(message.agentStages, "done"')
+    expect(source).toContain('settleRunningAgentStages(message.agentStages, "error"')
+    expect(source).toContain('settleRunningAgentStages(message.agentStages, "cancelled"')
+  })
+
   it("shows the sent chat message before asynchronous chapter context building", () => {
-    const appendIndex = source.indexOf("appendAgentChatMessages(capturedConvId, plainText, tokens)")
+    const appendIndex = source.indexOf("appendAgentChatMessages(capturedConvId, userVisibleText || plainText, tokens)")
     const prePluginIndex = source.indexOf("await runNovelPrePluginChain({")
 
     expect(appendIndex).toBeGreaterThan(-1)
@@ -128,13 +185,30 @@ describe("chat-panel agent reference integration", () => {
   it("passes workflow mode and available skills into the novel pre-plugin chain", () => {
     expect(source).toContain("deAiSkillToUserSkill")
     expect(source).toContain("const availableAgentSkills")
-    expect(source).toContain("agentWritingSkills")
+    expect(source).toContain("agentDeAiSkills")
+    expect(source).toContain("agentUserWritingSkills")
     expect(source).toContain("aiWorkflowMode,")
     expect(source).toContain("availableSkills: availableAgentSkills")
   })
 
+  it("passes Plan Execute mode into the novel pre-plugin chain and consumes its final prompt", () => {
+    expect(source).toContain("planExecuteEnabled,")
+    expect(source).toContain("planExecuteEnabled: planExecuteActive")
+    expect(source).toContain("if (!hasAgentError && planExecuteActive)")
+    expect(source).toContain("prePluginResult?.finalSystemPrompt")
+    expect(source).toContain("prePluginSystemPrompt")
+  })
+
   it("passes MCP capabilities from agent config into the novel pre-plugin chain", () => {
-    expect(source).toContain("mcpCapabilities: _agentMcpCapabilities")
+    expect(source).toContain("mcpCapabilities: agentMcpCapabilities")
+    expect(source).not.toContain("mcpCapabilities: ([] as any[])")
+    expect(source).not.toContain("mcpCapabilities: _agentMcpCapabilities")
+  })
+
+  it("passes selected capability tool names into the session runner for tool scoping", () => {
+    expect(source).toContain("enabledToolNames: prePluginResult?.enabledToolNames")
+    expect(source).not.toContain('import { scopeAgentConfigTools } from "@/lib/agent/tool-scope"')
+    expect(source).not.toContain("scopeAgentConfigTools(agentConfig, prePluginResult?.enabledToolNames)")
   })
 
   it("adds selected skill prompts from the pre-plugin result into the agent system prompt", () => {
@@ -166,24 +240,22 @@ describe("chat-panel agent reference integration", () => {
     expect(source).toContain('settleRunningAgentToolCalls(message.agentToolCalls, "error"')
   })
 
-  it("routes continue-unfinished normal path through AgentRunner", () => {
+  it("routes normal agent sends through runAiChatSession", () => {
     const continueIndex = source.indexOf("const handleContinueUnfinished")
-    const agentRunnerIndex = source.indexOf("new AgentRunner().run(")
-    const streamChatIndex = source.indexOf("await streamChat(")
+    const sessionRunnerIndex = source.indexOf("runAiChatSession({")
 
     expect(continueIndex).toBeGreaterThan(-1)
-    expect(agentRunnerIndex).toBeGreaterThan(-1)
-    expect(streamChatIndex === -1 || agentRunnerIndex < streamChatIndex).toBe(true)
+    expect(sessionRunnerIndex).toBeGreaterThan(-1)
+    expect(source).not.toContain("await streamChat(")
   })
 
-  it("routes continue-unfinished context loading through the novel pre-plugin chain", () => {
+  it("routes continue-unfinished through the ReAct send path with compact display text", () => {
     const continueIndex = source.indexOf("const handleContinueUnfinished")
-    const chainIndex = source.indexOf("runNovelPrePluginChain({")
-    const promptIndex = source.indexOf("contextPackToPrompt")
 
     expect(continueIndex).toBeGreaterThan(-1)
-    expect(chainIndex).toBeGreaterThan(-1)
-    expect(chainIndex).toBeLessThan(promptIndex)
+    expect(source).toContain('handleSendRef.current(prompt, [], "继续未完成")')
+    expect(source).not.toContain('await import("@/lib/novel/deep-chapter-generation")')
+    expect(source).not.toContain("await runDeepChapterGeneration(")
   })
 
   it("validates chapter content before confirming draft saves", () => {
@@ -228,10 +300,10 @@ describe("chat-panel chapter plan confirm integration (Stage C)", () => {
     expect(afterOnDone).toContain("extractChapterPlan")
   })
 
-  it("skips chapter plan confirmation in fast mode", () => {
-    const onDoneIndex = source.indexOf("onDone: () => {")
-    const afterOnDone = source.slice(onDoneIndex)
-    expect(afterOnDone).toContain('"fast"')
+  it("skips chapter plan confirmation when Plan Execute is disabled", () => {
+    const runnerIndex = source.indexOf("const record = await runAiChatSession({")
+    const afterRunner = source.slice(runnerIndex)
+    expect(afterRunner).toContain("if (!hasAgentError && planExecuteActive)")
   })
 
   it("calls requestChapterPlanConfirm when a plan marker is found", () => {
@@ -245,6 +317,28 @@ describe("chat-panel chapter plan confirm integration (Stage C)", () => {
     const afterOnDone = source.slice(onDoneIndex)
     expect(afterOnDone).toContain("buildPlanConfirmMessage")
     expect(afterOnDone).toContain("buildPlanSkipMessage")
+  })
+
+  it("waits for chapter plan confirmation outside the completed stream guard before follow-up execution", () => {
+    const runnerIndex = source.indexOf("const record = await runAiChatSession({")
+    const finishIndex = source.indexOf("finishAgentSession(() => {", runnerIndex)
+    const planConfirmIndex = source.indexOf("await requestChapterPlanConfirm(", runnerIndex)
+    const followupIndex = source.indexOf("await handleSendRef.current(followupText", runnerIndex)
+
+    expect(runnerIndex).toBeGreaterThan(-1)
+    expect(finishIndex).toBeGreaterThan(runnerIndex)
+    expect(planConfirmIndex).toBeGreaterThan(finishIndex)
+    expect(followupIndex).toBeGreaterThan(planConfirmIndex)
+
+    const afterPlanConfirm = source.slice(planConfirmIndex, followupIndex)
+    expect(afterPlanConfirm).not.toContain("streamSessionGuardRef.current.isActive")
+    expect(afterPlanConfirm).toContain("setActiveConversation(capturedConvId)")
+  })
+
+  it("disables Plan Execute protocol for confirmed plan follow-up messages to avoid planning loops", () => {
+    expect(source).toContain("isChapterPlanExecutionFollowup")
+    expect(source).toContain("const planExecuteActive = planExecuteEnabled && !planExecutionFollowup")
+    expect(source).toContain("planExecuteEnabled: planExecuteActive")
   })
 
   it("renders ChapterPlanConfirmDialog in JSX bound to pendingChapterPlan", () => {
@@ -364,26 +458,26 @@ describe("Stage D AI 推理集成", () => {
   })
 })
 
-describe("Stage F 断点恢复", () => {
-  it("chat-store 缓存 lastBreakpoint", () => {
-    expect(chatStoreSource).toContain("lastBreakpoint")
-    expect(chatStoreSource).toContain("setLastBreakpoint")
+describe("断点恢复自动弹窗已移除", () => {
+  it("chat-store 不再缓存 lastBreakpoint", () => {
+    expect(chatStoreSource).not.toContain("lastBreakpoint")
+    expect(chatStoreSource).not.toContain("setLastBreakpoint")
   })
 
-  it("挂载时调用 loadTaskBreakpoint", () => {
-    expect(source).toContain("loadTaskBreakpoint")
-    expect(source).toMatch(/loadTaskBreakpoint\(projectPath\)/)
+  it("ChatPanel 挂载时不再读取断点文件", () => {
+    expect(source).not.toContain("loadTaskBreakpoint")
+    expect(source).not.toMatch(/loadTaskBreakpoint\(projectPath\)/)
   })
 
-  it("检测到断点时弹确认对话框", () => {
-    expect(source).toContain("检测到上次有未完成的任务")
-    expect(source).toContain("breakpointResumeOpen")
-    expect(source).toContain("<ModifyConfirmDialog")
+  it("ChatPanel 不再渲染继续未完成任务弹窗", () => {
+    expect(source).not.toContain("检测到上次有未完成的任务")
+    expect(source).not.toContain("breakpointResumeOpen")
+    expect(source).not.toContain("<ModifyConfirmDialog")
   })
 
-  it("用户确认时调用 buildBreakpointResumePrompt 并发送恢复内容", () => {
-    expect(source).toContain("buildBreakpointResumePrompt")
-    expect(source).toContain("breakpointResumeContent")
-    expect(source).toContain("handleSendRef.current(breakpointResumeContent")
+  it("ChatPanel 不再发送断点恢复提示词", () => {
+    expect(source).not.toContain("buildBreakpointResumePrompt")
+    expect(source).not.toContain("breakpointResumeContent")
+    expect(source).not.toContain("handleSendRef.current(breakpointResumeContent")
   })
 })

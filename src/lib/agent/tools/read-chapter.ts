@@ -1,5 +1,5 @@
 import type { Tool } from "../types"
-import { readFile } from "@/commands/fs"
+import { readMarkdownResource } from "./read-markdown-resource"
 
 export function createReadChapterTool(chaptersDir: string): Tool {
   return {
@@ -10,15 +10,6 @@ export function createReadChapterTool(chaptersDir: string): Tool {
       name: { type: "string", description: "章节名称，系统会自动查找对应 .md 文件" },
       path: { type: "string", description: "章节文件的完整路径（可选，与 name 二选一）" },
     },
-    execute: async (params) => {
-      const name = params.name as string | undefined
-      const path = params.path as string | undefined
-      const filePath = path || `${chaptersDir}/${name}.md`
-      try {
-        return await readFile(filePath)
-      } catch {
-        return `错误：无法读取章节「${name || path}」，请确认文件存在`
-      }
-    },
+    execute: async (params) => readMarkdownResource(chaptersDir, params, "章节"),
   }
 }

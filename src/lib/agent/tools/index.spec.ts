@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { ToolRegistry } from "../registry"
 import { registerAllBuiltInTools } from "./index"
 
@@ -93,5 +93,21 @@ describe("registerAllBuiltInTools", () => {
 
     expect(registry.has("mcp_graph_query")).toBe(true)
     expect(registry.has("read_chapter")).toBe(false)
+  })
+
+  it("registers the chapter workflow tool when dependencies are provided", () => {
+    const registry = new ToolRegistry()
+
+    registerAllBuiltInTools(registry, {
+      ...baseOptions,
+      projectPath: "/project",
+      llmConfig: {} as any,
+      aiWorkflowMode: "standard",
+      runDeepChapterGeneration: vi.fn() as any,
+      getUserSkills: () => [],
+      getSearchApiConfig: () => null,
+    })
+
+    expect(registry.has("run_chapter_workflow")).toBe(true)
   })
 })

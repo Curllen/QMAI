@@ -3,6 +3,7 @@ import { AgentRunner } from "./runner"
 import { ToolRegistry } from "./registry"
 import type { AgentConfig, AgentMessage } from "./types"
 import type { Tool } from "./types"
+import { TOOL_EXECUTE_TIMEOUT_MS } from "./types"
 import type { StreamCallbacks } from "../llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
 
@@ -125,11 +126,169 @@ describe("AgentRunner", () => {
     const config: AgentConfig = { maxRounds: 3, tools: [tool], systemPrompt: "You are helpful", llmConfig: mockLlmConfig }
     const result = await runner.run(config, registry, [systemMsg, userMsg], callbacks, undefined)
 
-    expect(tool.execute).toHaveBeenCalledWith({ name: "ch1" }, undefined)
+    expect(tool.execute).toHaveBeenCalledWith(
+      { name: "ch1" },
+      undefined,
+      expect.objectContaining({ callId: "call_1", toolName: "read_chapter" }),
+    )
     expect(callbacks.onToolCall).toHaveBeenCalledOnce()
     expect(callbacks.onToolResult).toHaveBeenCalledOnce()
     expect(result.finalText).toBe("Got it!")
     expect(result.roundsUsed).toBe(2)
+  })
+
+  it("passes the real tool call id into tool execution context", async () => {
+    const tool: Tool = {
+      name: "read_chapter",
+      description: "read",
+      category: "read",
+      parameters: { name: { type: "string", description: "name" } },
+      execute: vi.fn().mockResolvedValue("Chapter content"),
+    }
+    registry.register(tool)
+
+    let callCount = 0
+    mockStreamChat.mockImplementation(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+      callCount++
+      if (callCount === 1) {
+        cb.onToolCallDelta?.({ index: 0, id: "real_call_1", name: "read_chapter" })
+        cb.onToolCallDelta?.({ index: 0, arguments: '{"name":"ch1"}' })
+        cb.onDone()
+      } else {
+        cb.onToken("done")
+        cb.onDone()
+      }
+    })
+
+    const config: AgentConfig = { maxRounds: 3, tools: [tool], systemPrompt: "", llmConfig: mockLlmConfig }
+    await runner.run(
+      config,
+      registry,
+      [systemMsg, userMsg],
+      { onText: vi.fn(), onToolCall: vi.fn(), onToolResult: vi.fn(), onToolError: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
+      undefined,
+    )
+
+    expect(tool.execute).toHaveBeenCalledWith(
+      { name: "ch1" },
+      undefined,
+      expect.objectContaining({
+        callId: "real_call_1",
+        toolName: "read_chapter",
+      }),
+    )
+  })
+
+  it("passes the tool event emitter into tool execution context", async () => {
+    const tool: Tool = {
+      name: "read_chapter",
+      description: "read",
+      category: "read",
+      parameters: { name: { type: "string", description: "name" } },
+      execute: vi.fn().mockResolvedValue("Chapter content"),
+    }
+    registry.register(tool)
+
+    let callCount = 0
+    mockStreamChat.mockImplementation(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+      callCount++
+      if (callCount === 1) {
+        cb.onToolCallDelta?.({ index: 0, id: "real_call_2", name: "read_chapter" })
+        cb.onToolCallDelta?.({ index: 0, arguments: '{"name":"ch1"}' })
+        cb.onDone()
+      } else {
+        cb.onToken("done")
+        cb.onDone()
+      }
+    })
+
+    const onToolEvent = vi.fn()
+    const config: AgentConfig = { maxRounds: 3, tools: [tool], systemPrompt: "", llmConfig: mockLlmConfig }
+    await runner.run(
+      config,
+      registry,
+      [systemMsg, userMsg],
+      { onText: vi.fn(), onToolCall: vi.fn(), onToolResult: vi.fn(), onToolError: vi.fn(), onDone: vi.fn(), onError: vi.fn(), onToolEvent },
+      undefined,
+    )
+
+    expect(tool.execute).toHaveBeenCalledWith(
+      { name: "ch1" },
+      undefined,
+      expect.objectContaining({
+        callId: "real_call_2",
+        toolName: "read_chapter",
+        onToolEvent,
+      }),
+    )
+  })
+
+  it("passes the activity event emitter into tool execution context", async () => {
+    const tool: Tool = {
+      name: "read_chapter",
+      description: "read",
+      category: "read",
+      parameters: { name: { type: "string", description: "name" } },
+      execute: vi.fn(async (_params, _signal, context) => {
+        context?.onActivityEvent?.({
+          id: "tool-activity",
+          stageId: "read_context",
+          kind: "read_source",
+          title: "读取章节",
+          content: "读取章节《第1章》",
+          toolCallId: context.callId,
+          timestamp: 100,
+        })
+        return "Chapter content"
+      }),
+    }
+    registry.register(tool)
+
+    let callCount = 0
+    mockStreamChat.mockImplementation(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+      callCount++
+      if (callCount === 1) {
+        cb.onToolCallDelta?.({ index: 0, id: "real_call_3", name: "read_chapter" })
+        cb.onToolCallDelta?.({ index: 0, arguments: '{"name":"ch1"}' })
+        cb.onDone()
+      } else {
+        cb.onToken("done")
+        cb.onDone()
+      }
+    })
+
+    const onActivityEvent = vi.fn()
+    const config: AgentConfig = { maxRounds: 3, tools: [tool], systemPrompt: "", llmConfig: mockLlmConfig }
+    await runner.run(
+      config,
+      registry,
+      [systemMsg, userMsg],
+      {
+        onText: vi.fn(),
+        onToolCall: vi.fn(),
+        onToolResult: vi.fn(),
+        onToolError: vi.fn(),
+        onDone: vi.fn(),
+        onError: vi.fn(),
+        onActivityEvent,
+      },
+      undefined,
+    )
+
+    expect(tool.execute).toHaveBeenCalledWith(
+      { name: "ch1" },
+      undefined,
+      expect.objectContaining({
+        callId: "real_call_3",
+        toolName: "read_chapter",
+        onActivityEvent,
+      }),
+    )
+    expect(onActivityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      stageId: "read_context",
+      kind: "read_source",
+      title: "读取章节",
+    }))
   })
 
   it("does not stream assistant narration from tool-call rounds", async () => {
@@ -226,6 +385,57 @@ describe("AgentRunner", () => {
     await runner.run(config, registry, [systemMsg, userMsg], { onText: vi.fn(), onToolCall: vi.fn(), onToolResult: vi.fn(), onToolError, onDone: vi.fn(), onError: vi.fn() }, undefined)
 
     expect(onToolError).toHaveBeenCalledOnce()
+  })
+
+  it("allows long-running workflow tools to opt out of the generic 30 second timeout", async () => {
+    vi.useFakeTimers()
+    try {
+      const tool: Tool = {
+        name: "run_chapter_workflow",
+        description: "workflow",
+        category: "action",
+        permission: "auto",
+        executeTimeoutMs: 0,
+        parameters: {},
+        execute: vi.fn(() => new Promise<string>((resolve) => {
+          setTimeout(() => resolve("章节工作流完成"), TOOL_EXECUTE_TIMEOUT_MS + 1000)
+        })),
+      }
+      registry.register(tool)
+
+      let callCount = 0
+      mockStreamChat.mockImplementation(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+        callCount++
+        if (callCount === 1) {
+          cb.onToolCallDelta?.({ index: 0, id: "workflow_1", name: "run_chapter_workflow" })
+          cb.onToolCallDelta?.({ index: 0, arguments: "{}" })
+          cb.onDone()
+        } else {
+          cb.onToken("完成")
+          cb.onDone()
+        }
+      })
+
+      const onToolError = vi.fn()
+      const onToolResult = vi.fn()
+      const config: AgentConfig = { maxRounds: 3, tools: [tool], systemPrompt: "", llmConfig: mockLlmConfig }
+      const runPromise = runner.run(
+        config,
+        registry,
+        [systemMsg, userMsg],
+        { onText: vi.fn(), onToolCall: vi.fn(), onToolResult, onToolError, onDone: vi.fn(), onError: vi.fn() },
+        undefined,
+      )
+
+      await vi.advanceTimersByTimeAsync(TOOL_EXECUTE_TIMEOUT_MS + 1000)
+      const result = await runPromise
+
+      expect(onToolError).not.toHaveBeenCalled()
+      expect(onToolResult).toHaveBeenCalledWith("workflow_1", "章节工作流完成")
+      expect(result.toolCalls[0].status).toBe("done")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("executes confirm-required write tools for preview and sets approval_required status", async () => {
@@ -372,6 +582,42 @@ describe("AgentRunner", () => {
         toolChoice: "auto",
       }),
     )
+  })
+
+  it("retries a reasoning-only model round once with reasoning disabled", async () => {
+    const reasoningOnlyError = new Error("模型只输出了 543 字符的思考内容，但没有输出正文。")
+    mockStreamChat.mockImplementationOnce(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+      cb.onError(reasoningOnlyError)
+    })
+    mockStreamChat.mockImplementationOnce(async (_config: unknown, _msgs: unknown[], cb: StreamCallbacks) => {
+      cb.onToken("章节正文")
+      cb.onDone()
+    })
+
+    const callbacks = {
+      onText: vi.fn(),
+      onToolCall: vi.fn(),
+      onToolResult: vi.fn(),
+      onToolError: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    }
+    const config: AgentConfig = {
+      maxRounds: 3,
+      tools: [],
+      systemPrompt: "",
+      llmConfig: { ...mockLlmConfig, reasoning: { mode: "high" } },
+    }
+
+    const result = await runner.run(config, registry, [systemMsg, userMsg], callbacks, undefined)
+
+    expect(mockStreamChat).toHaveBeenCalledTimes(2)
+    expect(mockStreamChat.mock.calls[0][4]).toBeUndefined()
+    expect(mockStreamChat.mock.calls[1][4]).toEqual({ reasoning: { mode: "off" } })
+    expect(result.finalText).toBe("章节正文")
+    expect(callbacks.onText).toHaveBeenCalledWith("章节正文")
+    expect(callbacks.onDone).toHaveBeenCalledOnce()
+    expect(callbacks.onError).not.toHaveBeenCalled()
   })
 
   describe("Stage F 断点保存与清理", () => {

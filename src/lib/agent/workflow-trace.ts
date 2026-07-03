@@ -19,6 +19,7 @@ export type AgentWorkflowStepKind =
 
 export interface WorkflowToolCall {
   id: string
+  parentCallId?: string
   name: string
   params: Record<string, unknown>
   result?: string
@@ -63,6 +64,7 @@ const READ_TOOLS = new Set([
 const WRITE_TOOLS = new Set(["write_chapter", "write_outline_node", "write_memory"])
 const SKILL_TOOLS = new Set(["apply_skill"])
 const ROUTE_TOOLS = new Set(["route_task"])
+const CHAPTER_CONTEXT_TOOLS = new Set(["chapter_context", "chapter_previous_analysis"])
 
 const INTENT_LABELS: Record<string, string> = {
   write_chapter: "生成小说章节",
@@ -168,6 +170,28 @@ export function getWorkflowToolDescription(call: WorkflowToolCall): string {
       return "加载小说上下文"
     case "trim_context":
       return "整理上下文长度"
+    case "run_chapter_workflow":
+      return "运行章节工作流"
+    case "chapter_context":
+      return "读取章节上下文"
+    case "chapter_previous_analysis":
+      return "分析前情章节"
+    case "chapter_task_brief":
+      return "生成写作任务书"
+    case "chapter_draft":
+      return "生成章节正文初稿"
+    case "chapter_expansion":
+      return "正文扩写补足"
+    case "chapter_review":
+      return "执行 AI 审稿"
+    case "chapter_revision":
+      return "自动返修章节正文"
+    case "chapter_post_revision_review":
+      return "返修后角色一致性复审"
+    case "chapter_final_polish":
+      return "简单审查与去AI味"
+    case "chapter_complete":
+      return "完成多任务写作循环"
     default:
       return call.name
   }
@@ -250,10 +274,10 @@ function buildSkillStep(calls: WorkflowToolCall[]): AgentWorkflowStep {
 }
 
 function buildContextStep(calls: WorkflowToolCall[], contextTrace?: ContextTrace | null): AgentWorkflowStep {
-  const contextCalls = calls.filter((call) => LIST_TOOLS.has(call.name) || READ_TOOLS.has(call.name) || call.name === "load_context" || call.name === "trim_context")
+  const contextCalls = calls.filter((call) => LIST_TOOLS.has(call.name) || READ_TOOLS.has(call.name) || CHAPTER_CONTEXT_TOOLS.has(call.name) || call.name === "load_context" || call.name === "trim_context")
   const listCount = contextCalls.filter((call) => LIST_TOOLS.has(call.name)).length
   const readDetails = contextCalls
-    .filter((call) => READ_TOOLS.has(call.name) || call.name === "load_context" || call.name === "trim_context")
+    .filter((call) => READ_TOOLS.has(call.name) || CHAPTER_CONTEXT_TOOLS.has(call.name) || call.name === "load_context" || call.name === "trim_context")
     .map((call): AgentWorkflowDetail => ({
       label: call.status === "running" ? "正在处理" : call.status === "error" ? "读取失败" : "已读取",
       value: getWorkflowToolDescription(call),
@@ -296,12 +320,13 @@ function buildToolStep(calls: WorkflowToolCall[]): AgentWorkflowStep {
   const doneCount = toolCalls.filter((call) => call.status === "done").length
   const approvalCount = toolCalls.filter((call) => call.status === "approval_required").length
   const errorCount = toolCalls.filter((call) => call.status === "error").length
+  const hasChapterWorkflow = toolCalls.some((call) => call.name === "run_chapter_workflow" || call.parentCallId)
   const details = uniqueDetails(toolCalls.map((call) => ({
     label: call.status === "approval_required" ? "等待确认" : call.status === "error" ? "失败" : "工具",
     value: getWorkflowToolDescription(call),
     tone: call.status === "approval_required" ? "warning" : call.status === "error" ? "error" : "default",
   })))
-  const summaryParts = [`调用 ${toolCalls.length} 个工具`]
+  const summaryParts = [hasChapterWorkflow ? `章节工作流调用 ${toolCalls.length} 个步骤` : `调用 ${toolCalls.length} 个工具`]
   if (doneCount > 0) summaryParts.push(`${doneCount} 个完成`)
   if (approvalCount > 0) summaryParts.push(`${approvalCount} 个等待确认`)
   if (errorCount > 0) summaryParts.push(`${errorCount} 个失败`)

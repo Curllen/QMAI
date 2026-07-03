@@ -3,6 +3,8 @@ import { X, Check, SkipForward, Edit3, ListChecks } from "lucide-react"
 
 export const CHAPTER_PLAN_MARKER_START = "<!-- chapter_plan -->"
 export const CHAPTER_PLAN_MARKER_END = "<!-- /chapter_plan -->"
+const CHAPTER_PLAN_CONFIRMED_PREFIX = "章节计划已确认"
+const CHAPTER_PLAN_SKIPPED_PREFIX = "跳过章节计划"
 
 export function extractChapterPlan(fullContent: string): { plan: string; body: string } | null {
   const startIdx = fullContent.indexOf(CHAPTER_PLAN_MARKER_START)
@@ -18,11 +20,17 @@ export function extractChapterPlan(fullContent: string): { plan: string; body: s
 }
 
 export function buildPlanConfirmMessage(plan: string): string {
-  return `章节计划已确认，请按以下计划写正文。不要再次输出计划，直接输出正文。\n\n=== 已确认的章节计划 ===\n${plan}`
+  return `${CHAPTER_PLAN_CONFIRMED_PREFIX}，现在进入执行阶段。请按以下计划写正文。不要再次输出计划，不要再次等待确认，直接输出正文。\n\n=== 已确认的章节计划 ===\n${plan}`
 }
 
 export function buildPlanSkipMessage(): string {
-  return "请直接写正文，不要输出计划，不要输出分析过程。"
+  return `${CHAPTER_PLAN_SKIPPED_PREFIX}，现在进入执行阶段。请直接写正文，不要输出计划，不要输出分析过程，不要再次等待确认。`
+}
+
+export function isChapterPlanExecutionFollowup(content: string): boolean {
+  const normalized = content.trim()
+  return normalized.startsWith(CHAPTER_PLAN_CONFIRMED_PREFIX) ||
+    normalized.startsWith(CHAPTER_PLAN_SKIPPED_PREFIX)
 }
 
 interface ChapterPlanConfirmDialogProps {

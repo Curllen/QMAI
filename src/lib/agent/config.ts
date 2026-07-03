@@ -15,6 +15,7 @@ export const TOOL_UNSUPPORTED_MODEL_PREFIXES: string[] = [
 
 export interface BuildAgentConfigOptions extends ToolFactoryOptions {
   llmConfig: LlmConfig
+  requestOverrides?: AgentConfig["requestOverrides"]
 }
 
 export function modelSupportsTools(modelId: string): boolean {
@@ -44,5 +45,7 @@ export function buildAgentConfig(
     systemPrompt,
     llmConfig: options.llmConfig,
     modelId,
+    projectPath: options.projectPath,
+    requestOverrides: options.requestOverrides,
   }
 }

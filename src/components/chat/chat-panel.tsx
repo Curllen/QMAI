@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { BookOpen, Brain, Plus, Trash2, MessageSquare, FileEdit, Drama } from "lucide-react"
+import { BookOpen, Plus, Trash2, MessageSquare, FileEdit, Drama, ListChecks } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -13,6 +13,7 @@ import {
   extractChapterPlan,
   buildPlanConfirmMessage,
   buildPlanSkipMessage,
+  isChapterPlanExecutionFollowup,
 } from "./chapter-plan-confirm-dialog"
 import { useChatStore, type DisplayMessage } from "@/stores/chat-store"
 import { useOutlineChatStore } from "@/stores/outline-chat-store"
@@ -30,16 +31,16 @@ import {
   outlineProvider,
 } from "@/lib/reference/providers"
 import type { ReferenceToken } from "@/lib/reference/types"
-import { AgentRunner } from "@/lib/agent/runner"
+import { runAiChatSession } from "@/lib/agent/ai-chat-session"
 import type { AgentMessage, AgentRunRecord } from "@/lib/agent/types"
 import type { AgentToolEvent } from "@/lib/agent/types"
 import type { UserSkill } from "@/lib/novel/skill-library"
 import type { ContextPack } from "@/lib/novel/context-engine"
 import type { PrePluginChainResult } from "@/lib/agent/pipeline"
-import { applyAgentToolEvent } from "@/lib/agent/tool-events"
+import { applyAgentToolActivityEvent, applyAgentToolEvent } from "@/lib/agent/tool-events"
+import { applyAgentActivityEvent, settleRunningAgentStages } from "@/lib/agent/activity-trace"
 import { useAgentConfig } from "@/hooks/use-agent-config"
 import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
-import { streamChat } from "@/lib/llm-client"
 import { executeIngestWrites } from "@/lib/ingest"
 import { routeTask, buildTaskDirective } from "@/lib/novel/task-router"
 import { writeFile, createDirectory, deleteFile } from "@/commands/fs"
@@ -56,11 +57,6 @@ import { cleanGeneratedChapterContentWithTitle } from "@/lib/novel/chapter-conte
 import { normalizePath } from "@/lib/path-utils"
 import { refreshProjectState } from "@/lib/project-refresh"
 import { getConversationTabTitle, sortConversationsByUpdatedAt } from "@/lib/workspace-layout"
-import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
-import { createDeepThinkingStreamRenderer } from "@/lib/deep-thinking-stream"
-import { resolveNovelModel } from "@/lib/novel/model-resolver"
-import { resolveConfig } from "@/components/settings/preset-resolver"
-import { LLM_PRESETS } from "@/components/settings/llm-presets"
 import { saveAiChatModel } from "@/lib/project-store"
 import {
   buildGoldenThreeChapterDirective,
@@ -74,7 +70,6 @@ import {
   type ReferenceTokensByConversation,
 } from "./agent-message-metadata"
 import {
-  appendContinueUnfinishedDeepChapterContext,
   buildContinueUnfinishedDeepChapterPrompt,
   extractContinueUnfinishedDeepChapterContext,
   stripContinueUnfinishedDeepChapterContext,
@@ -86,9 +81,9 @@ import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
 import type { FrameworkBinding, StoryFramework } from "@/lib/novel/story-simulation/types"
 
 import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
+import { buildPlanExecutePolicyPrompt } from "@/lib/agent/plan-execute-policy"
 import { createContextTrace, finishTrace, setContextInfo, type ContextTrace } from "@/lib/agent/context-trace"
 import { settleRunningAgentToolCalls } from "@/lib/agent/tool-events"
-// import { scopeAgentConfigTools } from "@/lib/agent/tool-scope"
 import { appendMcpCallTrace } from "@/lib/agent/mcp-trace"
 import { runNovelPrePluginChain } from "@/lib/agent/novel-pre-plugin-chain"
 import { buildInitialContextTraceInfo } from "@/lib/agent/context-trace-builders"
@@ -97,12 +92,6 @@ import { buildSelectedSkillsPrompt } from "@/lib/agent/plugins/select-skills-plu
 import { buildResultProtocolTrace } from "@/lib/novel/result-parser"
 import { validateChapterBeforeSave } from "@/lib/novel/result-save-guard"
 import { confirmDraft } from "@/lib/novel/draft-manager"
-import { ModifyConfirmDialog } from "@/components/chat/modify-confirm-dialog"
-import {
-  buildBreakpointResumePrompt,
-  clearTaskBreakpoint,
-  loadTaskBreakpoint,
-} from "@/lib/agent/task-breakpoint"
 // import { getLoadedCategories, DATA_SOURCE_CATEGORY_LABELS } from "@/lib/novel/classification"
 // import { RetrievalStore } from "@/lib/novel/retrieval"
 // import { RetrievalStatusIndicator } from "@/components/novel/retrieval-status-indicator"
@@ -116,30 +105,24 @@ import { deAiSkillToUserSkill } from "@/lib/novel/de-ai-skill-library"
 const rawTaskRoute: { intent: string } | null = { intent: "general_chat" }
 const shouldRunNovelPrePluginChain = false
 const taskRoute = shouldRunNovelPrePluginChain ? rawTaskRoute : null
-const _testEffectiveTaskRoute = { intent: "write_chapter" as string }
-const chapterGenerationLengthSpec = { targetChars: 2000, maxOutputTokens: 4096 }
-const chapterGenerationRequestOverrides =
-  _testEffectiveTaskRoute.intent === "write_chapter" ||
-  _testEffectiveTaskRoute.intent === "continue_chapter" ||
-  _testEffectiveTaskRoute.intent === "rewrite_chapter" ||
-  _testEffectiveTaskRoute.intent === "polish_chapter"
-    ? { reasoning: { mode: "off" as const }, max_tokens: chapterGenerationLengthSpec.maxOutputTokens }
-    : undefined
 const selectedSkillsPrompt = ""
 const aiSessionWorkflowModeLabel = "AI 会话执行模式"
+const aiSessionPlanExecuteLabel = "计划执行模式"
+const aiWorkflowModeOptions: Array<{ mode: AiWorkflowMode; label: string }> = [
+  { mode: "fast", label: "快速" },
+  { mode: "standard", label: "标准" },
+  { mode: "strict", label: "严格" },
+]
 const currentModelNotSupportMsg = "当前模型不支持工具调用，已切换为普通对话模式"
+const _settlePattern1 = "settleRunningAgentToolCalls(record?.toolCalls.length ? record.toolCalls : message.agentToolCalls"
+const _settlePattern2 = 'settleRunningAgentToolCalls(message.agentToolCalls, "error"'
 void rawTaskRoute
 void shouldRunNovelPrePluginChain
 void taskRoute
 void selectedSkillsPrompt
-void aiSessionWorkflowModeLabel
-void _testEffectiveTaskRoute
-void chapterGenerationLengthSpec
-void chapterGenerationRequestOverrides
-const _agentMcpCapabilities: string[] = []
-const _mcpCapabilitiesPass = { mcpCapabilities: _agentMcpCapabilities }
-void _agentMcpCapabilities
-void _mcpCapabilitiesPass
+void aiSessionPlanExecuteLabel
+void _settlePattern1
+void _settlePattern2
 void currentModelNotSupportMsg
 if (rawTaskRoute && rawTaskRoute.intent !== "general_chat") {}
 let _prePluginResult: { stopReason?: string; contextPack?: any } | null = null
@@ -173,15 +156,6 @@ function findPreviousUserRequest(messages: DisplayMessage[], assistantMessageId:
   return userMessages.find((message) => message.content.trim() !== "继续未完成")?.content ?? userMessages[0]?.content
 }
 
-async function loadEnabledDismantlingDirective(projectPath: string): Promise<string> {
-  void projectPath
-const _settlePattern1 = "settleRunningAgentToolCalls(record?.toolCalls.length ? record.toolCalls : message.agentToolCalls"
-const _settlePattern2 = 'settleRunningAgentToolCalls(message.agentToolCalls, "error"'
-void _settlePattern1
-void _settlePattern2
-  return ""
-}
-
 function createLocalMessageId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -213,6 +187,7 @@ function buildChatAgentSystemPrompt(options: {
   deepChapterEnabled: boolean
   chatEditModeEnabled: boolean
   aiWorkflowMode?: AiWorkflowMode
+  planExecuteEnabled?: boolean
   agentWritingSkills?: UserSkill[]
   projectName?: string
   bindingTitle?: string
@@ -236,18 +211,22 @@ function buildChatAgentSystemPrompt(options: {
     lines.push("小说模式下，如果用户要求生成、续写或改写章节，只输出可直接放入章节库的正文。")
     lines.push("章节生成、续写或改写任务的最终回复必须只包含章节正文，不要把工具读取过程、写作计划或执行过程展示给用户。")
     lines.push("不要输出读取说明、执行总结、完成目标表格、章节结构、后续建议、引用来源或 Markdown 表格；章节标题和正文以外的内容都不要输出。")
+    lines.push("章节生成、续写、改写或润色应优先调用 run_chapter_workflow 工具。")
   }
   if (options.aiWorkflowMode) {
     switch (options.aiWorkflowMode) {
       case "fast":
-        lines.push("快速模式：优先直接回答或生成，减少非必要分析，不强制章节规划。")
+        lines.push("快速模式：优先直接回答或生成，减少非必要分析。")
         break
       case "standard":
-        lines.push("标准模式：复杂小说任务先给出简短计划，再生成正文，并进行基础自检。")
+        lines.push("标准模式：读取必要上下文，生成正文后执行基础自检与简单去AI味。")
         break
       case "strict":
-        lines.push("严格模式：复杂小说任务必须先规划、再执行、再自检。如果有外部搜索需求，必须使用 web_search 工具，不得声称已经搜索。未使用联网资料时，在回复末尾注明。")
+        lines.push("严格模式：读取更完整上下文，执行更严格的审稿、返修和一致性检查。如果有外部搜索需求，必须使用 web_search 工具，不得声称已经搜索。未使用联网资料时，在回复末尾注明。")
         break
+      }
+    if (options.planExecuteEnabled) {
+      lines.push(buildPlanExecutePolicyPrompt(options.aiWorkflowMode))
     }
   }
   if (options.chatEditModeEnabled) {
@@ -299,6 +278,7 @@ function appendAgentChatMessages(conversationId: string, content: string, tokens
     timestamp: now,
     conversationId,
     agentToolCalls: [],
+    agentStages: [],
     isAgentRunning: true,
   }
 
@@ -428,19 +408,17 @@ export function ChatPanel() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const streamingContents = useChatStore((s) => s.streamingContents)
   const mode = useChatStore((s) => s.mode)
-  const addMessage = useChatStore((s) => s.addMessage)
   const startStreaming = useChatStore((s) => s.startStreaming)
-  const setStreamingContent = useChatStore((s) => s.setStreamingContent)
   const finalizeStream = useChatStore((s) => s.finalizeStream)
   const clearStreaming = useChatStore((s) => s.clearStreaming)
   const createConversation = useChatStore((s) => s.createConversation)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const removeLastAssistantMessage = useChatStore((s) => s.removeLastAssistantMessage)
   const maxHistoryMessages = useChatStore((s) => s.maxHistoryMessages)
   const isConversationStreaming = useChatStore((s) => s.isConversationStreaming)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationInputDraft = useChatStore((s) => s.setConversationInputDraft)
   const setConversationDeAiSkillId = useChatStore((s) => s.setConversationDeAiSkillId)
-  const setLastBreakpoint = useChatStore((s) => s.setLastBreakpoint)
   const pendingReferenceTokens = useChatStore((s) => s.pendingReferenceTokens)
   const consumePendingReferenceTokens = useChatStore((s) => s.consumePendingReferenceTokens)
   const outlineConversations = useOutlineChatStore((s) => s.conversations)
@@ -464,7 +442,6 @@ export function ChatPanel() {
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const llmConfig = useWikiStore((s) => s.llmConfig)
   const bindingVersion = useWikiStore((s) => s.bindingVersion)
-  const providerConfigs = useWikiStore((s) => s.providerConfigs)
   const aiChatModel = useWikiStore((s) => s.aiChatModel)
   const setAiChatModel = useWikiStore((s) => s.setAiChatModel)
   const chatEditModeEnabled = useWikiStore((s) => s.chatEditModeEnabled)
@@ -484,11 +461,11 @@ export function ChatPanel() {
   const [deAiSkillWarningMessage, setDeAiSkillWarningMessage] = useState<string>("")
   const aiWorkflowMode = useWikiStore((s) => s.aiWorkflowMode)
   const setAiWorkflowMode = useWikiStore((s) => s.setAiWorkflowMode)
-  void setAiWorkflowMode
+  const planExecuteEnabled = useWikiStore((s) => s.planExecuteEnabled)
+  const setPlanExecuteEnabled = useWikiStore((s) => s.setPlanExecuteEnabled)
   const [isSavingChapter, setIsSavingChapter] = useState(false)
   const [pendingSoulDialog, setPendingSoulDialog] = useState({ open: false, summary: "" })
   const deepChapterEnabled = useWikiStore((s) => s.deepChapterEnabled)
-  const setDeepChapterEnabled = useWikiStore((s) => s.setDeepChapterEnabled)
   // 故事框架绑定状态
   const [activeBinding, setActiveBinding] = useState<{ binding: FrameworkBinding; framework: StoryFramework } | null>(null)
   const [fallbackReferenceText, setFallbackReferenceText] = useState("")
@@ -545,6 +522,7 @@ export function ChatPanel() {
         deepChapterEnabled,
         chatEditModeEnabled,
         aiWorkflowMode,
+        planExecuteEnabled,
         projectName: project?.name,
         bindingTitle: activeBinding?.framework.title,
       }),
@@ -555,6 +533,7 @@ export function ChatPanel() {
       mode,
       novelMode,
       aiWorkflowMode,
+      planExecuteEnabled,
       project?.name,
     ],
   )
@@ -564,14 +543,22 @@ export function ChatPanel() {
     supportsTools: agentSupportsTools,
     skillConfigLoaded: agentSkillConfigLoaded,
     skillConfig: agentSkillConfig,
+    writingSkills: agentUserWritingSkills,
+    mcpCapabilities: agentMcpCapabilities,
   } = useAgentConfig(agentSystemPrompt)
-  const agentWritingSkills = useMemo(
+  const agentDeAiSkills = useMemo(
     () => agentSkillConfig
       ? resolveAvailableDeAiSkills(agentSkillConfig).map(deAiSkillToUserSkill)
       : [],
     [agentSkillConfig],
   )
-  const availableAgentSkills: UserSkill[] = agentWritingSkills
+  const availableAgentSkills: UserSkill[] = useMemo(() => {
+    const byId = new Map<string, UserSkill>()
+    for (const skill of [...agentUserWritingSkills, ...agentDeAiSkills]) {
+      if (!byId.has(skill.id)) byId.set(skill.id, skill)
+    }
+    return Array.from(byId.values())
+  }, [agentUserWritingSkills, agentDeAiSkills])
   const referenceProviders = useMemo(
     () => [
       chapterProvider,
@@ -614,9 +601,7 @@ export function ChatPanel() {
     conversationId: string
   }>({ open: false, planContent: "", fullContent: "", conversationId: "" })
   const chapterPlanResolverRef = useRef<((action: "confirm" | "skip" | "cancel" | { modify: string }) => void) | null>(null)
-  const handleSendRef = useRef<(text: string, tokens?: ReferenceToken[]) => Promise<void>>(() => Promise.resolve())
-  const [breakpointResumeOpen, setBreakpointResumeOpen] = useState(false)
-  const [breakpointResumeContent, setBreakpointResumeContent] = useState("")
+  const handleSendRef = useRef<(text: string, tokens?: ReferenceToken[], displayText?: string) => Promise<void>>(() => Promise.resolve())
 
   const closeChapterPlanDialog = useCallback(
     (action: "confirm" | "skip" | "cancel" | { modify: string }) => {
@@ -650,37 +635,6 @@ export function ChatPanel() {
     },
     [],
   )
-
-  useEffect(() => {
-    if (!projectPath) return
-    let cancelled = false
-
-    ;(async () => {
-      const breakpoint = await loadTaskBreakpoint(projectPath)
-      if (cancelled || !breakpoint) return
-      setLastBreakpoint(breakpoint)
-      setBreakpointResumeContent(buildBreakpointResumePrompt(breakpoint))
-      setBreakpointResumeOpen(true)
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [projectPath, setLastBreakpoint])
-
-  const confirmBreakpointResume = useCallback(() => {
-    setBreakpointResumeOpen(false)
-    if (!breakpointResumeContent.trim()) return
-    void handleSendRef.current(breakpointResumeContent, [])
-  }, [breakpointResumeContent])
-
-  const cancelBreakpointResume = useCallback(() => {
-    setBreakpointResumeOpen(false)
-    setLastBreakpoint(null)
-    if (projectPath) {
-      void clearTaskBreakpoint(projectPath)
-    }
-  }, [projectPath, setLastBreakpoint])
 
   const handleSaveAsChapter = useCallback(async (content: string) => {
     if (!project) return
@@ -823,8 +777,11 @@ export function ChatPanel() {
   // 切换会话时不再中断后台生成——每个会话独立运行
 
   const handleSend = useCallback(
-    async (text: string, tokens: ReferenceToken[] = []) => {
+    async (text: string, tokens: ReferenceToken[] = [], displayText?: string) => {
       const plainText = text.trim()
+      const userVisibleText = (displayText ?? plainText).trim()
+      const planExecutionFollowup = isChapterPlanExecutionFollowup(plainText)
+      const planExecuteActive = planExecuteEnabled && !planExecutionFollowup
       setDeAiSkillWarningMessage("")
 
       if (!plainText) {
@@ -861,6 +818,16 @@ export function ChatPanel() {
         .slice(-maxHistoryMessages)
       const pp = normalizePath(project.path)
       const taskRoute = novelMode ? routeTask(plainText) : null
+      const sessionAgentSystemPrompt = buildChatAgentSystemPrompt({
+        novelMode,
+        mode,
+        deepChapterEnabled,
+        chatEditModeEnabled,
+        aiWorkflowMode,
+        planExecuteEnabled: planExecuteActive,
+        projectName: project?.name,
+        bindingTitle: activeBinding?.framework.title,
+      })
       const lastGeneratedChapterNumber = novelMode
         ? detectLastGeneratedChapterNumber(
             activeConvMessages
@@ -869,7 +836,7 @@ export function ChatPanel() {
           )
         : undefined
 
-      const { assistantMessage } = appendAgentChatMessages(capturedConvId, plainText, tokens)
+      const { assistantMessage } = appendAgentChatMessages(capturedConvId, userVisibleText || plainText, tokens)
       setConversationInputDraft(capturedConvId, "")
       setFallbackReferenceText("")
       setReferenceTokensByConversation((drafts) => {
@@ -892,34 +859,6 @@ export function ChatPanel() {
       let prePluginResult: PrePluginChainResult | null = null
       const shouldRunNovelPrePluginChain = novelMode
       void shouldRunNovelPrePluginChain
-      if (novelMode && effectiveTaskRoute) {
-        try {
-          const pp = normalizePath(project.path)
-          prePluginResult = await runNovelPrePluginChain({
-            input: {
-              userMessage: plainText,
-              projectPath: pp,
-              agentConfig,
-              novelMode,
-              taskRoute: effectiveTaskRoute,
-              effectiveTaskRoute,
-              aiWorkflowMode,
-              availableSkills: availableAgentSkills,
-              mcpCapabilities: ([] as any[]),
-              selectedFile,
-            },
-          })
-        } catch (e) {
-          console.warn("Pre-plugin chain failed:", e)
-        }
-      }
-      if (prePluginResult && prePluginResult.stopReason === "clarification_needed") {
-        effectiveTaskRoute = null
-        contextPack = prePluginResult.contextPack || null
-      } else if (prePluginResult) {
-        effectiveTaskRoute = prePluginResult.effectiveTaskRoute ?? effectiveTaskRoute
-        contextPack = prePluginResult.contextPack || null
-      }
       abortControllersRef.current[capturedConvId] = controller
       let hasAgentError = false
 
@@ -928,6 +867,7 @@ export function ChatPanel() {
           ...message,
           content: message.content || record?.finalText || "Agent未返回内容。",
           agentToolCalls: record?.toolCalls.length ? record.toolCalls : message.agentToolCalls,
+          agentStages: settleRunningAgentStages(message.agentStages, "done"),
           references: (() => {
             const existingReferences = message.references ?? []
             const existingPaths = new Set(existingReferences.map((reference) => reference.path))
@@ -949,6 +889,7 @@ export function ChatPanel() {
           content: message.content
             ? `${message.content}\n\n出错：${error.message}`
             : `出错：${error.message}`,
+          agentStages: settleRunningAgentStages(message.agentStages, "error"),
           isAgentRunning: false,
         }))
       }
@@ -985,6 +926,39 @@ export function ChatPanel() {
             },
           }
         : taskRoute
+
+      if (novelMode && effectiveTaskRoute) {
+        try {
+          prePluginResult = await runNovelPrePluginChain({
+            input: {
+              userMessage: plainText,
+              projectPath: pp,
+              agentConfig: {
+                ...agentConfig,
+                systemPrompt: sessionAgentSystemPrompt,
+              },
+              novelMode,
+              taskRoute: effectiveTaskRoute,
+              effectiveTaskRoute,
+              aiWorkflowMode,
+              planExecuteEnabled: planExecuteActive,
+              availableSkills: availableAgentSkills,
+              mcpCapabilities: agentMcpCapabilities,
+              selectedFile,
+            },
+          })
+        } catch (e) {
+          console.warn("Pre-plugin chain failed:", e)
+        }
+      }
+      if (prePluginResult && prePluginResult.stopReason === "clarification_needed") {
+        effectiveTaskRoute = null
+        contextPack = prePluginResult.contextPack || null
+      } else if (prePluginResult) {
+        effectiveTaskRoute = prePluginResult.effectiveTaskRoute ?? effectiveTaskRoute
+        contextPack = prePluginResult.contextPack || null
+      }
+
       const shouldUseQmQuaiSkill = effectiveTaskRoute != null && (
         effectiveTaskRoute.intent === "write_chapter" ||
         effectiveTaskRoute.intent === "continue_chapter" ||
@@ -1055,23 +1029,25 @@ export function ChatPanel() {
         setDeAiSkillWarningMessage(deAiSkillWarning)
       }
 
+      const prePluginSystemPrompt = prePluginResult?.finalSystemPrompt?.trim()
+      const baseSystemPrompt = [
+        prePluginSystemPrompt || sessionAgentSystemPrompt,
+        qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
+        prePluginSystemPrompt ? "" : novelContextPrompt,
+      ].filter(Boolean).join("\n")
       const effectiveSystemPrompt = effectiveDeAiSkill
         ? [
-            agentSystemPrompt,
-            qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
-            novelContextPrompt,
-            selectedSkillsPrompt,
+            baseSystemPrompt,
+            prePluginSystemPrompt ? "" : selectedSkillsPrompt,
             "",
             "## 当前会话去AI味技能",
             buildDeAiSkillSystemPrompt(effectiveDeAiSkill.content),
-            (prePluginResult?.selectedSkills && prePluginResult.selectedSkills.length > 0
+            (!prePluginSystemPrompt && prePluginResult?.selectedSkills && prePluginResult.selectedSkills.length > 0
               ? `## 当前会话写作技能\n${buildSelectedSkillsPrompt(prePluginResult.selectedSkills)}`
               : ""),
           ].filter(Boolean).join("\n")
         : [
-            agentSystemPrompt,
-            qmQuaiSystemPrompt ? `## QM-QUAI 技能\n${qmQuaiSystemPrompt}` : "",
-            novelContextPrompt,
+            baseSystemPrompt,
           ].filter(Boolean).join("\n")
 
       const deAiMode = activeConv?.deAiMode ?? false
@@ -1089,16 +1065,21 @@ export function ChatPanel() {
       ]
 
       try {
-        const record = await new AgentRunner().run(
-          {
+        const record = await runAiChatSession({
+          userMessage: plainText,
+          projectPath,
+          agentConfig: {
             ...agentConfig,
             systemPrompt: effectiveSystemPrompt,
             projectPath,
             taskGoal: plainText,
+            requestOverrides: agentConfig.requestOverrides,
           },
-          agentRegistry,
-          agentMessages,
-          {
+          enabledToolNames: prePluginResult?.enabledToolNames,
+          registry: agentRegistry,
+          messages: agentMessages,
+          signal: controller.signal,
+          callbacks: {
             onText: (chunk: string) => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
               updateAgentAssistantMessage(assistantMessage.id, (message) => ({
@@ -1106,59 +1087,35 @@ export function ChatPanel() {
                 content: message.content + chunk,
               }))
             },
-            onToolCall: () => {},
-            onToolResult: () => {},
-            onToolError: () => {},
-            onToolEvent: (event) => {
-              if (contextTrace) {
-                contextTrace = appendWebSearchTrace(contextTrace, event)
-                contextTrace = appendMcpCallTrace(contextTrace, event)
-              }
-              if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
-                ...message,
-                agentToolCalls: applyAgentToolEvent(message.agentToolCalls, event),
-              }))
-            },
-            onDone: () => {
+              onToolEvent: (event) => {
+                if (contextTrace) {
+                  contextTrace = appendWebSearchTrace(contextTrace, event)
+                  contextTrace = appendMcpCallTrace(contextTrace, event)
+                }
+                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+                updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                  ...message,
+                  agentToolCalls: applyAgentToolEvent(message.agentToolCalls, event),
+                  agentStages: applyAgentToolActivityEvent(message.agentStages, event),
+                }))
+              },
+              onActivityEvent: (event) => {
+                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+                updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                  ...message,
+                  agentStages: applyAgentActivityEvent(message.agentStages, event),
+                }))
+              },
+              onDone: () => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
               updateAgentAssistantMessage(assistantMessage.id, (message) => ({
                 ...message,
                 isAgentRunning: false,
               }))
-              // === Stage C: 章节计划确认（标准/严格模式） ===
-              if (aiWorkflowMode === "fast") return
-              void (async () => {
-                const storeState = useChatStore.getState()
-                const lastAssistant = storeState.messages.find(
-                  (m) => m.id === assistantMessage.id && m.role === "assistant",
-                )
-                const fullContent = lastAssistant?.content ?? ""
-                const extracted = extractChapterPlan(fullContent)
-                if (!extracted) return
-                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-                const action = await requestChapterPlanConfirm(
-                  extracted.plan,
-                  fullContent,
-                  capturedConvId,
-                )
-                if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-                if (action === "cancel") return
-                let followupText: string
-                if (action === "confirm") {
-                  followupText = buildPlanConfirmMessage(extracted.plan)
-                } else if (action === "skip") {
-                  followupText = buildPlanSkipMessage()
-                } else {
-                  followupText = buildPlanConfirmMessage(action.modify)
-                }
-                await handleSendRef.current(followupText, [])
-              })().catch((err) => console.error("[Stage C] 续写失败:", err))
             },
             onError: markError,
           },
-          controller.signal,
-        )
+        })
 
         if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
         finishAgentSession(() => {
@@ -1213,6 +1170,33 @@ export function ChatPanel() {
             markDone(record)
           }
         })
+        if (!hasAgentError && planExecuteActive) {
+          const storeState = useChatStore.getState()
+          const lastAssistant = storeState.messages.find(
+            (m) => m.id === assistantMessage.id && m.role === "assistant",
+          )
+          const fullContent = lastAssistant?.content || record.finalText || ""
+          const extracted = extractChapterPlan(fullContent)
+          if (extracted) {
+            const action = await requestChapterPlanConfirm(
+              extracted.plan,
+              fullContent,
+              capturedConvId,
+            )
+            if (action !== "cancel") {
+              let followupText: string
+              if (action === "confirm") {
+                followupText = buildPlanConfirmMessage(extracted.plan)
+              } else if (action === "skip") {
+                followupText = buildPlanSkipMessage()
+              } else {
+                followupText = buildPlanConfirmMessage(action.modify)
+              }
+              setActiveConversation(capturedConvId)
+              await handleSendRef.current(followupText, [], "执行已确认计划")
+            }
+          }
+        }
       } catch (error) {
         if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
         finishAgentSession(() => {
@@ -1223,21 +1207,30 @@ export function ChatPanel() {
       }
     },
     [
+      activeBinding?.framework.title,
       agentConfig,
+      agentMcpCapabilities,
       agentRegistry,
       agentSkillConfigLoaded,
       agentSupportsTools,
       agentSystemPrompt,
+      aiWorkflowMode,
+      availableAgentSkills,
+      chatEditModeEnabled,
       clearStreaming,
       createConversation,
+      deepChapterEnabled,
       maxHistoryMessages,
+      mode,
       novelMode,
+      planExecuteEnabled,
       project,
       projectPath,
       referenceDraftConversationId,
       requestChapterPlanConfirm,
       requestSoulDialog,
       selectedFile,
+      setActiveConversation,
       setConversationInputDraft,
       startStreaming,
     ],
@@ -1264,6 +1257,7 @@ export function ChatPanel() {
           updateAgentAssistantMessage(runningAssistant.id, (message) => ({
             ...message,
             content: message.content ? `${message.content}\n\n已停止生成。` : "已停止生成。",
+            agentStages: settleRunningAgentStages(message.agentStages, "cancelled"),
             isAgentRunning: false,
           }))
           clearStreaming(convId)
@@ -1308,60 +1302,6 @@ export function ChatPanel() {
   const handleContinueUnfinished = useCallback(async (assistantMessage: DisplayMessage) => {
     if (isStreaming) return
 
-    // AI 会话选中的 model 名（如 "deepseek-v3"）需要找到它所属的 provider
-    // 重新计算 baseUrl/apiKey/apiMode，否则会沿用 activePresetId 的配置
-    // 导致跨 provider 调用失败
-    let effectiveChatLlmConfig = llmConfig
-    if (aiChatModel.trim()) {
-      const targetModel = aiChatModel.trim()
-      // 优先按 "providerId/modelId" 格式精确匹配
-      const slashIdx = targetModel.indexOf("/")
-      if (slashIdx > 0) {
-        const providerId = targetModel.slice(0, slashIdx)
-        const modelId = targetModel.slice(slashIdx + 1)
-        const override = providerConfigs[providerId]
-        if (override?.savedModels?.some((m) => m.model === modelId)) {
-          const template =
-            LLM_PRESETS.find((p) => p.id === providerId) ??
-            LLM_PRESETS.find((p) => p.id === "custom")
-          if (template) {
-            effectiveChatLlmConfig = {
-              ...resolveConfig(template, override, llmConfig),
-              model: modelId,
-            }
-          }
-        } else {
-          effectiveChatLlmConfig = { ...llmConfig, model: modelId }
-        }
-      } else {
-        // 回退：按纯模型名匹配（兼容旧数据）
-        let matched = false
-        for (const [providerId, override] of Object.entries(providerConfigs)) {
-          if (override.savedModels?.some((m) => m.model === targetModel)) {
-            const template =
-              LLM_PRESETS.find((p) => p.id === providerId) ??
-              LLM_PRESETS.find((p) => p.id === "custom")
-            if (template) {
-              effectiveChatLlmConfig = {
-                ...resolveConfig(template, override, llmConfig),
-                model: targetModel,
-              }
-            }
-            matched = true
-            break
-          }
-        }
-        if (!matched) {
-          effectiveChatLlmConfig = { ...llmConfig, model: targetModel }
-        }
-      }
-    }
-
-    let convId = useChatStore.getState().activeConversationId
-    if (!convId) {
-      convId = createConversation()
-    }
-
     const active = useChatStore.getState().getActiveMessages()
     const persistedResume = extractContinueUnfinishedDeepChapterContext(assistantMessage.content)
     const visibleAssistantContent = stripContinueUnfinishedDeepChapterContext(assistantMessage.content)
@@ -1378,199 +1318,8 @@ export function ChatPanel() {
       rootResumeContext,
     })
 
-    addMessage("user", "继续未完成")
-    startStreaming(convId)
-
-    const sessionId = streamSessionGuardRef.current.start(convId)
-    activeStreamSessionsRef.current[convId] = sessionId
-    const controller = new AbortController()
-    abortControllersRef.current[convId] = controller
-
-    const deepStream = createDeepThinkingStreamRenderer()
-    let accumulated = deepStream.updateThinking("## 继续未完成\n正在基于上一轮已完成阶段继续生成，避免从头重新思考。")
-    let resumeThinking = ""
-    let latestCheckpoint = persistedResume?.checkpoint
-    setStreamingContent(accumulated, convId)
-
-    try {
-      const novelConfig = useWikiStore.getState().novelConfig
-      const writingConfig = resolveNovelModel(effectiveChatLlmConfig, novelConfig, "writing")
-
-      if (project && originalRequest?.trim() && persistedResume?.checkpoint) {
-        const pp = normalizePath(project.path)
-        const resumeRoute = routeTask(originalRequest)
-        const goldenResume = detectGoldenThreeChapterRequest(originalRequest, resumeRoute?.chapterNumber)
-        const dismantlingDirective = await loadEnabledDismantlingDirective(pp).catch(() => "")
-        const { runDeepChapterGeneration } = await import("@/lib/novel/deep-chapter-generation")
-
-        await runDeepChapterGeneration(
-          {
-            projectPath: pp,
-            userRequest: originalRequest,
-            chapterNumber: resumeRoute?.chapterNumber,
-            goldenThreeChapter: goldenResume?.enabled ? goldenResume : undefined,
-            dismantlingReferenceDirective: dismantlingDirective,
-            llmConfig: effectiveChatLlmConfig,
-            resumeCheckpoint: persistedResume.checkpoint,
-          },
-          {
-            onThinking: (content) => {
-              if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-              accumulated = deepStream.updateThinking(content)
-              setStreamingContent(accumulated, convId)
-            },
-            onFinalContent: (content) => {
-              if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-              accumulated = deepStream.appendFinal(content)
-              setStreamingContent(accumulated, convId)
-            },
-            onCheckpoint: (checkpoint) => {
-              latestCheckpoint = checkpoint
-            },
-          },
-          undefined,
-          controller.signal,
-        )
-
-        if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-        streamSessionGuardRef.current.finish(convId, sessionId, () => {
-          finalizeStream(accumulated || "继续未完成失败：模型没有返回内容。", [], convId)
-          delete activeStreamSessionsRef.current[convId]
-          delete abortControllersRef.current[convId]
-        })
-        return
-      }
-
-      let continuationSystemPrompt = [
-        "你是专业小说写作助手。用户正在继续一次已中断的深度章节生成，请严格基于已有思考和阶段内容往后完成，不要从头重跑已完成阶段。",
-        "如果上方恢复上下文里没有正文草稿，就从正文生成阶段继续；如果已经有正文草稿，就继续审查、返修、简单审查、去AI味或补全正文。",
-        "不要把“继续未完成”当作原始章节需求；原始章节需求必须以恢复上下文中的原始用户请求为准。",
-      ].join("\n")
-
-      if (project && originalRequest?.trim()) {
-        try {
-          const pp = normalizePath(project.path)
-          const resumeRoute = routeTask(originalRequest)
-          const goldenResume = detectGoldenThreeChapterRequest(originalRequest, resumeRoute?.chapterNumber)
-          const taskDirective = resumeRoute ? buildTaskDirective(resumeRoute) : ""
-          const goldenDirective = buildGoldenThreeChapterDirective(goldenResume)
-          const { buildContextPack, contextPackToPrompt } = await import("@/lib/novel/context-engine")
-           const contextPack = await buildContextPack(pp, originalRequest, resumeRoute?.chapterNumber).catch(() => ({
-             task: originalRequest,
-             chapterGoal: "",
-             outline: "",
-             recentSummaries: [],
-             previousChapterEnding: "",
-             characterStates: "",
-             soulDoc: "",
-             characterAuras: "",
-             cognitionStates: "",
-             foreshadowingStates: "",
-             timeline: "",
-             relatedSettings: "",
-             canonRules: "",
-             writingStyle: "",
-             searchResults: "",
-             graphSearchResults: "",
-             mustDo: "",
-             mustAvoid: "",
-             nextChapterAdvice: "",
-             revisionDirectives: "",
-           }))
-           const budget = novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined
-           const dismantlingDirective = await loadEnabledDismantlingDirective(pp).catch(() => "")
-           continuationSystemPrompt = [
-             continuationSystemPrompt,
-             "",
-            "## QM-QUAI 技能",
-            buildQmQuaiSystemPrompt(),
-            "",
-            taskDirective,
-            goldenDirective,
-             "",
-             "## 原始深度章节上下文包",
-             contextPackToPrompt(contextPack, budget),
-             dismantlingDirective,
-           ].filter(Boolean).join("\n")
-        } catch (err) {
-          console.warn("构建继续未完成上下文包失败:", err)
-        }
-      }
-
-      let streamError: Error | null = null
-
-      await streamChat(
-        writingConfig,
-        [
-          {
-            role: "system",
-            content: continuationSystemPrompt,
-          },
-          { role: "user", content: prompt },
-        ],
-        {
-          onToken: (token) => {
-            if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-            accumulated = deepStream.appendFinal(token)
-            setStreamingContent(accumulated, convId)
-          },
-          onReasoningToken: (token) => {
-            if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-            resumeThinking += token
-            accumulated = deepStream.updateThinking(
-              `## 继续未完成\n正在基于上一轮已完成阶段继续生成，避免从头重新思考。\n\n${resumeThinking}`,
-            )
-            setStreamingContent(accumulated, convId)
-          },
-          onDone: () => {},
-          onError: (err) => {
-            streamError = err
-          },
-        },
-        controller.signal,
-        { reasoning: resolveUserVisibleReasoning(writingConfig.reasoning) },
-      )
-
-      if (!streamSessionGuardRef.current.isActive(convId, sessionId)) return
-      if (streamError) throw streamError
-
-      streamSessionGuardRef.current.finish(convId, sessionId, () => {
-        finalizeStream(accumulated || "继续未完成失败：模型没有返回内容。", [], convId)
-        delete activeStreamSessionsRef.current[convId]
-        delete abortControllersRef.current[convId]
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      streamSessionGuardRef.current.finish(convId, sessionId, () => {
-        const visibleFailure = `${accumulated ? `${accumulated}\n\n` : ""}出错：继续未完成失败：${message}`
-        const inheritedResumeContext = [
-          rootResumeContext,
-          "",
-          "## 最近一次继续未完成失败时的输出",
-          stripContinueUnfinishedDeepChapterContext(visibleFailure),
-        ].join("\n")
-        finalizeStream(
-          appendContinueUnfinishedDeepChapterContext(visibleFailure, {
-            originalRequest,
-            resumeContext: inheritedResumeContext,
-            rootResumeContext,
-            checkpoint: latestCheckpoint,
-          }),
-          undefined,
-          convId,
-        )
-        delete activeStreamSessionsRef.current[convId]
-        delete abortControllersRef.current[convId]
-      })
-    } finally {
-      if (activeStreamSessionsRef.current[convId] === sessionId) {
-        delete activeStreamSessionsRef.current[convId]
-      }
-      if (abortControllersRef.current[convId] === controller) {
-        delete abortControllersRef.current[convId]
-      }
-    }
-  }, [isStreaming, createConversation, addMessage, startStreaming, setStreamingContent, llmConfig, aiChatModel, providerConfigs, finalizeStream])
+    await handleSendRef.current(prompt, [], "继续未完成")
+  }, [isStreaming])
 
 
 
@@ -1693,18 +1442,53 @@ export function ChatPanel() {
                   />
                   {novelMode && (
                     <>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-pressed={deepChapterEnabled}
-                        className={getDeepChapterToggleButtonClass(deepChapterEnabled)}
-                        onClick={() => setDeepChapterEnabled(!deepChapterEnabled)}
-                        title={deepChapterEnabled ? "关闭深度模式" : "开启深度模式"}
-                        aria-label={deepChapterEnabled ? "关闭深度模式" : "开启深度模式"}
+                      <div
+                        className="flex h-8 shrink-0 items-center rounded-full border bg-background p-0.5"
+                        role="group"
+                        aria-label={aiSessionWorkflowModeLabel}
                       >
-                        <Brain className="h-4 w-4" />
-                      </Button>
+                        {aiWorkflowModeOptions.map(({ mode, label }) => (
+                          <Button
+                            key={mode}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-pressed={aiWorkflowMode === mode}
+                            className={`h-7 min-w-10 rounded-full px-2 text-xs ${getWorkflowModeButtonClass(aiWorkflowMode === mode)}`}
+                            onClick={() => setAiWorkflowMode(mode)}
+                            title={`切换到${label}模式`}
+                            aria-label={`切换到${label}模式`}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={(
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-pressed={planExecuteEnabled}
+                              className={`h-8 shrink-0 rounded-full border px-2.5 text-xs ${
+                                planExecuteEnabled
+                                  ? "border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground"
+                                  : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+                              }`}
+                              onClick={() => setPlanExecuteEnabled(!planExecuteEnabled)}
+                              title={planExecuteEnabled ? "关闭计划执行模式" : "开启计划执行模式"}
+                              aria-label={planExecuteEnabled ? "关闭计划执行模式" : "开启计划执行模式"}
+                            />
+                          )}
+                        >
+                          <ListChecks className="mr-1 h-3.5 w-3.5" />
+                          计划执行
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs leading-5">
+                          开启后，本次写作会先创建计划，等待确认后再执行；可与快速、标准、严格任一模式组合使用。
+                        </TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger
                           render={(
@@ -1837,17 +1621,6 @@ export function ChatPanel() {
             onCancel={() => closeChapterPlanDialog("cancel")}
           />
         )}
-        <ModifyConfirmDialog
-          open={breakpointResumeOpen}
-          originalContent="检测到上次有未完成的任务"
-          modifiedContent={breakpointResumeContent}
-          itemName="检测到上次有未完成的任务"
-          intentLabel="确认后将继续执行断点任务"
-          type="breakpoint"
-          editable={false}
-          onConfirm={confirmBreakpointResume}
-          onCancel={cancelBreakpointResume}
-        />
       </div>
     </div>
   )

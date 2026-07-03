@@ -19,7 +19,7 @@ const KNOWLEDGE_INTENTS = new Set<NovelTaskIntent>([
   "setting_query",
 ])
 
-const FAST_WRITING_TOOLS = new Set(["read_chapter", "read_outline", "load_context", "trim_context"])
+const FAST_WRITING_TOOLS = new Set(["read_chapter", "read_outline", "load_context", "trim_context", "run_chapter_workflow"])
 const STANDARD_WRITING_TOOLS = new Set([
   "read_chapter",
   "read_outline",
@@ -27,6 +27,7 @@ const STANDARD_WRITING_TOOLS = new Set([
   "search_chapters",
   "load_context",
   "trim_context",
+  "run_chapter_workflow",
   "write_chapter",
   "apply_skill",
 ])

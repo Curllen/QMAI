@@ -51,6 +51,7 @@ const TOOL_LABELS: Record<string, string> = {
   route_task: "Route Task",
   load_context: "Load Context",
   trim_context: "Trim Context",
+  run_chapter_workflow: "Chapter Workflow",
 }
 
 export interface BuildAvailableCapabilitiesOptions {
@@ -107,6 +108,7 @@ function toolIntents(toolName: string): CapabilityIntent[] {
     return ["external_search", ...QUERY_INTENTS, "general"]
   }
   if (toolName === "write_chapter") return WRITING_INTENTS
+  if (toolName === "run_chapter_workflow") return WRITING_INTENTS
   if (toolName === "write_outline_node") return ["generate_outline"]
   if (toolName === "write_memory") return ["extract_memory"]
   if (toolName === "apply_skill") return [...WRITING_INTENTS, ...REVIEW_INTENTS, "generate_outline"]

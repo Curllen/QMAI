@@ -1,4 +1,5 @@
-import type { AgentRunRecord, AgentToolEvent } from "./types"
+import type { AgentRunRecord, AgentStageTrace, AgentToolEvent } from "./types"
+import { activityEventFromToolEvent, applyAgentActivityEvent } from "./activity-trace"
 
 export type ToolCallRecord = AgentRunRecord["toolCalls"][number]
 type SettledToolCallStatus = "done" | "error" | "cancelled"
@@ -20,9 +21,11 @@ export function applyAgentToolEvent(
 
   const nextRecord: ToolCallRecord = {
     id: event.callId,
+    parentCallId: event.parentCallId,
     name: event.name,
     params: event.params,
     result: event.result ?? "",
+    preview: event.preview,
     status,
     startedAt: event.timestamp,
     finishedAt: event.type === "call_started" ? 0 : event.timestamp,
@@ -36,6 +39,8 @@ export function applyAgentToolEvent(
     if (index !== existingIndex) return record
     return {
       ...record,
+      parentCallId: event.parentCallId ?? record.parentCallId,
+      preview: event.preview ?? record.preview,
       name: event.name,
       params: event.params,
       result: event.result ?? record.result,
@@ -61,4 +66,27 @@ export function settleRunningAgentToolCalls(
       finishedAt: timestamp,
     }
   })
+}
+
+export function activityEventFromAgentToolEvent(event: AgentToolEvent) {
+  const activity = activityEventFromToolEvent(event)
+  const titleFromParams = typeof event.params.title === "string" ? event.params.title : ""
+
+  if (event.name.startsWith("chapter_")) {
+    return {
+      ...activity,
+      stageId: "chapter_workflow",
+      kind: event.type === "result" ? "stage_output" as const : event.type === "error" ? "error" as const : activity.kind,
+      title: titleFromParams || activity.title,
+    }
+  }
+
+  return activity
+}
+
+export function applyAgentToolActivityEvent(
+  stages: AgentStageTrace[] | undefined,
+  event: AgentToolEvent,
+): AgentStageTrace[] {
+  return applyAgentActivityEvent(stages, activityEventFromAgentToolEvent(event))
 }

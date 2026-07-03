@@ -6,6 +6,7 @@ import { loadDeAiSkillConfig, type DeAiSkillConfig } from "@/lib/novel/de-ai-ski
 import { loadUserSkillConfig, resolveEnabledWritingSkills } from "@/lib/novel/user-skill-store"
 import type { UserSkill } from "@/lib/novel/skill-library"
 import { resolveModelConfig } from "@/lib/novel/model-resolver"
+import { runDeepChapterGeneration } from "@/lib/novel/deep-chapter-generation"
 import { normalizePath } from "@/lib/path-utils"
 import { ToolRegistry } from "@/lib/agent/registry"
 import { buildAgentConfig, modelSupportsTools } from "@/lib/agent/config"
@@ -33,6 +34,7 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
   const providerConfigs = useWikiStore((s) => s.providerConfigs)
   const searchApiConfig = useWikiStore((s) => s.searchApiConfig)
   const mcpConfig = useWikiStore((s) => s.mcpConfig)
+  const aiWorkflowMode = useWikiStore((s) => s.aiWorkflowMode)
 
   const chatConversations = useChatStore((s) => s.conversations)
   const chatMessages = useChatStore((s) => s.messages)
@@ -137,6 +139,8 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
       getOutlineConversations,
       mcpTools: mcpRuntime.mcpTools,
       llmConfig,
+      aiWorkflowMode,
+      runDeepChapterGeneration,
       draftMode: novelMode,
       projectPath: normalizePath(projectPath),
     })
@@ -158,6 +162,7 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
     baseLlmConfig,
     providerConfigs,
     mcpConfig,
+    aiWorkflowMode,
     getSearchApiConfig,
     getUserSkills,
     systemPrompt,

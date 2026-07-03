@@ -79,6 +79,23 @@ describe("buildAgentWorkflowSteps", () => {
     expect(decision?.summary).toContain("等待用户确认")
   })
 
+  it("summarizes chapter workflow parent and child calls", () => {
+    const steps = buildAgentWorkflowSteps({
+      toolCalls: [
+        call({ id: "parent", name: "run_chapter_workflow", status: "running" }),
+        call({ id: "context", name: "chapter_context", status: "done", parentCallId: "parent" } as any),
+        call({ id: "draft", name: "chapter_draft", status: "running", parentCallId: "parent" } as any),
+      ],
+    })
+
+    const tool = steps.find((step) => step.kind === "tool")
+    const details = tool?.details.map((detail) => detail.value).join("\n")
+
+    expect(tool?.summary).toContain("章节工作流")
+    expect(details).toContain("读取章节上下文")
+    expect(details).toContain("生成章节正文初稿")
+  })
+
   it("uses context trace result protocol for validation", () => {
     const trace: ContextTrace = {
       id: "trace-1",
@@ -115,5 +132,12 @@ describe("getWorkflowToolDescription", () => {
   it("does not expose undefined when params are missing", () => {
     expect(getWorkflowToolDescription(call({ id: "chapter", name: "read_chapter" }))).toBe("读取章节")
     expect(getWorkflowToolDescription(call({ id: "memory", name: "read_memory" }))).toBe("读取记忆")
+  })
+
+  it("describes synthetic chapter workflow calls as user-visible writing steps", () => {
+    expect(getWorkflowToolDescription(call({ id: "brief", name: "chapter_task_brief" }))).toBe("生成写作任务书")
+    expect(getWorkflowToolDescription(call({ id: "draft", name: "chapter_draft", params: { chars: 3200 } }))).toBe("生成章节正文初稿")
+    expect(getWorkflowToolDescription(call({ id: "review", name: "chapter_review" }))).toBe("执行 AI 审稿")
+    expect(getWorkflowToolDescription(call({ id: "polish", name: "chapter_final_polish" }))).toBe("简单审查与去AI味")
   })
 })

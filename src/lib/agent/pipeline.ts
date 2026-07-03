@@ -17,6 +17,7 @@ export interface PrePluginInput {
   effectiveTaskRoute?: TaskRouteResult | null
   contextPack?: ContextPack | null
   aiWorkflowMode?: AiWorkflowMode
+  planExecuteEnabled?: boolean
   availableSkills?: UserSkill[]
   selectedSkills?: UserSkill[]
   mcpCapabilities?: AiCapability[]

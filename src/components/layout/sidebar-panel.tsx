@@ -24,8 +24,7 @@ import { SoulSidebarPanel } from "./soul-sidebar-panel"
 import { ReviewCenterSidebarPanel } from "./review-center-sidebar-panel"
 import { BookAnalysisSidebarPanel } from "./book-analysis-sidebar-panel"
 import { FrameworkList } from "@/components/novel/story-simulation/framework-list"
-import { SkillLibrarySidebarPanel } from "@/components/skill-library/skill-library-view"
-import { WritingSkillLibrarySidebarPanel } from "@/components/skill-library/writing-skill-library-view"
+import { UnifiedSkillLibrarySidebarPanel } from "@/components/skill-library/unified-skill-library-view"
 
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
@@ -1283,12 +1282,8 @@ export function SidebarPanel() {
     return <SoulSidebarPanel />
   }
 
-  if (activeView === "skillLibrary") {
-    return <SkillLibrarySidebarPanel />
-  }
-
-  if (activeView === "writingSkillLibrary") {
-    return <WritingSkillLibrarySidebarPanel />
+  if (activeView === "skillLibrary" || activeView === "writingSkillLibrary") {
+    return <UnifiedSkillLibrarySidebarPanel />
   }
 
   if (activeView === "reviewCenter") {

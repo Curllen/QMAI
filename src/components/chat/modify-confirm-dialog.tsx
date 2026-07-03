@@ -24,6 +24,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
   iconColor: string
   originalLabel: string
   modifiedLabel: string
+  confirmLabel: string
 }> = {
   chapter: {
     title: "确认修改章节",
@@ -31,6 +32,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
     iconColor: "text-amber-500",
     originalLabel: "原文",
     modifiedLabel: "修改后",
+    confirmLabel: "确认保存",
   },
   outline: {
     title: "确认写入大纲",
@@ -38,6 +40,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
     iconColor: "text-blue-500",
     originalLabel: "原大纲",
     modifiedLabel: "新内容",
+    confirmLabel: "确认保存",
   },
   memory: {
     title: "确认写入记忆",
@@ -45,6 +48,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
     iconColor: "text-purple-500",
     originalLabel: "原记忆",
     modifiedLabel: "新内容",
+    confirmLabel: "确认保存",
   },
   classification: {
     title: "确认恢复 classification.md",
@@ -52,6 +56,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
     iconColor: "text-emerald-500",
     originalLabel: "当前配置",
     modifiedLabel: "默认配置",
+    confirmLabel: "确认保存",
   },
   breakpoint: {
     title: "继续未完成任务",
@@ -59,6 +64,7 @@ const TYPE_CONFIG: Record<ModifyConfirmType, {
     iconColor: "text-blue-500",
     originalLabel: "断点摘要",
     modifiedLabel: "恢复提示词",
+    confirmLabel: "继续执行",
   },
 }
 
@@ -242,7 +248,7 @@ export function ModifyConfirmDialog({
             className="flex items-center gap-1.5 rounded-md bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700"
           >
             <Check className="h-4 w-4" />
-            确认保存
+            {config.confirmLabel}
           </button>
         </div>
       </div>

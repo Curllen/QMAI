@@ -15,7 +15,6 @@ describe("sidebar nav preferences", () => {
       "lint",
       "soul",
       "skillLibrary",
-      "writingSkillLibrary",
       "bookAnalysis",
       "reviewCenter",
       "storySimulation",
@@ -39,7 +38,6 @@ describe("sidebar nav preferences", () => {
       "lint",
       "soul",
       "skillLibrary",
-      "writingSkillLibrary",
       "bookAnalysis",
       "reviewCenter",
       "storySimulation",
@@ -65,10 +63,10 @@ describe("sidebar nav preferences", () => {
     expect(config.order[0]).toBe("wiki")
   })
 
-  it("includes skill library in the configurable sidebar order", () => {
+  it("keeps writing skills merged into the single skill library entry", () => {
     expect(DEFAULT_SIDEBAR_NAV_ORDER).toContain("skillLibrary")
-    expect(DEFAULT_SIDEBAR_NAV_ORDER).toContain("writingSkillLibrary")
+    expect(DEFAULT_SIDEBAR_NAV_ORDER).not.toContain("writingSkillLibrary")
     expect(normalizeSidebarNavConfig({ order: ["wiki"] }).order).toContain("skillLibrary")
-    expect(normalizeSidebarNavConfig({ order: ["wiki"] }).order).toContain("writingSkillLibrary")
+    expect(normalizeSidebarNavConfig({ order: ["wiki"] }).order).not.toContain("writingSkillLibrary")
   })
 })

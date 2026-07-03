@@ -406,7 +406,7 @@ export async function streamChat(
           new Error(
             `模型只输出了 ${reasoningCharsObserved.toLocaleString()} 字符的思考内容，但没有输出正文。` +
             `这通常表示接口触发了思考 token 上限、模型没有从思考阶段切换到正式回答，或当前兼容接口的流式输出不完整。` +
-            `请缩短输入、提高 max_tokens，或在设置里切换其他模型后重试。`,
+            `请关闭模型思考、切换到非推理模型，或缩短输入后重试。`,
           ),
         )
         return

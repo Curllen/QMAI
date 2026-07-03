@@ -14,12 +14,24 @@ import {
   updateBreakpointStage,
 } from "./task-breakpoint"
 import type { ChatMessage } from "../llm-providers"
+import { isReasoningDisabled, isReasoningOnlyResponseError, withReasoningDisabled } from "../reasoning-retry"
 
 export class ModelDoesNotSupportToolsError extends Error {
   constructor() {
     super("当前模型不支持工具调用")
     this.name = "ModelDoesNotSupportToolsError"
   }
+}
+
+function withToolTimeout<T>(operation: Promise<T>, timeoutMs: number | undefined): Promise<T> {
+  const resolvedTimeoutMs = timeoutMs ?? TOOL_EXECUTE_TIMEOUT_MS
+  if (resolvedTimeoutMs <= 0) return operation
+  return Promise.race([
+    operation,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("工具执行超时")), resolvedTimeoutMs),
+    ),
+  ])
 }
 
 export class AgentRunner {
@@ -109,10 +121,12 @@ export class AgentRunner {
       }
 
       const openaiTools = config.tools.length > 0 ? toOpenAITools(config.tools) : undefined
-      const requestOverrides = openaiTools
-        ? { ...config.requestOverrides, tools: openaiTools as any, toolChoice: "auto" as const }
-        : config.requestOverrides
-      try {
+      const buildRequestOverrides = (baseOverrides = config.requestOverrides) =>
+        openaiTools
+          ? { ...baseOverrides, tools: openaiTools as any, toolChoice: "auto" as const }
+          : baseOverrides
+      let requestOverrides = buildRequestOverrides()
+      const streamRound = async () => {
         await streamChat(
           config.llmConfig,
           workingMessages as ChatMessage[],
@@ -120,6 +134,9 @@ export class AgentRunner {
           signal,
           requestOverrides,
         )
+      }
+      try {
+        await streamRound()
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         if (openaiTools && /tool|function.?call|unsupported|不支持工具/i.test(msg)) {
@@ -129,6 +146,23 @@ export class AgentRunner {
         }
         callbacks.onError(err instanceof Error ? err : new Error(String(err)))
         return record
+      }
+
+      if (
+        streamError &&
+        isReasoningOnlyResponseError(streamError) &&
+        !isReasoningDisabled(config.llmConfig, requestOverrides)
+      ) {
+        roundText = ""
+        toolCallDeltas.length = 0
+        streamError = undefined
+        requestOverrides = buildRequestOverrides(withReasoningDisabled(config.requestOverrides))
+        try {
+          await streamRound()
+        } catch (err) {
+          callbacks.onError(err instanceof Error ? err : new Error(String(err)))
+          return record
+        }
       }
 
       if (streamError) {
@@ -190,6 +224,12 @@ export class AgentRunner {
         }
 
         const callbackToolCall: ToolCall = { id: tc.id, name: toolName, arguments: params }
+        const executionContext = {
+          callId: tc.id,
+          toolName,
+          onToolEvent: callbacks.onToolEvent,
+          onActivityEvent: callbacks.onActivityEvent,
+        }
         callbacks.onToolCall(callbackToolCall)
         callbacks.onToolEvent?.({
           type: "call_started",
@@ -224,12 +264,7 @@ export class AgentRunner {
           let preview = ""
           try {
             const previewFn = tool.generatePreview ?? tool.execute
-            preview = await Promise.race([
-              previewFn(params, signal),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("工具执行超时")), TOOL_EXECUTE_TIMEOUT_MS),
-              ),
-            ])
+            preview = await withToolTimeout(previewFn(params, signal, executionContext), tool.executeTimeoutMs)
           } catch (e) {
             preview = `预览生成失败：${e instanceof Error ? e.message : String(e)}`
           }
@@ -253,11 +288,9 @@ export class AgentRunner {
         }
 
         try {
-          const result = await Promise.race([
-            tool.execute(params, signal),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("工具执行超时")), TOOL_EXECUTE_TIMEOUT_MS)),
-          ])
+          const result = await withToolTimeout(tool.execute(params, signal, executionContext), tool.executeTimeoutMs)
           toolCallRecord.result = result
+          toolCallRecord.status = "done"
           toolCallRecord.finishedAt = Date.now()
           callbacks.onToolResult(tc.id, result)
           callbacks.onToolEvent?.({

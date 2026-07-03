@@ -11,6 +11,7 @@ import type { DeAiSkillConfig } from "@/lib/novel/de-ai-skill-library"
 import type { UserSkillConfig } from "@/lib/novel/user-skill-store"
 import type { McpConfig } from "@/lib/mcp/config"
 import type { UseAgentConfigResult } from "@/hooks/use-agent-config"
+import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
 
 const baseLlmConfig: LlmConfig = {
   provider: "openai",
@@ -30,6 +31,7 @@ interface StoreStates {
     providerConfigs: ProviderConfigs
     searchApiConfig: SearchApiConfig
     mcpConfig: McpConfig
+    aiWorkflowMode: AiWorkflowMode
   }>
   chat?: Partial<{
     conversations: Conversation[]
@@ -66,6 +68,7 @@ async function renderHook(systemPrompt: string, overrides: StoreStates & {
     } as SearchApiConfig,
     mcpConfig: { servers: [] } as McpConfig,
     novelMode: true,
+    aiWorkflowMode: "standard" as AiWorkflowMode,
     ...overrides.wiki,
   }
 
@@ -120,6 +123,10 @@ async function renderHook(systemPrompt: string, overrides: StoreStates & {
       loadUserSkillConfig: vi.fn().mockResolvedValue(userSkillConfig),
     }
   })
+
+  vi.doMock("@/lib/novel/deep-chapter-generation", () => ({
+    runDeepChapterGeneration: vi.fn(),
+  }))
 
   vi.doMock("@/lib/web-search", () => ({
     resolveSearchConfig: (config: SearchApiConfig) => config,
@@ -183,6 +190,7 @@ describe("useAgentConfig", () => {
     vi.doUnmock("@/stores/outline-chat-store")
     vi.doUnmock("@/lib/novel/de-ai-skill-library")
     vi.doUnmock("@/lib/novel/user-skill-store")
+    vi.doUnmock("@/lib/novel/deep-chapter-generation")
     vi.doUnmock("@/lib/web-search")
     vi.doUnmock("@/lib/mcp/real-connector")
   })
@@ -386,6 +394,29 @@ describe("useAgentConfig", () => {
       source: "mcp",
     }))
     expect(result.mcpWarnings).toEqual([])
+
+    await cleanup()
+  }, 15000)
+
+  it("passes chapter workflow dependencies into the agent tool registry", async () => {
+    const { result, cleanup } = await renderHook("test prompt", {
+      wiki: {
+        aiChatModel: "openai/gpt-4o",
+        project: { path: "/tmp/project" } as WikiProject,
+        aiWorkflowMode: "strict",
+      },
+      skillConfig: {
+        version: 1,
+        defaultSkillId: "built-in:comprehensive",
+        disabledSkillIds: [],
+        projectSkills: [],
+        builtInSkillOverrides: [],
+        lastChapterDeAiSkillId: null,
+      },
+    })
+
+    expect(result.registry.has("run_chapter_workflow")).toBe(true)
+    expect(result.config?.tools.some((tool) => tool.name === "run_chapter_workflow")).toBe(true)
 
     await cleanup()
   }, 15000)

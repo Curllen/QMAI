@@ -1,5 +1,6 @@
 import type { ToolRegistry } from "../registry"
-import type { Tool } from "../types"
+import type { AgentToolEvent, Tool } from "../types"
+import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
 import { createReadChapterTool } from "./read-chapter"
 import { createReadOutlineTool } from "./read-outline"
 import { createReadMemoryTool } from "./read-memory"
@@ -18,12 +19,13 @@ import { createApplySkillTool } from "./apply-skill"
   import { createWebSearchTool } from "./web-search"
   import { createReadWebPageTool } from "./read-web-page"
   import { createSummarizeSearchResultsTool } from "./summarize-search-results"
-  import { createRouteTaskTool } from "./route-task"
+import { createRouteTaskTool } from "./route-task"
 import { createLoadContextTool } from "./load-context"
 import { createTrimContextTool } from "./trim-context"
+import { createRunChapterWorkflowTool, type RunDeepChapterGeneration } from "./run-chapter-workflow"
 import type { DeAiSkillConfig } from "@/lib/novel/de-ai-skill-library"
 import type { UserSkill } from "@/lib/novel/skill-library"
-import type { SearchApiConfig } from "@/stores/wiki-store"
+import type { LlmConfig, SearchApiConfig } from "@/stores/wiki-store"
 import type { TaskRouteResult } from "@/lib/novel/task-router"
 import type { ContextPack } from "@/lib/novel/context-engine"
 
@@ -50,6 +52,10 @@ export interface ToolFactoryOptions {
   sourceMessageId?: string
   enabledToolNames?: string[]
   disabledTools?: string[]
+  llmConfig?: LlmConfig
+  aiWorkflowMode?: AiWorkflowMode
+  runDeepChapterGeneration?: RunDeepChapterGeneration
+  onToolEvent?: (event: AgentToolEvent) => void
 }
 
 export function registerAllBuiltInTools(registry: ToolRegistry, options: ToolFactoryOptions): void {
@@ -87,6 +93,21 @@ export function registerAllBuiltInTools(registry: ToolRegistry, options: ToolFac
   if (shouldRegister("web_search")) registry.register(createWebSearchTool(options.getSearchApiConfig))
   if (shouldRegister("read_web_page")) registry.register(createReadWebPageTool())
   if (shouldRegister("summarize_search_results")) registry.register(createSummarizeSearchResultsTool())
+  if (
+    shouldRegister("run_chapter_workflow") &&
+    options.projectPath &&
+    options.llmConfig &&
+    options.aiWorkflowMode &&
+    options.runDeepChapterGeneration
+  ) {
+    registry.register(createRunChapterWorkflowTool({
+      projectPath: options.projectPath,
+      llmConfig: options.llmConfig,
+      aiWorkflowMode: options.aiWorkflowMode,
+      runDeepChapterGeneration: options.runDeepChapterGeneration,
+      onToolEvent: options.onToolEvent,
+    }))
+  }
   for (const tool of options.mcpTools ?? []) {
     if (shouldRegister(tool.name)) registry.register(tool)
   }

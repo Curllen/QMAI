@@ -571,6 +571,7 @@ interface WikiState {
   novelMode: boolean
   chatEditModeEnabled: boolean
   aiWorkflowMode: AiWorkflowMode
+  planExecuteEnabled: boolean
   /** 深度模式状态：跨视图切换保持开启 */
   deepChapterEnabled: boolean
   novelConfig: NovelConfig
@@ -642,6 +643,7 @@ interface WikiState {
   setNovelMode: (novelMode: boolean) => void
   setChatEditModeEnabled: (enabled: boolean) => void
   setAiWorkflowMode: (mode: AiWorkflowMode) => void
+  setPlanExecuteEnabled: (enabled: boolean) => void
   setDeepChapterEnabled: (enabled: boolean) => void
   setNovelConfig: (config: Partial<NovelConfig>) => void
   setCommunitySummaryError: (error: string | null) => void
@@ -855,6 +857,7 @@ export const useWikiStore = create<WikiState>((set) => ({
   novelMode: true,
   chatEditModeEnabled: false,
   aiWorkflowMode: "standard",
+  planExecuteEnabled: false,
   deepChapterEnabled: false,
   novelConfig: { ...DEFAULT_NOVEL_CONFIG },
   communitySummaryError: null,
@@ -895,6 +898,7 @@ export const useWikiStore = create<WikiState>((set) => ({
     aiWorkflowMode,
     deepChapterEnabled: aiWorkflowMode === "strict",
   }),
+  setPlanExecuteEnabled: (planExecuteEnabled) => set({ planExecuteEnabled }),
   setDeepChapterEnabled: (deepChapterEnabled) => set({
     deepChapterEnabled,
     aiWorkflowMode: deepChapterEnabled ? "strict" : "standard",

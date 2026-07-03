@@ -2,6 +2,7 @@ import React from "react"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { vi } from "vitest"
+import type { TaskBreakpoint } from "@/lib/agent/task-breakpoint"
 
 const wikiState = {
   project: { path: "C:/QMAI_C/QMAI-main", name: "测试项目" },
@@ -23,11 +24,14 @@ const wikiState = {
   chatEditModeEnabled: false,
   selectedFile: null,
   aiWorkflowMode: "standard",
+  planExecuteEnabled: false,
   deepChapterEnabled: false,
   chatDockPosition: "right",
   novelConfig: { contextTokenBudget: 0 },
   setActiveView: vi.fn(),
   setAiChatModel: vi.fn(),
+  setAiWorkflowMode: vi.fn(),
+  setPlanExecuteEnabled: vi.fn(),
   setChatEditModeEnabled: vi.fn(),
   setDeepChapterEnabled: vi.fn(),
   setChatDockPosition: vi.fn(),
@@ -51,6 +55,7 @@ const defaultAgentSkillConfig = {
 }
 
 let mockAgentSkillConfig: typeof defaultAgentSkillConfig | null = defaultAgentSkillConfig
+let mockTaskBreakpoint: TaskBreakpoint | null = null
 
 vi.mock("react-i18next", () => ({
   initReactI18next: {
@@ -97,6 +102,7 @@ vi.mock("@/hooks/use-agent-config", () => ({
 
 vi.mock("@/components/chat/chat-shared", () => ({
   useSourceFiles: () => [],
+  getLastQueryPages: () => [],
 }))
 
 vi.mock("@/lib/novel/story-simulation/framework-binding", () => ({
@@ -108,9 +114,9 @@ vi.mock("@/lib/novel/story-simulation/framework-store", () => ({
 }))
 
 vi.mock("@/lib/agent/task-breakpoint", () => ({
-  loadTaskBreakpoint: vi.fn(async () => null),
+  loadTaskBreakpoint: vi.fn(async () => mockTaskBreakpoint),
   clearTaskBreakpoint: vi.fn(async () => {}),
-  buildBreakpointResumePrompt: vi.fn(() => ""),
+  buildBreakpointResumePrompt: vi.fn(() => "恢复提示词"),
 }))
 
 vi.mock("@/lib/llm-client", () => ({
@@ -144,6 +150,7 @@ import { useChatStore } from "@/stores/chat-store"
 export interface RenderChatPanelOptions {
   activeConversation?: boolean
   agentSkillConfig?: typeof defaultAgentSkillConfig | null
+  taskBreakpoint?: TaskBreakpoint | null
 }
 
 export async function renderChatPanel(options: RenderChatPanelOptions = {}) {
@@ -151,6 +158,7 @@ export async function renderChatPanel(options: RenderChatPanelOptions = {}) {
   mockAgentSkillConfig = options.agentSkillConfig === undefined
     ? defaultAgentSkillConfig
     : options.agentSkillConfig
+  mockTaskBreakpoint = options.taskBreakpoint ?? null
 
   const activeConversationId = options.activeConversation ? "conv_mount" : null
   useChatStore.setState({

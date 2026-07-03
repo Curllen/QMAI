@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { applyAgentToolEvent, settleRunningAgentToolCalls } from "./tool-events"
+import {
+  activityEventFromAgentToolEvent,
+  applyAgentToolActivityEvent,
+  applyAgentToolEvent,
+  settleRunningAgentToolCalls,
+} from "./tool-events"
 
 describe("applyAgentToolEvent", () => {
   it("creates and updates tool call records from normalized events", () => {
@@ -54,6 +59,24 @@ describe("applyAgentToolEvent", () => {
     expect(records[0].result).toContain("需要用户确认")
   })
 
+  it("preserves parent call metadata for workflow child events", () => {
+    const records = applyAgentToolEvent(undefined, {
+      type: "call_started",
+      callId: "chapter-context",
+      parentCallId: "chapter-workflow",
+      name: "chapter_context",
+      params: { title: "读取上下文" },
+      timestamp: 100,
+    })
+
+    expect(records[0]).toMatchObject({
+      id: "chapter-context",
+      name: "chapter_context",
+      status: "running",
+      parentCallId: "chapter-workflow",
+    })
+  })
+
   it("settles leftover running tool calls when an agent session finishes", () => {
     const records = settleRunningAgentToolCalls([
       {
@@ -83,6 +106,59 @@ describe("applyAgentToolEvent", () => {
     expect(records?.[1]).toMatchObject({
       status: "approval_required",
       finishedAt: 130,
+    })
+  })
+
+  it("converts read tools into read_source activity events", () => {
+    const event = activityEventFromAgentToolEvent({
+      type: "result",
+      callId: "read-1",
+      name: "read_chapter",
+      params: { chapter: "第13章" },
+      result: "第13章结尾：主角发现铜铃线索。",
+      timestamp: 100,
+    })
+
+    expect(event).toMatchObject({
+      stageId: "read_context",
+      kind: "read_source",
+      title: "调用完成：read_chapter",
+      toolCallId: "read-1",
+    })
+    expect(event.content).toContain("铜铃线索")
+  })
+
+  it("converts workflow child events into chapter workflow activities", () => {
+    const event = activityEventFromAgentToolEvent({
+      type: "result",
+      callId: "workflow-1:chapter_task_brief",
+      parentCallId: "workflow-1",
+      name: "chapter_task_brief",
+      params: { title: "生成写作任务书" },
+      result: "写作任务书完成。",
+      timestamp: 200,
+    })
+
+    expect(event).toMatchObject({
+      stageId: "chapter_workflow",
+      kind: "stage_output",
+      title: "生成写作任务书",
+    })
+  })
+
+  it("applies tool activity events to stage traces", () => {
+    const stages = applyAgentToolActivityEvent(undefined, {
+      type: "call_started",
+      callId: "w1",
+      name: "write_chapter",
+      params: { title: "第14章" },
+      timestamp: 100,
+    })
+
+    expect(stages[0]).toMatchObject({
+      id: "write_confirmation",
+      title: "写入确认",
+      status: "running",
     })
   })
 })
