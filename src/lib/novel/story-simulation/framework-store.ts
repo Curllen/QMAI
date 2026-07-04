@@ -23,6 +23,8 @@ import type {
   StoryFramework,
   StoryNode,
   TimelineEvent,
+  RumorEvent,
+  SimulationDebugTrace,
 } from "./types"
 import type { SerializedSimulationSnapshot } from "./simulation-serializer"
 
@@ -404,6 +406,8 @@ export async function saveSimulationResult(
   draft?: StoryDraft,
   timelineEvents?: TimelineEvent[],
   agentSnapshot?: SerializedSimulationSnapshot,
+  rumors?: RumorEvent[],
+  debugTraces?: SimulationDebugTrace[],
 ): Promise<string> {
   await ensureSimulationDirs(projectPath)
   const resultId = `result-${Date.now()}`
@@ -415,6 +419,8 @@ export async function saveSimulationResult(
     draft: draft ?? null,
     timelineEvents: timelineEvents ?? [],
     agentSnapshot: agentSnapshot ?? null,
+    rumors: rumors ?? [],
+    debugTraces: debugTraces ?? [],
   }
   await writeFileAtomic(`${dir}/${resultId}.json`, JSON.stringify(payload, null, 2))
   await writeFileAtomic(
@@ -453,6 +459,8 @@ export async function loadSimulationResults(
   draft?: StoryDraft | null
   timelineEvents?: TimelineEvent[]
   agentSnapshot?: SerializedSimulationSnapshot | null
+  rumors?: RumorEvent[]
+  debugTraces?: SimulationDebugTrace[]
 }[]> {
   const dir = frameworkResultsDir(projectPath, frameworkId)
   let entries: FileNode[]
@@ -468,6 +476,8 @@ export async function loadSimulationResults(
     draft?: StoryDraft | null
     timelineEvents?: TimelineEvent[]
     agentSnapshot?: SerializedSimulationSnapshot | null
+    rumors?: RumorEvent[]
+    debugTraces?: SimulationDebugTrace[]
   }[] = []
   for (const entry of entries) {
     if (entry.is_dir) continue
@@ -479,6 +489,8 @@ export async function loadSimulationResults(
         draft?: StoryDraft | null
         timelineEvents?: TimelineEvent[]
         agentSnapshot?: SerializedSimulationSnapshot | null
+        rumors?: RumorEvent[]
+        debugTraces?: SimulationDebugTrace[]
       }
       if (parsed && parsed.report) {
         results.push({
@@ -487,6 +499,8 @@ export async function loadSimulationResults(
           draft: parsed.draft ?? null,
           timelineEvents: parsed.timelineEvents ?? [],
           agentSnapshot: parsed.agentSnapshot ?? null,
+          rumors: parsed.rumors ?? [],
+          debugTraces: parsed.debugTraces ?? [],
         })
       }
     } catch {

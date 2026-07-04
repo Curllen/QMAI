@@ -25,6 +25,7 @@ function makeAgent(id: string, name: string): NovelAgent {
       knownSecrets: new Set(),
       sentiments: new Map(),
       recentDecisions: [],
+      rumorCredibility: 0.5,
     },
     knowledgeScope: [],
     personality: [],
@@ -44,6 +45,7 @@ function makeRumorEvent(id: string, observableBy: string[]): RumorEvent {
     believedBy: [],
     verifiedBy: [],
     timestamp: "2026-07-04T00:00:00.000Z",
+    generation: 0,
   }
 }
 

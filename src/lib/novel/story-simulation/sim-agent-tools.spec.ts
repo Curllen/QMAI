@@ -25,6 +25,7 @@ function makeAgent(id: string, name: string): NovelAgent {
       knownSecrets: new Set(),
       sentiments: new Map(),
       recentDecisions: [],
+      rumorCredibility: 0.5,
     },
     knowledgeScope: [],
     personality: [],
@@ -66,7 +67,7 @@ function setupTwoAgents(): {
 }
 
 describe("createSimAgentTools", () => {
-  it("creates a registry with 5 tools", () => {
+  it("creates a registry with 6 tools", () => {
     const { agentA, blackboard } = setupTwoAgents()
     const registry = createSimAgentTools(agentA, blackboard)
     expect(registry.has("recall")).toBe(true)
@@ -74,7 +75,8 @@ describe("createSimAgentTools", () => {
     expect(registry.has("inquire")).toBe(true)
     expect(registry.has("introspect")).toBe(true)
     expect(registry.has("investigate")).toBe(true)
-    expect(registry.list().length).toBe(5)
+    expect(registry.has("spread_rumor")).toBe(true)
+    expect(registry.list().length).toBe(6)
   })
 })
 

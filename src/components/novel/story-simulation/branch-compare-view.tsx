@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { ArrowLeft, BarChart3, Clock, Zap } from "lucide-react"
 import type { SimulationBranch, DirectorScore } from "@/lib/novel/story-simulation/types"
+import { actionTypeShortLabel } from "@/lib/novel/story-simulation/action-type-utils"
 import { Button } from "@/components/ui/button"
 import { useSimulationWorker } from "@/hooks/use-simulation-worker"
 
@@ -309,7 +310,7 @@ function TimelineCompareTab({ branches }: { branches: SimulationBranch[] }) {
                           </span>
                           <span className="text-muted-foreground">
                             {" "}
-                            {ev.targetName ? `对 ${ev.targetName}` : ""} · {ev.actionType}
+                            {ev.targetName ? `对 ${ev.targetName}` : ""} · {actionTypeShortLabel(ev.actionType)}
                           </span>
                         </div>
                         <div className="line-clamp-3 text-muted-foreground">

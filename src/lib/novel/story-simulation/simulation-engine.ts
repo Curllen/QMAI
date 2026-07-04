@@ -105,6 +105,7 @@ function cloneAgent(agent: NovelAgent): NovelAgent {
       knownSecrets: new Set(agent.memory.knownSecrets),
       sentiments: new Map(agent.memory.sentiments),
       recentDecisions: [...agent.memory.recentDecisions],
+      rumorCredibility: agent.memory.rumorCredibility,
     },
     knowledgeScope: [...agent.knowledgeScope],
     personality: [...agent.personality],
@@ -865,6 +866,7 @@ function maybeDeriveRumor(
     believedBy: [],
     verifiedBy: [],
     timestamp: new Date().toISOString(),
+    generation: 0,
   }
 
   recordRumorEvent(blackboard, rumor)

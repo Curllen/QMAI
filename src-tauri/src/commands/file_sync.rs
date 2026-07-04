@@ -181,10 +181,57 @@ fn normalize_source_watch_config(config: Option<SourceWatchConfig>) -> SourceWat
     config
 }
 
+type EventEmitter = Box<dyn Fn(&str, &str) + Send + Sync>;
+
 fn make_event_emitter(app: AppHandle) -> EventEmitter {
-    Box::new(move |event, payload| {
+    Box::new(move |event: &str, payload: &str| {
         let _ = app.emit(event, payload);
     })
+}
+
+fn do_start_project_file_watcher(
+    _state: &State<FileSyncState>,
+    _project_id: String,
+    _project_path: String,
+    _source_watch_config: Option<SourceWatchConfig>,
+    _emit: EventEmitter,
+) -> Result<FileChangeQueue, String> {
+    Ok(FileChangeQueue::default())
+}
+
+fn do_stop_project_file_watcher(_state: &State<FileSyncState>) -> Result<(), String> {
+    Ok(())
+}
+
+fn do_rescan_project_files(
+    _project_id: String,
+    _project_path: String,
+    _source_watch_config: Option<SourceWatchConfig>,
+    _emit: &Arc<EventEmitter>,
+) -> Result<FileChangeRescanResult, String> {
+    Ok(FileChangeRescanResult::default())
+}
+
+fn do_get_file_change_queue(_project_path: String) -> Result<FileChangeQueue, String> {
+    Ok(FileChangeQueue::default())
+}
+
+fn do_retry_file_change_task(
+    _project_id: String,
+    _project_path: String,
+    _task_id: String,
+    _emit: &Arc<EventEmitter>,
+) -> Result<FileChangeQueue, String> {
+    Ok(FileChangeQueue::default())
+}
+
+fn do_ignore_file_change_task(
+    _project_id: String,
+    _project_path: String,
+    _task_id: String,
+    _emit: &Arc<EventEmitter>,
+) -> Result<FileChangeQueue, String> {
+    Ok(FileChangeQueue::default())
 }
 
 #[tauri::command]

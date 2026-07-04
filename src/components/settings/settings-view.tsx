@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+﻿import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Bot,
   BookOpen,
@@ -562,7 +562,7 @@ export function SettingsView() {
             className="cursor-pointer text-muted-foreground transition-colors hover:text-primary"
           />
         </div>
-        <nav className="flex-1 overflow-y-auto px-2 pb-3">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {CATEGORIES.map((c) => {
             const Icon = c.icon
             const isActive = c.id === active
@@ -599,8 +599,8 @@ export function SettingsView() {
       </aside>
 
       {/* Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
           <div className="mx-auto max-w-2xl">{body}</div>
         </div>
 

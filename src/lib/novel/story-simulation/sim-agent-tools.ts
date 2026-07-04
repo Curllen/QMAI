@@ -5,6 +5,7 @@ import {
   findMatchingRumor,
   getBlackboardVisibleEvents,
   recordBlackboardEvent,
+  spreadRumor,
   type SimulationBlackboard,
   verifyRumor,
 } from "@/lib/novel/story-simulation/multi-agent-orchestrator"
@@ -206,11 +207,54 @@ export function createSimAgentTools(
     },
   }
 
+  const spreadRumorTool: Tool = {
+    name: "spread_rumor",
+    description: "把一条你知道的传闻告诉另一个角色。可以加上你自己的描述和评价。注意选择你信任的角色来传播。",
+    category: "write",
+    permission: "auto",
+    parameters: {
+      rumorId: {
+        type: "string",
+        description: "要传播的传闻 ID",
+        required: true,
+      },
+      targetAgentId: {
+        type: "string",
+        description: "告诉谁（角色 ID）",
+        required: true,
+      },
+      message: {
+        type: "string",
+        description: "你说的内容（对传闻的描述、补充或评价）",
+        required: true,
+      },
+    },
+    execute: async (params) => {
+      const rumorId = String(params.rumorId ?? "")
+      const targetAgentId = String(params.targetAgentId ?? "")
+      const message = String(params.message ?? "")
+      if (!rumorId || !targetAgentId) {
+        return "错误：必须指定 rumorId 和 targetAgentId 参数"
+      }
+      const result = spreadRumor(blackboard, rumorId, agent.characterId, targetAgentId, message)
+      if (!result.newRumor) {
+        return "传播失败，找不到传闻或目标角色"
+      }
+      const newDistortion = Math.round(result.newRumor.distortion * 100) / 100
+      if (result.targetBelieved) {
+        return `传播成功！新传闻 ID：${result.newRumor.id}，目标角色相信了这条传闻。新失真度：${newDistortion}`
+      } else {
+        return `传播成功！新传闻 ID：${result.newRumor.id}，目标角色对这条传闻持怀疑态度，没有完全相信。新失真度：${newDistortion}`
+      }
+    },
+  }
+
   registry.register(recallTool)
   registry.register(observeTool)
   registry.register(inquireTool)
   registry.register(introspectTool)
   registry.register(investigateTool)
+  registry.register(spreadRumorTool)
 
   return registry
 }

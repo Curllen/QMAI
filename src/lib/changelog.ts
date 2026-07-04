@@ -91,6 +91,9 @@ const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
       "Duplicate-entity scans and merges run faster, with progress that tells you what is happening; the most likely duplicates show up first.",
       "macOS and Linux no longer check for automatic updates — the settings page points you to manual download instead, and the install guide covers common macOS setup issues.",
       "Some settings pages no longer need a Save button; changes take effect as you go.",
+      "Editor now polls disk every 2 seconds for external changes — if you edit a file outside QMai, the editor syncs automatically.",
+      "Fixed chapter save creating duplicate or wrong files when switching chapters; stale autosaves are cancelled and drafts are cleaned up after rename.",
+      "Fixed hydration race when switching projects quickly — paths are now compared with a normalized form, and hydration runs serially without corrupting the file tree.",
     ],
     zh: [
       "聊天用的模型和后台任务用的模型分开了：聊天框里选的只管对话和写正文，审稿、摘要、去 AI 味等默认走「默认模型」；需要的话，也可以给单个环节单独指定模型。",
@@ -101,6 +104,9 @@ const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
       "重复实体扫描和合并更快了，进度会告诉你当前在干什么；最可能重复的会排在前面。",
       "macOS 和 Linux 版暂不支持自动更新，设置里会提示去官网手动下载；安装说明也补充了 macOS 常见问题。",
       "部分设置页不再需要点保存，改动即时生效。",
+      "编辑器新增 2 秒轮询检测磁盘外部修改——如果外部程序修改了文件，编辑器会自动同步显示最新内容。",
+      "修复切换章节时保存产生重复文件或误删文件的问题：取消过期自动保存，重命名后清理草稿。",
+      "修复快速切换项目时界面卡死或文件树错乱的问题：路径使用 normalizePath 比较，hydration 串行执行，避免竞态条件。",
     ],
   },
 }

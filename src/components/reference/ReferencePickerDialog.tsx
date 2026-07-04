@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import { Search, X } from "lucide-react"
 import type { ReferenceCategory, ReferenceToken } from "@/lib/reference/types"
 import { MAX_REFERENCE_COUNT, REFERENCE_TABS } from "@/lib/reference/types"
@@ -147,7 +147,7 @@ export function ReferencePickerDialog({
               </label>
             </div>
 
-            <div className="min-h-[320px] flex-1 overflow-y-auto p-2">
+            <div className="min-h-[320px] min-h-0 flex-1 overflow-y-auto p-2">
               {loading ? (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">加载中...</div>
               ) : filteredItems.length === 0 ? (

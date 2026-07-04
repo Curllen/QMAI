@@ -40,6 +40,7 @@ function makeAgent(id: string, name: string): NovelAgent {
       knownSecrets: new Set(),
       sentiments: new Map(),
       recentDecisions: [],
+      rumorCredibility: 0.5,
     },
     knowledgeScope: [],
     personality: [],
@@ -136,7 +137,7 @@ describe("agentDecideAndActWithReact", () => {
     expect(mockRun).toHaveBeenCalledTimes(1)
     const callArgs = mockRun.mock.calls[0]
     expect(callArgs[0].maxRounds).toBe(3)
-    expect(callArgs[0].tools.length).toBe(5)
+    expect(callArgs[0].tools.length).toBe(6)
   })
 
   it("throws ModelDoesNotSupportToolsError when model does not support tools", async () => {

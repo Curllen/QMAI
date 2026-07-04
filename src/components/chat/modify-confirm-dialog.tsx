@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"
+﻿import { useState, useMemo, useEffect } from "react"
 import { X, Check, FileText, GitCompare, Edit3, Eye, BookOpen, Brain } from "lucide-react"
 import { computeLineDiff } from "@/lib/utils/diff"
 
@@ -177,7 +177,7 @@ export function ModifyConfirmDialog({
           )}
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {viewMode === "diff" && (
             <div className="h-full overflow-auto p-4 font-mono text-xs leading-relaxed">
               {diffLines.map((line, idx) => (

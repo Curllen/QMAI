@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
+﻿import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { PreviewPanel } from "./preview-panel"
 import { clampChatHeight, clampChatWidth, getInitialChatWidth } from "@/lib/workspace-layout"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -92,7 +92,7 @@ export function WritingWorkspace() {
   if (shouldShowRightDockChat(chatExpanded, chatDockPosition)) {
     return (
       <div ref={containerRef} className="flex h-full min-h-0 overflow-hidden bg-background">
-        <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="min-w-0 min-h-0 flex-1 overflow-hidden">
           <PreviewPanel />
         </div>
         <div

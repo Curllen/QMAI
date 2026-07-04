@@ -30,6 +30,7 @@ interface FrameworkConfirmPanelProps {
   onConfirm: () => void
   onRegenerate: () => void
   onSave?: () => void
+  onViewHistory?: () => void           // 新增：查看历史结果
 }
 
 // 起/承/转/合 阶段对应的标签配色
@@ -44,6 +45,7 @@ export function FrameworkConfirmPanel({
   onConfirm,
   onRegenerate,
   onSave,
+  onViewHistory,
 }: FrameworkConfirmPanelProps) {
   const { t } = useTranslation()
   const currentFramework = useStorySimulationStore((s) => s.currentFramework)
@@ -199,6 +201,9 @@ export function FrameworkConfirmPanel({
         </div>
         {!editingTitle && (
           <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" onClick={onViewHistory}>
+              历史推演
+            </Button>
             <Button variant="outline" onClick={onRegenerate}>
               {t("storySimulation.regenerateFramework")}
             </Button>

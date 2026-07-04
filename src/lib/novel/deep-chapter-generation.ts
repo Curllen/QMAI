@@ -1,4 +1,4 @@
-﻿import type { LlmConfig } from "@/stores/wiki-store"
+import type { LlmConfig } from "@/stores/wiki-store"
 import { streamChat, type ChatMessage, type RequestOverrides, type StreamCallbacks } from "@/lib/llm-client"
 import { useWikiStore } from "@/stores/wiki-store"
 import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
@@ -322,9 +322,7 @@ export async function runDeepChapterGeneration(
   const workflowProfile = resolveChapterWorkflowProfile(input.aiWorkflowMode)
   const lengthSpec = resolveCurrentChapterLengthSpec()
   const novelConfig = useWikiStore.getState().novelConfig
-  const writingConfig = resolveWritingConfig(input.llmConfig)
   const deAiConfig = resolveNovelModel(input.llmConfig, novelConfig, "deAi")
-  const lengthSpec = resolveCurrentChapterLengthSpec()
   const { loadSmartDeAiSkill } = await import("./de-ai-adapter")
   const workflowBaseParams = {
     mode: workflowProfile.mode,

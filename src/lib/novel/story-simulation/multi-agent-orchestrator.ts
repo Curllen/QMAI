@@ -407,3 +407,62 @@ export function verifyRumor(
     return `经过调查，部分属实：${strippedContent}`
   }
 }
+
+export function spreadRumor(
+  blackboard: SimulationBlackboard,
+  sourceRumorId: string,
+  spreaderId: string,
+  targetId: string,
+  message: string,
+): { newRumor: RumorEvent | null; targetBelieved: boolean } {
+  const sourceRumor = blackboard.rumors.find((r) => r.id === sourceRumorId)
+  if (!sourceRumor) {
+    return { newRumor: null, targetBelieved: false }
+  }
+
+  if (!blackboard.allAgents.has(spreaderId)) {
+    return { newRumor: null, targetBelieved: false }
+  }
+  if (!blackboard.allAgents.has(targetId)) {
+    return { newRumor: null, targetBelieved: false }
+  }
+
+  const visibleRumors = blackboard.visibleRumorsByAgent.get(spreaderId) ?? []
+  if (!visibleRumors.some((r) => r.id === sourceRumorId)) {
+    return { newRumor: null, targetBelieved: false }
+  }
+
+  const newRumor: RumorEvent = {
+    id: `rumor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    content: message && message.length > 0 ? message : sourceRumor.content,
+    distortion: Math.min(1, sourceRumor.distortion + 0.1 + Math.random() * 0.2),
+    generation: sourceRumor.generation + 1,
+    parentId: sourceRumorId,
+    spreadBy: spreaderId,
+    spreadRound: sourceRumor.round + 1,
+    round: sourceRumor.round + 1,
+    nodeIndex: sourceRumor.nodeIndex,
+    sourceId: sourceRumor.sourceId,
+    observableBy: [targetId],
+    believedBy: [],
+    verifiedBy: [],
+    timestamp: new Date().toISOString(),
+  }
+
+  recordRumorEvent(blackboard, newRumor)
+
+  const baseBelief = (1 - newRumor.distortion) * 0.6
+  const spreader = blackboard.allAgents.get(spreaderId)!
+  const target = blackboard.allAgents.get(targetId)!
+  const credibilityBonus = (spreader.memory.rumorCredibility - 0.5) * 0.4
+  const sentimentVal = target.memory.sentiments.get(spreaderId) ?? 0
+  const sentimentBonus = sentimentVal / 200
+  const finalProb = Math.max(0.1, Math.min(0.9, baseBelief + credibilityBonus + sentimentBonus))
+  const believed = Math.random() < finalProb
+
+  if (believed) {
+    newRumor.believedBy.push(targetId)
+  }
+
+  return { newRumor, targetBelieved: believed }
+}

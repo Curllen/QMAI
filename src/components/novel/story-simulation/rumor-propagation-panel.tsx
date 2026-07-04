@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { MessageCircle, Users, Eye, CheckCircle, XCircle, Clock, Filter } from "lucide-react"
+import { MessageCircle, Users, Eye, CheckCircle, GitBranch, Filter } from "lucide-react"
 import type { RumorEvent, NovelAgent, TimelineEvent } from "@/lib/novel/story-simulation/types"
 
 type RumorFilter = "all" | "unverified" | "verified" | "falsified"
@@ -8,6 +8,47 @@ interface RumorPropagationPanelProps {
   rumors: RumorEvent[]
   agents: Map<string, NovelAgent>
   events: TimelineEvent[]
+}
+
+interface RumorTreeNode {
+  rumor: RumorEvent
+  children: RumorTreeNode[]
+  spreaderName?: string
+}
+
+function buildRumorFamilyTree(rumors: RumorEvent[], targetRumorId: string): RumorTreeNode | null {
+  const rumorMap = new Map<string, RumorEvent>()
+  for (const r of rumors) {
+    rumorMap.set(r.id, r)
+  }
+
+  const target = rumorMap.get(targetRumorId)
+  if (!target) return null
+
+  const ancestors: RumorEvent[] = []
+  let current: RumorEvent | undefined = target
+  while (current) {
+    ancestors.unshift(current)
+    current = current.parentId ? rumorMap.get(current.parentId) : undefined
+  }
+
+  const rootRumor = ancestors[0]
+
+  function buildNode(rumor: RumorEvent): RumorTreeNode {
+    const children = rumors
+      .filter((r) => r.parentId === rumor.id)
+      .map((r) => buildNode(r))
+    return {
+      rumor,
+      children,
+    }
+  }
+
+  return buildNode(rootRumor)
+}
+
+function getAgentName(agents: Map<string, NovelAgent>, agentId: string): string {
+  return agents.get(agentId)?.name ?? agentId
 }
 
 export function RumorPropagationPanel({ rumors, agents, events }: RumorPropagationPanelProps) {
@@ -36,6 +77,11 @@ export function RumorPropagationPanel({ rumors, agents, events }: RumorPropagati
     if (!selectedRumor?.sourceId) return null
     return events.find((e) => e.id === selectedRumor.sourceId) ?? null
   }, [selectedRumor, events])
+
+  const familyTree = useMemo(() => {
+    if (!selectedRumorId) return null
+    return buildRumorFamilyTree(rumors, selectedRumorId)
+  }, [rumors, selectedRumorId])
 
   if (rumors.length === 0) {
     return (
@@ -129,109 +175,23 @@ export function RumorPropagationPanel({ rumors, agents, events }: RumorPropagati
 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">传播时间线</span>
+                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">传播家谱</span>
               </div>
 
-              <div className="relative ml-3 space-y-4 border-l-2 border-muted pl-4">
-                <div className="relative">
-                  <div className="absolute -left-[21px] top-0.5 h-3 w-3 rounded-full bg-primary" />
-                  <div className="text-xs font-medium">
-                    第 {selectedRumor.round + 1} 轮 · 传闻生成
-                  </div>
-                  {sourceEvent ? (
-                    <div className="mt-1.5 rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground">
-                      <div className="mb-1 font-medium text-foreground">
-                        源事件：{sourceEvent.actorName} 的
-                        {actionTypeLabel(sourceEvent.actionType)}
-                      </div>
-                      <div className="line-clamp-3">{sourceEvent.content}</div>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5 text-xs text-muted-foreground">
-                      （无源事件记录）
-                    </div>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <div className="absolute -left-[21px] top-0.5 h-3 w-3 rounded-full bg-blue-500" />
-                  <div className="text-xs font-medium">角色可见</div>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {selectedRumor.observableBy.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">无</span>
-                    ) : (
-                      selectedRumor.observableBy.map((agentId) => {
-                        const agent = agents.get(agentId)
-                        return (
-                          <span
-                            key={agentId}
-                            className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                          >
-                            {agent?.name ?? agentId}
-                          </span>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute -left-[21px] top-0.5 h-3 w-3 rounded-full bg-emerald-500" />
-                  <div className="text-xs font-medium">相信传闻</div>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {selectedRumor.believedBy.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">暂无角色相信</span>
-                    ) : (
-                      selectedRumor.believedBy.map((agentId) => {
-                        const agent = agents.get(agentId)
-                        return (
-                          <span
-                            key={agentId}
-                            className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                          >
-                            {agent?.name ?? agentId}
-                          </span>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute -left-[21px] top-0.5 h-3 w-3 rounded-full bg-purple-500" />
-                  <div className="text-xs font-medium">调查验证</div>
-                  <div className="mt-1.5">
-                    {selectedRumor.verifiedBy.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">暂无角色验证</span>
-                    ) : (
-                      <div className="space-y-1">
-                        {selectedRumor.verifiedBy.map((agentId) => {
-                          const agent = agents.get(agentId)
-                          const isTrue = selectedRumor.distortion < 0.5
-                          return (
-                            <div
-                              key={agentId}
-                              className="flex items-center gap-2 rounded-md border bg-muted/20 px-2 py-1 text-xs"
-                            >
-                              {isTrue ? (
-                                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-                              ) : (
-                                <XCircle className="h-3.5 w-3.5 text-red-500" />
-                              )}
-                              <span className="font-medium">
-                                {agent?.name ?? agentId}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {isTrue ? "证实为真" : "证实为假"}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="space-y-2">
+                {familyTree ? (
+                  <RumorTreeNodeView
+                    node={familyTree}
+                    agents={agents}
+                    selectedRumorId={selectedRumorId}
+                    depth={0}
+                    isRoot={true}
+                    sourceEvent={sourceEvent}
+                  />
+                ) : (
+                  <div className="text-xs text-muted-foreground">暂无传播链数据</div>
+                )}
               </div>
             </div>
 
@@ -273,6 +233,118 @@ export function RumorPropagationPanel({ rumors, agents, events }: RumorPropagati
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+interface RumorTreeNodeViewProps {
+  node: RumorTreeNode
+  agents: Map<string, NovelAgent>
+  selectedRumorId: string | null
+  depth: number
+  isRoot: boolean
+  sourceEvent: TimelineEvent | null
+}
+
+function RumorTreeNodeView({
+  node,
+  agents,
+  selectedRumorId,
+  depth,
+  isRoot,
+  sourceEvent,
+}: RumorTreeNodeViewProps) {
+  const { rumor } = node
+  const isSelected = rumor.id === selectedRumorId
+  const spreaderName = rumor.spreadBy ? getAgentName(agents, rumor.spreadBy) : undefined
+
+  return (
+    <div className="relative">
+      <div className="flex gap-2">
+        {depth > 0 && (
+          <div className="relative w-5 shrink-0">
+            <div className="absolute left-2 top-0 h-full w-px bg-muted" />
+            <div className="absolute left-2 top-3 h-px w-3 bg-muted" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div
+            className={`rounded-md border p-2.5 transition-colors ${
+              isSelected
+                ? "border-primary bg-primary/5"
+                : "bg-background/70 hover:bg-muted/20"
+            }`}
+          >
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                {isRoot ? (
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    原始传闻
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">
+                    第 {rumor.generation} 代
+                  </span>
+                )}
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    rumor.distortion < 0.3
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300"
+                      : rumor.distortion < 0.6
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                        : "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300"
+                  }`}
+                >
+                  失真 {(rumor.distortion * 100).toFixed(0)}%
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                第 {rumor.round + 1} 轮
+              </span>
+            </div>
+            <div className="mb-1.5 line-clamp-2 text-xs">{rumor.content}</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+              {spreaderName && (
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  传播者：{spreaderName}
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                {rumor.observableBy.length} 人可见
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle className="h-3 w-3" />
+                {rumor.believedBy.length} 人相信
+              </span>
+            </div>
+            {isRoot && sourceEvent && (
+              <div className="mt-2 rounded-md border bg-muted/20 p-2 text-[10px] text-muted-foreground">
+                <div className="mb-0.5 font-medium text-foreground">
+                  源事件：{sourceEvent.actorName} 的{actionTypeLabel(sourceEvent.actionType)}
+                </div>
+                <div className="line-clamp-2">{sourceEvent.content}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {node.children.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {node.children.map((child) => (
+            <RumorTreeNodeView
+              key={child.rumor.id}
+              node={child}
+              agents={agents}
+              selectedRumorId={selectedRumorId}
+              depth={depth + 1}
+              isRoot={false}
+              sourceEvent={null}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

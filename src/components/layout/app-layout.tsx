@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+﻿import { useCallback, useEffect, useRef, useState } from "react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { refreshProjectFileTree } from "@/lib/project-file-tree-refresh"
 import { IconSidebar } from "./icon-sidebar"
@@ -324,14 +324,14 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
           onOpenSidebar={() => setSidebarCollapsed(false)}
           onSwitchProject={onSwitchProject}
         />
-        <div ref={containerRef} className="flex min-w-0 flex-1 overflow-hidden">
+        <div ref={containerRef} className="flex min-w-0 min-h-0 flex-1 overflow-hidden">
         {!isSettings && !sidebarCollapsed && (
           <>
             <div
               className="flex shrink-0 flex-col overflow-hidden border-r"
               style={{ width: leftWidth }}
             >
-              <div className="flex-1 overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 <SidebarPanel />
               </div>
               <ActivityPanel />
@@ -342,7 +342,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
             />
           </>
         )}
-        <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="min-w-0 min-h-0 flex-1 overflow-hidden">
           <ErrorBoundary>
             <ContentArea />
           </ErrorBoundary>

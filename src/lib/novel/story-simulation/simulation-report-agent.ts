@@ -306,6 +306,68 @@ function parseBranches(raw: unknown): StoryBranch[] {
   })
 }
 
+function parseRecommendation(raw: unknown): string {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim()
+    if (!trimmed) return "模型未提供综合推荐建议"
+    // 如果是 JSON 字符串，尝试解析提取文本
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (typeof parsed === "string") return parsed.trim() || "模型未提供综合推荐建议"
+        if (typeof parsed === "object" && parsed !== null) {
+          // 尝试提取常见的文本字段
+          const obj = parsed as Record<string, unknown>
+          if (typeof obj.text === "string") return obj.text.trim() || "模型未提供综合推荐建议"
+          if (typeof obj.content === "string") return obj.content.trim() || "模型未提供综合推荐建议"
+          if (typeof obj.recommendation === "string") return obj.recommendation.trim() || "模型未提供综合推荐建议"
+          if (typeof obj.summary === "string") return obj.summary.trim() || "模型未提供综合推荐建议"
+          // 是数组则拼接内容
+          if (Array.isArray(parsed)) {
+            return parsed.map((item) => {
+              if (typeof item === "string") return item
+              if (typeof item === "object" && item !== null) {
+                const o = item as Record<string, unknown>
+                return String(o.text || o.content || o.recommendation || JSON.stringify(item))
+              }
+              return String(item)
+            }).filter(Boolean).join("；") || "模型未提供综合推荐建议"
+          }
+          // 退而求其次：把对象值拼接
+          return Object.values(parsed).map((v) =>
+            typeof v === "string" ? v : Array.isArray(v) ? v.join("、") : "",
+          ).filter(Boolean).join("；") || "模型未提供综合推荐建议"
+        }
+      } catch {
+        // 解析失败，返回原字符串
+      }
+    }
+    return trimmed
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((item) => {
+      if (typeof item === "string") return item
+      if (typeof item === "object" && item !== null) {
+        const o = item as Record<string, unknown>
+        return String(o.text || o.content || o.recommendation || JSON.stringify(item))
+      }
+      return String(item)
+    }).filter(Boolean).join("；") || "模型未提供综合推荐建议"
+  }
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as Record<string, unknown>
+    if (typeof obj.text === "string") return obj.text.trim() || "模型未提供综合推荐建议"
+    if (typeof obj.content === "string") return obj.content.trim() || "模型未提供综合推荐建议"
+    if (typeof obj.recommendation === "string") return obj.recommendation.trim() || "模型未提供综合推荐建议"
+    if (typeof obj.summary === "string") return obj.summary.trim() || "模型未提供综合推荐建议"
+    return Object.values(obj).map((v) =>
+      typeof v === "string" ? v : Array.isArray(v) ? v.join("、") : "",
+    ).filter(Boolean).join("；") || "模型未提供综合推荐建议"
+  }
+  return "模型未提供综合推荐建议"
+}
+
 // ── 主入口：生成推演报告 ──
 
 export async function generateSimulationReport(
@@ -342,8 +404,7 @@ export async function generateSimulationReport(
     const data = JSON.parse(jsonText) as Record<string, unknown>
     const characterAnalyses = parseCharacterAnalyses(data.characterAnalyses)
     const branches = parseBranches(data.branches)
-    const recommendation =
-      String(data.recommendation ?? "").trim() || "模型未提供综合推荐建议"
+    const recommendation = parseRecommendation(data.recommendation)
 
     return {
       frameworkId: framework.id,

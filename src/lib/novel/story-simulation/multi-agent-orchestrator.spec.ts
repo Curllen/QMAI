@@ -36,6 +36,7 @@ function makeAgent(id: string, name: string): NovelAgent {
       knownSecrets: new Set(),
       sentiments: new Map(),
       recentDecisions: [],
+      rumorCredibility: 0.5,
     },
     knowledgeScope: [],
     personality: [],

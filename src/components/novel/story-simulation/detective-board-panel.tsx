@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react"
 import { Eye, EyeOff, Filter, MessageSquare, Zap, Clock } from "lucide-react"
 import type { RumorEvent, NovelAgent, TimelineEvent } from "@/lib/novel/story-simulation/types"
+import { actionTypeShortLabel } from "@/lib/novel/story-simulation/action-type-utils"
 
 interface ClueTimelinePanelProps {
   agents: Map<string, NovelAgent>
@@ -57,7 +58,7 @@ export function ClueTimelinePanel({ agents, rumors, events }: ClueTimelinePanelP
           nodeIndex: e.nodeIndex,
           round: e.round,
           timestamp: new Date(e.timestamp).getTime(),
-          title: e.actionType,
+          title: actionTypeShortLabel(e.actionType),
           content: e.content,
           actorName: e.actorName,
           targetName: e.targetName,

@@ -80,6 +80,14 @@ export interface RumorEvent {
   /** 已验证此传闻的角色 ID 列表 */
   verifiedBy: string[]
   timestamp: string
+  /** 父传闻 ID */
+  parentId?: string
+  /** 传播者角色 ID */
+  spreadBy?: string
+  /** 传播发生的轮次 */
+  spreadRound?: number
+  /** 传播代数，原始传闻为 0 */
+  generation: number
 }
 
 export interface SimulationDebugVisibleEvent {
@@ -132,6 +140,8 @@ export interface AgentMemory {
   sentiments: Map<string, number>
   /** 最近决策记录 */
   recentDecisions: string[]
+  /** 传闻可信度，范围 0-1，默认 0.5 */
+  rumorCredibility: number
 }
 
 // ── Agent ──
@@ -491,6 +501,20 @@ export interface DirectorEvaluation {
 }
 
 // ── 仿真分支 ──
+
+export interface SimulationHistoryEntry {
+  round: number
+  nodeIndex: number
+  nodeTitle: string
+  agentStates: Record<string, {
+    name: string
+    sentiments: [string, number][]
+    knownSecrets: string[]
+    observedEvents: string[]
+  }>
+  eventCount: number
+  rumorCount: number
+}
 
 export interface SimulationBranch {
   id: string

@@ -107,6 +107,7 @@ function initMemory(
     knownSecrets: new Set<string>(),
     sentiments,
     recentDecisions: [],
+    rumorCredibility: 0.5,
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Link2, PencilLine, Plus, Save, Sparkles, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -461,7 +461,7 @@ export function CharacterAuraView({ hideSidebar = false }: { hideSidebar?: boole
       {soulTab === "project" && !hideSidebar ? (
         <SoulDocEditor />
       ) : (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="min-h-0 flex-1 flex overflow-hidden">
       {!hideSidebar && (
       <aside className="flex w-72 shrink-0 flex-col border-r bg-muted/30">
         <div className="border-b p-4">
@@ -508,7 +508,7 @@ export function CharacterAuraView({ hideSidebar = false }: { hideSidebar?: boole
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {visibleAuras.map((aura) => (
             <button
               key={aura.id}
@@ -537,7 +537,7 @@ export function CharacterAuraView({ hideSidebar = false }: { hideSidebar?: boole
       </aside>
       )}
 
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
           <div className="rounded-lg border bg-card p-4">
             <div className="flex items-start gap-3">

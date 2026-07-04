@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useRef, useState } from "react"
+﻿import { Suspense, lazy, useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useWikiStore } from "@/stores/wiki-store"
 import { OutlineActionToolbar } from "@/components/sources/outline-action-toolbar"
@@ -96,7 +96,7 @@ export function SourcesView() {
       <div className="min-h-0 flex-1 overflow-hidden">
         {outlineChatOpen && novelMode && chatDockPosition === "right" ? (
           <div className="flex h-full min-h-0 overflow-hidden">
-            <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="min-w-0 min-h-0 flex-1 overflow-hidden">
               <PreviewPanel />
             </div>
             <div

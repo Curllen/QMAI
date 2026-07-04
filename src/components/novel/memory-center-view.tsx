@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+﻿import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
@@ -448,7 +448,7 @@ export function MemoryCenterView() {
         )}
       </div>
 
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {error ? (
           <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
@@ -657,7 +657,7 @@ function MemoryCenterDetailPanel({
               ) : null}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {allChapterNumbers.length === 0 ? (
               <p className="p-3 text-xs text-muted-foreground">暂无章节快照</p>
             ) : (
@@ -688,7 +688,7 @@ function MemoryCenterDetailPanel({
         </div>
 
         {/* 右侧快照详情 */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {loadingCard ? (
             <div className="flex items-center justify-center py-12">
               <RefreshCw className="mr-2 h-5 w-5 animate-spin text-muted-foreground" />

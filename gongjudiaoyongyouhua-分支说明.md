@@ -806,6 +806,288 @@ Git 状态：本轮修复未提交 git，未合并 main。
 
 Git 状态：本阶段未提交 git，未合并 main。
 
+# 20260703-125025 AI Chat ReAct 工具裁剪职责下沉
+
+本轮目标：继续按照 `2026-07-03-ai-chat-react-mainline.md` 推进 AI Chat ReAct 主线，把能力选择后的工具裁剪从 `ChatPanel` 下沉到 `runAiChatSession`，使界面层只负责传递 `enabledToolNames`，会话运行层负责构建最终可执行工具集。
+
+修改文件：
+- `src/lib/agent/ai-chat-session.ts`
+- `src/lib/agent/ai-chat-session.spec.ts`
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.spec.tsx`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. `RunAiChatSessionInput` 增加 `enabledToolNames?: string[] | null`。
+2. `runAiChatSession` 统一调用 `scopeAgentConfigTools(input.agentConfig, input.enabledToolNames)`，再把裁剪后的配置交给 `AgentRunner.run`。
+3. `ChatPanel` 移除 `scopeAgentConfigTools` import 和本地裁剪变量，改为把 `prePluginResult?.enabledToolNames` 传入 `runAiChatSession`。
+4. `ai-chat-session` 测试新增工具裁剪断言，保证未选中的工具不会暴露给 `AgentRunner`。
+5. `chat-panel` 测试改为守卫 UI 层不再直接执行工具裁剪，只传递能力选择结果。
+
+验证记录：
+1. RED/GREEN：新增 `runAiChatSession` 工具裁剪测试先失败后通过。
+2. 定向测试：`npx.cmd vitest run src/lib/agent/ai-chat-session.spec.ts src/components/chat/chat-panel.spec.tsx src/lib/agent/tool-scope.spec.ts`，3 个测试文件、62 个用例通过。
+3. 目标矩阵：`npx.cmd vitest run src/lib/agent/ai-chat-session.spec.ts src/lib/agent/tools/run-chapter-workflow.spec.ts src/lib/agent/tools/index.spec.ts src/lib/agent/capabilities/selector.spec.ts src/lib/agent/plan-execute-policy.spec.ts src/lib/agent/workflow-trace.spec.ts src/components/chat/chat-panel.spec.tsx src/lib/novel/deep-chapter-generation.spec.ts`，8 个测试文件、113 个用例通过。
+4. `npm.cmd run typecheck`：通过。
+5. `npm.cmd run test:mocks`：344 个测试文件、2578 个用例通过，6 个 todo。
+6. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+7. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+8. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149403648` 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+# 20260703-120231 AI 会话 ReAct 工具调用收口
+
+本轮目标：继续完成 AI 会话 ReAct 主线收口，把继续未完成、能力裁剪和 workflow 事件父子关系统一到 Agent 工具调用链路。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.spec.tsx`
+- `src/components/chat/chat-message.spec.tsx`
+- `src/components/chat/dismantling-reference.spec.ts`
+- `src/components/layout/startup-heavy-imports.test.ts`
+- `src/lib/agent/types.ts`
+- `src/lib/agent/runner.ts`
+- `src/lib/agent/runner.spec.ts`
+- `src/lib/agent/tools/run-chapter-workflow.ts`
+- `src/lib/agent/tools/run-chapter-workflow.spec.ts`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. `Tool.execute` / `generatePreview` 增加 `ToolExecutionContext`，runner 将真实 tool call id 传入工具执行上下文。
+2. `run_chapter_workflow` 子事件使用真实父级 tool call id，避免 workflow trace 出现伪 parent id。
+3. AI 会话执行前用 `scopeAgentConfigTools(agentConfig, prePluginResult?.enabledToolNames)` 收窄可见工具。
+4. “继续未完成”改为调用 `handleSendRef.current(prompt, [], "继续未完成")`，不再直连 `streamChat` 或 `runDeepChapterGeneration`。
+5. `handleSend` 支持可选展示文本，用户消息显示简短“继续未完成”，Agent 实际收到完整恢复提示词。
+6. 同步更新旧源码守卫，明确 ChatPanel 不再保留深度章节直连动态导入和隐藏拆书注入函数。
+
+验证记录：
+1. TDD RED/GREEN 已完成：真实 parent tool call id、能力裁剪接线、继续未完成 ReAct 路径均先看到失败断言后实现。
+2. 定向测试：`npx.cmd vitest run src/components/chat/chat-panel.spec.tsx src/lib/agent/runner.spec.ts src/lib/agent/tools/run-chapter-workflow.spec.ts src/lib/agent/tool-scope.spec.ts`，4 个测试文件、74 个用例通过。
+3. 回归守卫：`npx.cmd vitest run src/components/chat/chat-message.spec.tsx src/components/layout/startup-heavy-imports.test.ts src/components/chat/dismantling-reference.spec.ts`，3 个测试文件、15 个用例通过。
+4. `npm.cmd run typecheck`：通过。
+5. `npm.cmd run test:mocks`：344 个测试文件、2575 个用例通过，6 个 todo。
+6. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+7. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+8. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149403648` 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+## 20260703-112750 AI 会话 ReAct 主线重构
+
+本轮目标：将 AI 会话主线调整为先进入单 Agent ReAct 循环，章节生成改为 Agent 可调用工具，标准/严格模式接入 Plan Execute，Skill、MCP、Web Search、Workflow 能力统一走能力选择链路。
+
+修改文件：
+- `src/lib/agent/ai-chat-session.ts`
+- `src/lib/agent/ai-chat-session.spec.ts`
+- `src/lib/agent/tools/run-chapter-workflow.ts`
+- `src/lib/agent/tools/run-chapter-workflow.spec.ts`
+- `src/lib/agent/tools/index.ts`
+- `src/lib/agent/tools/index.spec.ts`
+- `src/lib/agent/types.ts`
+- `src/lib/agent/tool-events.ts`
+- `src/lib/agent/tool-events.spec.ts`
+- `src/lib/agent/config.ts`
+- `src/hooks/use-agent-config.ts`
+- `src/hooks/use-agent-config.spec.ts`
+- `src/lib/agent/capabilities/registry.ts`
+- `src/lib/agent/capabilities/selector.ts`
+- `src/lib/agent/capabilities/selector.spec.ts`
+- `src/lib/agent/plan-execute-policy.ts`
+- `src/lib/agent/plan-execute-policy.spec.ts`
+- `src/lib/agent/workflow-trace.ts`
+- `src/lib/agent/workflow-trace.spec.ts`
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.spec.tsx`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. 新增 `runAiChatSession`，ChatPanel 主发送路径改为统一 session runner，不再在主发送路径直连深度章节生成结果分支。
+2. 新增 `run_chapter_workflow` Agent 工具，封装既有深度章节生成流程，并把章节工作流子步骤作为父子工具事件展示。
+3. 工具事件、运行记录和 workflow trace 支持 `parentCallId`，便于展示工作流父工具和子步骤。
+4. `useAgentConfig` 和工具注册链路传入章节工作流依赖，能力选择器会为章节写作意图选中 `run_chapter_workflow`。
+5. 新增 Plan Execute 策略模块，快速模式不强制计划，标准/严格模式按写作任务要求计划、执行和审查。
+
+验证记录：
+1. 目标测试：`npx.cmd vitest run src/lib/agent/ai-chat-session.spec.ts src/lib/agent/tools/run-chapter-workflow.spec.ts src/lib/agent/tools/index.spec.ts src/lib/agent/capabilities/selector.spec.ts src/lib/agent/plan-execute-policy.spec.ts src/lib/agent/workflow-trace.spec.ts src/components/chat/chat-panel.spec.tsx src/lib/novel/deep-chapter-generation.spec.ts src/lib/agent/tool-events.spec.ts src/hooks/use-agent-config.spec.ts`：10 个测试文件、121 个用例通过。
+2. `npm.cmd run typecheck`：通过。
+3. `npm.cmd run test:mocks`：344 个测试文件、2572 个用例通过，6 个 todo。
+4. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+5. 源码启动：临时 PowerShell Job 启动 `http://127.0.0.1:5179/`，首页返回 HTTP 200，验证后端口无监听残留。
+6. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；`QMaiWrite.exe` 大小 149,407,744 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+## 20260703-101747 章节生成可见多任务工具工作流
+
+本轮目标：
+1. 把现有章节多任务生成循环升级为用户可见的工具/任务时间线。
+2. 快速、标准、严格三种模式都按实际执行阶段展示，跳过的阶段也说明原因。
+3. 不改模型调用底座、不改正文保存确认、不改变最终正文输出内容。
+
+修改文件：
+1. `src/lib/novel/deep-chapter-generation.ts`
+2. `src/lib/novel/deep-chapter-generation.spec.ts`
+3. `src/components/chat/chat-panel.tsx`
+4. `src/components/chat/chat-panel.spec.tsx`
+5. `src/lib/agent/workflow-trace.ts`
+6. `src/lib/agent/workflow-trace.spec.ts`
+7. `GenxinLOG/更新日志.md`
+8. `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. 新增 `ChapterWorkflowEvent`，章节循环在读取上下文、任务书、正文初稿、扩写、审稿、返修、复审、去AI味和完成阶段发出事件。
+2. `chat-panel` 将章节工作流事件转换为现有 `AgentToolEvent`，写入 `agentToolCalls`，复用原工具时间线展示。
+3. 快速模式显示跳过 AI 审稿、返修和最终去AI味；标准模式显示跳过 AI 审稿和自动返修，但继续显示最终简单审查与去AI味；严格模式显示完整审稿/返修链路。
+4. `workflow-trace` 为章节工作流步骤补充中文描述，避免用户看到内部英文名称。
+
+验证记录：
+1. TDD 红绿验证：章节工作流事件、聊天面板映射、工具中文描述测试均先失败后通过。
+2. `npx.cmd vitest run src/lib/novel/deep-chapter-generation.spec.ts src/components/chat/chat-panel.spec.tsx src/lib/agent/workflow-trace.spec.ts`：3 个测试文件、86 个用例通过。
+3. `npm.cmd run typecheck`：通过。
+4. `npm.cmd run test:mocks`：341 个测试文件、2559 个用例通过，6 个 todo。
+5. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+6. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后未发现端口残留监听。
+7. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe`；版本 2.2.31，大小 149,407,744 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+# 20260703-095044 章节写作多任务循环改造
+
+本轮目标：把章节生成、续写、改写等写作任务改成多任务循环流程，并让快速 / 标准 / 严格三档都走同一个阶段化底座，降低推理模型只输出思考、不输出正文的概率。
+
+成功标准：
+1. 写作任务不再强制关闭模型推理。
+2. 写作任务不再传应用侧正文 `max_tokens` 限制。
+3. 普通章节写作入口不再只走单轮 AgentRunner，而是进入阶段化章节生成器。
+4. 快速、标准、严格三档只改变阶段强度，不再改变是否进入多任务循环。
+5. Anthropic thinking 模式必须给正文保留输出预算，不能让思考预算挤掉正文。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.spec.tsx`
+- `src/lib/novel/deep-chapter-generation.ts`
+- `src/lib/novel/deep-chapter-generation.spec.ts`
+- `src/lib/llm-providers.ts`
+- `src/lib/llm-providers.test.ts`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. `chat-panel` 在识别到章节生成、续写、改写、润色路由后，先进入 `runDeepChapterGeneration` 多任务循环，完成后把最终正文写入当前 assistant 消息。
+2. `runDeepChapterGeneration` 新增 `aiWorkflowMode` 输入，快速模式执行任务书与正文初稿，标准模式增加最终简单审查与去AI味，严格模式保留完整审稿与返修链路。
+3. 移除章节写作路径中 `reasoning: { mode: "off" }` 的覆盖，模型推理配置由用户当前模型配置决定。
+4. `collectModelText` 不再把模型 reasoning 配置重新写入 request overrides，避免把“配置值”误当成“请求覆盖”。
+5. Anthropic extended thinking 适配改为 `max_tokens >= thinking budget + 4096`，给正文保留最少输出空间。
+
+验证记录：
+1. TDD RED/GREEN 已完成：新增的章节多任务循环、三档强度、保留推理、Anthropic 正文预算测试均先失败后通过。
+2. 定向测试：`npx.cmd vitest run src/components/chat/chat-panel.spec.tsx src/lib/novel/deep-chapter-generation.spec.ts`：2 个测试文件、76 个用例通过。
+3. 相关回归：`npx.cmd vitest run src/components/chat/chat-panel.spec.tsx src/components/chat/chat-panel.mount.spec.tsx src/components/layout/startup-heavy-imports.test.ts src/lib/novel/deep-chapter-generation.spec.ts src/lib/llm-client.test.ts src/lib/llm-providers.test.ts src/lib/llm-providers.spec.ts src/stores/wiki-store.test.ts`：8 个测试文件、140 个用例通过，6 个 todo。
+4. `npm.cmd run typecheck`：通过。
+5. `npm.cmd run test:mocks`：341 个测试文件、2555 个用例通过，6 个 todo。
+6. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+7. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+8. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149403648` 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+# 20260703-090644 章节生成 reasoning-only 修复与技能库入口合并
+
+本轮目标：解决章节生成总是出现“模型只输出思考内容但没有输出正文”的问题，并把“技能库”和“写作 Skill”两个入口合并为一个。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/lib/novel/deep-chapter-generation.ts`
+- `src/lib/llm-client.ts`
+- `src/components/skill-library/unified-skill-library-view.tsx`
+- `src/components/layout/content-area.tsx`
+- `src/components/layout/sidebar-panel.tsx`
+- `src/components/layout/icon-sidebar.tsx`
+- `src/lib/sidebar-nav-preferences.ts`
+- `src/components/settings/sections/interface-section.tsx`
+- 相关测试文件
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. ChatPanel 的真实 AgentRunner 调用现在会在章节生成、续写、改写、润色任务中传入 `reasoning: off`，但不再传 `max_tokens`。
+2. 深度章节生成四个正文相关模型调用不再设置应用层输出 token 上限。
+3. reasoning-only 诊断文案不再建议“提高 max_tokens”，改为提示关闭思考、切换非推理模型或缩短输入。
+4. 新增统一技能库壳组件，内容区和侧栏都通过“去AI味技能 / 写作 Skill”标签切换两个现有管理视图。
+5. 图标侧边栏和侧边栏排序默认项移除独立 `writingSkillLibrary` 入口；内部视图 ID 仍保留，兼容旧状态和标签切换。
+
+验证记录：
+1. 新增/更新测试均先确认失败再实现修复。
+2. 相关测试：10 个测试文件、129 个用例通过，6 个 todo。
+3. `npm.cmd run typecheck`：通过。
+4. `npm.cmd run test:mocks`：341 个测试文件、2551 个用例通过，6 个 todo。
+5. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+6. `npm.cmd run build`：通过；保留既有构建警告。
+7. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe`；版本 2.2.31，大小 149,403,648 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+# 20260703-075031 软件启动崩溃修复
+
+本轮目标：修复软件打开时报 `Cannot read properties of null (reading 'disabledSkillIds')` 的启动崩溃，只处理 Agent skill 配置为空时的空值兼容，不改动其他 AI 会话功能设计。
+
+成功标准：
+1. `agentSkillConfig` 为空时 `ChatPanel` 可以正常挂载。
+2. Agent skill 配置加载完成后仍沿用原有 `resolveAvailableDeAiSkills` 解析逻辑。
+3. 新增回归测试能覆盖空配置启动场景。
+4. 源码启动、旧功能测试、构建和便携版打包均完成验证。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/test/chat-panel-mount.ts`
+- `src/components/chat/chat-panel.mount.spec.tsx`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. 根因是 `ChatPanel` 对 `agentSkillConfig` 使用非空断言，配置为空时 `resolveAvailableDeAiSkills` 内部读取 `disabledSkillIds` 触发崩溃。
+2. 修复为 `agentSkillConfig` 为空时返回空 Agent 写作 skill 列表，避免启动阶段崩溃。
+3. 测试工具支持注入 `agentSkillConfig: null`，并新增挂载回归测试。
+
+验证记录：
+1. 已先确认回归测试在修复前复现同类空值崩溃。
+2. `npx.cmd vitest run src/components/chat/chat-panel.mount.spec.tsx -t "Agent skill 配置为空"`：1 个用例通过。
+3. `npx.cmd vitest run src/components/chat/chat-panel.spec.tsx src/components/chat/chat-panel.mount.spec.tsx`：2 个测试文件、54 个用例通过，6 个 todo。
+4. 源码启动：`npm.cmd run dev -- --host 127.0.0.1 --port 5179` 通过 Job 轮询验证，`http://127.0.0.1:5179/` 返回 200；验证后端口无监听残留。
+5. `npm.cmd run typecheck`：通过。
+6. `npm.cmd run test:mocks`：341 个测试文件、2549 个用例通过，6 个 todo。
+7. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+8. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149403648` 字节。
+
+Git 状态：本轮修复未提交 git，未合并 main。
+
+# 20260703-073403 Stage C-G 优化 Part 2/3 完成
+
+本轮目标：继续执行 `docs/superpowers/plans/2026-07-02-stage-C-D-optimization-plan.md` 中 Task 8-20，在 Stage C/D 已完成基础上补齐后续未完成任务。
+
+实现内容：
+1. Stage E：classification 支持原始 markdown 读取，设置页新增 textarea 编辑、保存前格式校验、恢复默认确认。
+2. Stage F：AgentConfig 扩展 projectPath/taskGoal；runner 支持断点保存、成功清理、失败保留；chat-panel 支持断点恢复确认入口。
+3. Stage G：Rust 新增 `mcp_stdio_spawn/write/read/kill`，前端新增 stdio transport、JSON-RPC client、RealMcpConnector。
+4. MCP runtime：server 配置 `command` 时注入真实 connector；无 command 时保持原有中文降级，不破坏兼容路径。
+5. 测试基础设施：新增 `renderChatPanel` mount helper 和 chat-panel 基础挂载测试，复杂交互用例以 todo 记录。
+
+验证记录：
+1. `cargo check`：通过。
+2. `npm.cmd run typecheck`：通过。
+3. Part 2 相关测试：5 个文件、108 个用例通过。
+4. Part 3 相关测试：8 个文件、34 个用例通过，6 个 mount todo。
+5. `npm.cmd run test:mocks`：341 个测试文件、2548 个用例通过，6 个 mount todo。
+6. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+7. 源码启动：Vite dev server 5179 端口可访问，验证后已停止。
+8. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe`；版本 2.2.31，大小 149,403,648 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
 ### 20260702-152521 Stage 9 MCP 配置 UI 与持久化闭环
 
 本轮目标：按 Stage 9 计划补齐 MCP 最小配置入口，让 AI 会话已有 MCP Adapter/Runtime 能从设置页读取用户配置，并在应用重启后恢复；本阶段不实现 MCP 市场、自动安装、真实进程生命周期或外部 MCP 客户端连接。
@@ -889,6 +1171,68 @@ Git 状态：本阶段未提交 git，未合并 main。
 7. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149201920` 字节。
 
 Git 状态：本阶段未提交 git，未合并 main。
+
+# 20260703-123259 AI 会话 ReAct 主线缺口补齐
+
+本轮目标：根据 `docs/superpowers/plans/2026-07-03-ai-chat-react-mainline.md` 的设计要求，补齐上一轮复核中发现的剩余缺口：真实 MCP capability 未进入预插件能力选择链，以及章节 workflow 子事件在真实 Agent 会话中无法稳定回传。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.spec.tsx`
+- `src/lib/agent/types.ts`
+- `src/lib/agent/runner.ts`
+- `src/lib/agent/runner.spec.ts`
+- `src/lib/agent/tools/run-chapter-workflow.ts`
+- `src/lib/agent/tools/run-chapter-workflow.spec.ts`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. `ChatPanel` 解构 `useAgentConfig` 返回的 `mcpCapabilities`，并传给 `runNovelPrePluginChain`。
+2. 删除旧的 `_agentMcpCapabilities` / `_mcpCapabilitiesPass` 源码守卫占位，避免测试被假字符串满足。
+3. `ToolExecutionContext` 增加会话级 `onToolEvent`。
+4. `AgentRunner` 调用工具时把当前会话的 `callbacks.onToolEvent` 注入执行上下文。
+5. `run_chapter_workflow` 优先使用执行上下文中的 `onToolEvent` 转发 workflow 子事件；没有上下文回调时保留原 `options.onToolEvent` 兼容路径。
+
+验证记录：
+1. TDD RED/GREEN 已完成：MCP capability 真实传递、Runner context 事件回调、workflow 子事件 context 转发测试均先失败后通过。
+2. 目标矩阵：`npx.cmd vitest run src/lib/agent/ai-chat-session.spec.ts src/lib/agent/tools/run-chapter-workflow.spec.ts src/lib/agent/tools/index.spec.ts src/lib/agent/capabilities/selector.spec.ts src/lib/agent/plan-execute-policy.spec.ts src/lib/agent/workflow-trace.spec.ts src/components/chat/chat-panel.spec.tsx src/lib/novel/deep-chapter-generation.spec.ts`，8 个测试文件、112 个用例通过。
+3. `npm.cmd run typecheck`：通过。
+4. `npm.cmd run test:mocks`：344 个测试文件、2577 个用例通过，6 个 todo。
+5. `npm.cmd run build`：通过；保留既有 Vite dynamic import、chunk size、plugin timings 警告。
+6. 源码启动：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+7. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe` 和 `release-portable\version-info.json`；版本 `2.2.31`，大小 `149403648` 字节。
+
+Git 状态：本轮未提交 git，未合并 main。
+
+# 20260703-083845 AI 会话三档模式按钮回归修复
+
+本轮目标：修复小说模式聊天输入工具栏重新显示旧“深度模式”按钮的问题，恢复“快速 / 标准 / 严格”三档模式入口。
+
+修改文件：
+- `src/components/chat/chat-panel.tsx`
+- `src/components/chat/chat-panel.mount.spec.tsx`
+- `src/test/chat-panel-mount.ts`
+- `GenxinLOG/更新日志.md`
+- `gongjudiaoyongyouhua-分支说明.md`
+
+实现记录：
+1. 在聊天输入工具栏中用三段按钮替换旧的 Brain 图标深度模式开关。
+2. 三段按钮直接调用已有 `setAiWorkflowMode`，不改 prompt、章节确认、写回或 MCP 流程。
+3. 测试 mock 补齐 `setAiWorkflowMode`，保证 mount 测试环境和真实 store API 一致。
+4. 新增 mount 回归断言，确认显示“快速 / 标准 / 严格”，且不再出现“开启/关闭深度模式”按钮。
+
+验证记录：
+1. `npx.cmd vitest run src/components/chat/chat-panel.mount.spec.tsx -t "输入工具栏显示快速"`：通过。
+2. `npx.cmd vitest run src/components/chat/chat-panel.mount.spec.tsx`：通过。
+3. `npx.cmd vitest run src/components/chat/chat-panel.spec.tsx src/components/chat/chat-message.spec.tsx`：通过。
+4. `npm.cmd run typecheck`：通过。
+5. `npm.cmd run test:mocks`：通过。
+6. `npm.cmd run build`：通过；保留既有构建警告。
+7. `npm.cmd run build:portable`：通过，生成 `release-portable\QMaiWrite.exe`。
+8. 源码启动补充验证：`http://127.0.0.1:5179/` 返回 200，验证后端口无监听残留。
+
+Git 状态：本轮未提交 git，未合并 main。
 
 ### 20260702-080431 @ 输入触发引用窗口修复
 

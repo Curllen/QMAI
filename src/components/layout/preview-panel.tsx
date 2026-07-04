@@ -1,4 +1,4 @@
-import { type CSSProperties, Suspense, lazy, useEffect, useCallback, useRef, useMemo, useState, useLayoutEffect } from "react"
+﻿import { type CSSProperties, Suspense, lazy, useEffect, useCallback, useRef, useMemo, useState, useLayoutEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, MoreHorizontal, X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -1252,7 +1252,7 @@ export function PreviewPanel() {
     <div className="flex h-full flex-col">
       <div className="border-b px-3 py-1.5">
         <div ref={chapterToolbarRef} className="flex min-w-0 items-center gap-2">
-          <div className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+          <div className="relative flex min-w-0 min-h-0 flex-1 items-center gap-1 overflow-hidden">
             {chapterHeader ? (
               <>
                 <span
