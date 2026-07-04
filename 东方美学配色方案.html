@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QMaiWrite - 东方美学配色方案</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #f5f0eb;
+    color: #2c2c2c;
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ====== 顶部 HERO ====== */
+  .hero {
+    background: linear-gradient(135deg, #1a3a4a 0%, #2d5f6e 40%, #4a8fa0 100%);
+    padding: 80px 60px 60px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(180,220,230,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 80%, rgba(255,255,255,0.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 8px;
+    margin-bottom: 16px;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.2);
+  }
+  .hero .subtitle {
+    font-size: 16px;
+    color: rgba(255,255,255,0.75);
+    letter-spacing: 3px;
+    font-weight: 300;
+  }
+  .hero .logo-preview {
+    width: 80px; height: 80px;
+    border-radius: 20px;
+    background: linear-gradient(145deg, #A8D5E5, #8EC5D8);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 30px auto 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2), inset 0 2px 4px rgba(255,255,255,0.4);
+  }
+  .hero .logo-preview .bar {
+    width: 12px; height: 36px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+
+  /* ====== 原LOGO分析区 ====== */
+  .section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 60px 40px;
+  }
+  .section-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 28px;
+    font-weight: 600;
+    color: #2c2c2c;
+    margin-bottom: 12px;
+    letter-spacing: 2px;
+    position: relative;
+    display: inline-block;
+  }
+  .section-title::after {
+    content: '';
+    position: absolute;
+    bottom: -4px; left: 0;
+    width: 40px; height: 3px;
+    background: #4a8fa0;
+    border-radius: 2px;
+  }
+  .section-desc {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 40px;
+    max-width: 700px;
+    line-height: 1.9;
+  }
+
+  /* 原色提取 */
+  .original-analysis {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 60px;
+  }
+  .analysis-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .analysis-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: #444;
+  }
+  .color-extract {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .color-chip {
+    width: 100px;
+    text-align: center;
+  }
+  .color-chip .swatch {
+    width: 100px; height: 80px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border: 2px solid rgba(255,255,255,0.8);
+  }
+  .color-chip .hex {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: #666;
+  }
+  .color-chip .name {
+    font-size: 11px;
+    color: #999;
+  }
+  .analysis-notes {
+    list-style: none;
+    padding: 0;
+  }
+  .analysis-notes li {
+    font-size: 13px;
+    color: #666;
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+    display: flex;
+    gap: 8px;
+  }
+  .analysis-notes li::before {
+    content: '';
+    width: 4px; height: 4px;
+    background: #4a8fa0;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 9px;
+  }
+
+  /* ====== 配色方案区 ====== */
+  .scheme-section {
+    margin-bottom: 80px;
+  }
+  .scheme-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .scheme-name {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: #333;
+  }
+  .scheme-tag {
+    font-size: 11px;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+    letter-spacing: 1px;
+  }
+  .scheme-desc {
+    font-size: 14px;
+    color: #777;
+    margin-bottom: 32px;
+    max-width: 800px;
+    line-height: 1.9;
+  }
+
+  /* 色卡展示 */
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .palette-card {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .palette-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  }
+  .palette-card .swatch {
+    height: 100px;
+    position: relative;
+  }
+  .palette-card .swatch::after {
+    content: attr(data-hex);
+    position: absolute;
+    bottom: 8px; right: 10px;
+    font-size: 10px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    background: rgba(255,255,255,0.85);
+    color: #333;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .palette-card:hover .swatch::after {
+    opacity: 1;
+  }
+  .palette-card .info {
+    padding: 12px 14px;
+  }
+  .palette-card .info .color-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+    margin-bottom: 2px;
+  }
+  .palette-card .info .color-hex {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: #aaa;
+  }
+  .palette-card .info .color-role {
+    font-size: 10px;
+    color: #bbb;
+    margin-top: 2px;
+  }
+
+  /* 渐变条 */
+  .gradient-bar {
+    height: 48px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  /* 应用预览卡片 */
+  .preview-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 32px;
+  }
+  .preview-card {
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    min-height: 180px;
+  }
+  .preview-card .preview-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .preview-card .preview-text {
+    font-size: 12px;
+    opacity: 0.75;
+    line-height: 1.7;
+  }
+  .preview-card .preview-btn {
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 16px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .preview-card .preview-btn:hover { opacity: 0.85; }
+
+  /* ====== 分隔 ====== */
+  .divider {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+  .divider hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, transparent, #d0c8c0, transparent);
+  }
+
+  /* ====== 方案对比 ====== */
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-top: 32px;
+  }
+  .comparison-item {
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    transition: transform 0.2s;
+  }
+  .comparison-item:hover {
+    transform: translateY(-2px);
+  }
+  .comparison-item .color-strip {
+    height: 120px;
+  }
+  .comparison-item .comp-info {
+    padding: 16px;
+  }
+  .comparison-item .comp-info .comp-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  .comparison-item .comp-info .comp-sub {
+    font-size: 11px;
+    color: #999;
+  }
+
+  /* ====== 推荐标识 ====== */
+  .recommend-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #e8d5b7, #d4bc96);
+    color: #7a6545;
+    font-weight: 500;
+  }
+
+  /* ====== 底部 ====== */
+  .footer {
+    text-align: center;
+    padding: 48px 40px;
+    color: #bbb;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+
+  /* ====== 响应式 ====== */
+  @media (max-width: 768px) {
+    .hero { padding: 50px 24px 40px; }
+    .hero h1 { font-size: 28px; letter-spacing: 4px; }
+    .section { padding: 40px 20px; }
+    .original-analysis { grid-template-columns: 1fr; }
+    .preview-row { grid-template-columns: 1fr; }
+    .comparison-grid { grid-template-columns: repeat(2, 1fr); }
+    .palette-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== HERO ====== -->
+<div class="hero">
+  <h1>东方美学 · 色彩方案</h1>
+  <div class="subtitle">QMaiWrite 品牌色系升级设计</div>
+  <div class="logo-preview"><div class="bar"></div></div>
+</div>
+
+<!-- ====== 原LOGO色彩分析 ====== -->
+<div class="section">
+  <div class="section-title">原 LOGO 色彩分析</div>
+  <p class="section-desc">
+    当前LOGO采用柔和的浅蓝/青色基调，带有拟物风格的3D光影效果。整体色彩饱和度偏低，色调偏向冷灰蓝，传达出安静、科技感的视觉印象。以下是提取的核心色值与设计特征分析。
+  </p>
+
+  <div class="original-analysis">
+    <div class="analysis-card">
+      <h3>核心色值提取</h3>
+      <div class="color-extract">
+        <div class="color-chip">
+          <div class="swatch" style="background: linear-gradient(145deg, #A8D5E5, #8EC5D8)"></div>
+          <div class="hex">#A8D5E5</div>
+          <div class="name">主体渐变起</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: linear-gradient(145deg, #8EC5D8, #7BB8CD)"></div>
+          <div class="hex">#8EC5D8</div>
+          <div class="name">主体渐变终</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: #B8E0E8"></div>
+          <div class="hex">#B8E0E8</div>
+          <div class="name">高光区</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: #FFFFFF; border: 1px solid #eee"></div>
+          <div class="hex">#FFFFFF</div>
+          <div class="name">竖条指示器</div>
+        </div>
+        <div class="color-chip">
+          <div class="swatch" style="background: linear-gradient(145deg, #C5E8F0, #D5EFF5)"></div>
+          <div class="hex">#C5E8F0</div>
+          <div class="name">顶部高光</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="analysis-card">
+      <h3>设计特征与问题</h3>
+      <ul class="analysis-notes">
+        <li>色彩饱和度偏低（HSL约185/50/75），灰度成分较高</li>
+        <li>色相位于青色与天蓝之间（185-190度），缺少明确的色彩性格</li>
+        <li>拟物风格3D效果在矢量缩放时表现不佳</li>
+        <li>缺乏与品牌"QMAI"名称关联的视觉记忆点</li>
+        <li>色彩层次偏少，仅有2-3个色阶变化</li>
+        <li>缺少辅助色与对比色体系，扩展性不足</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案一：天青釉色 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案一 · 天青釉色</span>
+      <span class="recommend-badge">&#10022; 推荐</span>
+      <span class="scheme-tag" style="background:#e0eff5; color:#3a7d8f;">汝窑传承</span>
+    </div>
+    <p class="scheme-desc">
+      取自宋代汝窑"雨过天青"的经典釉色，与原LOGO的浅蓝青色最为接近，但饱和度与层次更为丰富。天青色是东方美学中最具代表性的青蓝色系，既有文人的雅致，又有现代设计所需的清新感。适合作为品牌主色的直接升级路径。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1B3D4F, #2A6478, #3D8B9E, #6BB5C4, #9DD4E0, #C5E8F0, #E3F3F8)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1B3D4F" data-hex="#1B3D4F"></div>
+        <div class="info">
+          <div class="color-name">墨青</div>
+          <div class="color-hex">#1B3D4F</div>
+          <div class="color-role">深层 / 标题文字</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2A6478" data-hex="#2A6478"></div>
+        <div class="info">
+          <div class="color-name">霁蓝</div>
+          <div class="color-hex">#2A6478</div>
+          <div class="color-role">主色深调</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#3D8B9E" data-hex="#3D8B9E"></div>
+        <div class="info">
+          <div class="color-name">天青</div>
+          <div class="color-hex">#3D8B9E</div>
+          <div class="color-role">LOGO主色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#6BB5C4" data-hex="#6BB5C4"></div>
+        <div class="info">
+          <div class="color-name">釉青</div>
+          <div class="color-hex">#6BB5C4</div>
+          <div class="color-role">辅助色 / 强调</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#9DD4E0" data-hex="#9DD4E0"></div>
+        <div class="info">
+          <div class="color-name">澄碧</div>
+          <div class="color-hex">#9DD4E0</div>
+          <div class="color-role">浅底色 / 背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#E3F3F8" data-hex="#E3F3F8"></div>
+        <div class="info">
+          <div class="color-name">冰裂</div>
+          <div class="color-hex">#E3F3F8</div>
+          <div class="color-role">极浅背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#F0E6D3" data-hex="#F0E6D3"></div>
+        <div class="info">
+          <div class="color-name">素瓷</div>
+          <div class="color-hex">#F0E6D3</div>
+          <div class="color-role">暖底色 / 卡片</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#C4A265" data-hex="#C4A265"></div>
+        <div class="info">
+          <div class="color-name">鎏金</div>
+          <div class="color-hex">#C4A265</div>
+          <div class="color-role">点缀 / 高亮</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: linear-gradient(135deg, #2A6478, #3D8B9E);">
+        <div class="preview-title" style="color:#fff">深色界面</div>
+        <div class="preview-text" style="color:rgba(255,255,255,0.8)">深青色系适合侧边栏与头部导航，营造沉浸式写作氛围，如同夜色中的雨过天青。</div>
+        <div class="preview-btn" style="background:#fff; color:#2A6478;">了解更多</div>
+      </div>
+      <div class="preview-card" style="background: #E3F3F8;">
+        <div class="preview-title" style="color:#1B3D4F">浅色界面</div>
+        <div class="preview-text" style="color:#5a7a8a">冰裂浅色系适合主编辑区域，清爽开阔，减少视觉疲劳，长时间写作也不觉压抑。</div>
+        <div class="preview-btn" style="background:#3D8B9E; color:#fff;">开始创作</div>
+      </div>
+      <div class="preview-card" style="background: linear-gradient(135deg, #F0E6D3, #E8DCC5);">
+        <div class="preview-title" style="color:#5a4a30">暖色卡片</div>
+        <div class="preview-text" style="color:#8a7a60">素瓷暖色用于信息卡片与提示区域，与青色主调形成冷暖对比，增添人文温度。</div>
+        <div class="preview-btn" style="background:#C4A265; color:#fff;">查看详情</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案二：青瓷墨韵 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案二 · 青瓷墨韵</span>
+      <span class="recommend-badge">&#10022; 推荐</span>
+      <span class="scheme-tag" style="background:#e5e0d8; color:#5a5040;">文人风骨</span>
+    </div>
+    <p class="scheme-desc">
+      以青瓷的温润青绿为基调，融入水墨的深浅层次。这套色系将青色的明度拉低，加入更多灰度，营造出东方文人的内敛气质。适合追求高级感、书卷气的品牌定位。色彩过渡更加柔和，视觉上更加沉稳。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1a2f2e, #2d4a47, #3e6360, #5a8a86, #7db0ab, #a5d3cf, #d0ece8)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1a2f2e" data-hex="#1A2F2E"></div>
+        <div class="info">
+          <div class="color-name">浓墨</div>
+          <div class="color-hex">#1A2F2E</div>
+          <div class="color-role">最深底 / 标题</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2d4a47" data-hex="#2D4A47"></div>
+        <div class="info">
+          <div class="color-name">松烟</div>
+          <div class="color-hex">#2D4A47</div>
+          <div class="color-role">侧边栏 / 深色区</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#3e6360" data-hex="#3E6360"></div>
+        <div class="info">
+          <div class="color-name">竹青</div>
+          <div class="color-hex">#3E6360</div>
+          <div class="color-role">LOGO主色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#5a8a86" data-hex="#5A8A86"></div>
+        <div class="info">
+          <div class="color-name">梅子青</div>
+          <div class="color-hex">#5A8A86</div>
+          <div class="color-role">强调色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#7db0ab" data-hex="#7DB0AB"></div>
+        <div class="info">
+          <div class="color-name">粉青</div>
+          <div class="color-hex">#7DB0AB</div>
+          <div class="color-role">辅助色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#d0ece8" data-hex="#D0ECE8"></div>
+        <div class="info">
+          <div class="color-name">月白</div>
+          <div class="color-hex">#D0ECE8</div>
+          <div class="color-role">极浅背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#EDE6D8" data-hex="#EDE6D8"></div>
+        <div class="info">
+          <div class="color-name">宣纸</div>
+          <div class="color-hex">#EDE6D8</div>
+          <div class="color-role">暖底色 / 内容区</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#B8956A" data-hex="#B8956A"></div>
+        <div class="info">
+          <div class="color-name">檀木</div>
+          <div class="color-hex">#B8956A</div>
+          <div class="color-role">点缀 / 暖色强调</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: #1a2f2e;">
+        <div class="preview-title" style="color:#d0ece8">浓墨深色模式</div>
+        <div class="preview-text" style="color:rgba(208,236,232,0.6)">如深夜书房的墨色，深而不沉，与青瓷色系的点缀形成层次。适合暗色主题界面。</div>
+        <div class="preview-btn" style="background:#3e6360; color:#d0ece8;">切换主题</div>
+      </div>
+      <div class="preview-card" style="background: #EDE6D8;">
+        <div class="preview-title" style="color:#2d4a47">宣纸编辑区</div>
+        <div class="preview-text" style="color:#6a6050">仿宣纸质感的中性暖色，营造传统书写的仪式感，与青色UI元素形成温润对比。</div>
+        <div class="preview-btn" style="background:#3e6360; color:#fff;">开始写作</div>
+      </div>
+      <div class="preview-card" style="background: linear-gradient(135deg, #5a8a86, #3e6360);">
+        <div class="preview-title" style="color:#fff">梅子青强调</div>
+        <div class="preview-text" style="color:rgba(255,255,255,0.75)">中饱和度的青绿色适合按钮、链接等交互元素，醒目而不刺眼。</div>
+        <div class="preview-btn" style="background:#EDE6D8; color:#2d4a47;">确认操作</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案三：云山黛色 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案三 · 云山黛色</span>
+      <span class="scheme-tag" style="background:#e8e5e0; color:#5a5550;">山水意境</span>
+    </div>
+    <p class="scheme-desc">
+      融合青绿山水画中的石青、石绿色彩，色调更加沉稳厚重。这套色系较前两套饱和度略高，加入了石绿（翡翠绿）与石青（群青蓝）的成分，呈现出层次更丰富的山水意境。适合需要视觉冲击力较强的应用场景。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1a2e3d, #2a4a5e, #35647a, #458298, #5da0b4, #82bdd0, #b0d8e6, #daeef5)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1a2e3d" data-hex="#1A2E3D"></div>
+        <div class="info">
+          <div class="color-name">远黛</div>
+          <div class="color-hex">#1A2E3D</div>
+          <div class="color-role">最深色 / 深色模式底</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2a4a5e" data-hex="#2A4A5E"></div>
+        <div class="info">
+          <div class="color-name">石青</div>
+          <div class="color-hex">#2A4A5E</div>
+          <div class="color-role">深色主调</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#35647a" data-hex="#35647A"></div>
+        <div class="info">
+          <div class="color-name">黛蓝</div>
+          <div class="color-hex">#35647A</div>
+          <div class="color-role">LOGO主色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#458298" data-hex="#458298"></div>
+        <div class="info">
+          <div class="color-name">霁青</div>
+          <div class="color-hex">#458298</div>
+          <div class="color-role">强调色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#5da0b4" data-hex="#5DA0B4"></div>
+        <div class="info">
+          <div class="color-name">碧波</div>
+          <div class="color-hex">#5DA0B4</div>
+          <div class="color-role">辅助色 / 交互</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#82bdd0" data-hex="#82BDD0"></div>
+        <div class="info">
+          <div class="color-name">烟岚</div>
+          <div class="color-hex">#82BDD0</div>
+          <div class="color-role">浅色辅助</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#daeef5" data-hex="#DAEEF5"></div>
+        <div class="info">
+          <div class="color-name">晨雾</div>
+          <div class="color-hex">#DAEEF5</div>
+          <div class="color-role">极浅背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#3A7A5C" data-hex="#3A7A5C"></div>
+        <div class="info">
+          <div class="color-name">石绿</div>
+          <div class="color-hex">#3A7A5C</div>
+          <div class="color-role">对比色 / 成功状态</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: #1a2e3d;">
+        <div class="preview-title" style="color:#daeef5">远黛深色</div>
+        <div class="preview-text" style="color:rgba(218,238,245,0.6)">远山如黛的深邃底色，适合深色模式的整体基调，沉稳有力。</div>
+        <div class="preview-btn" style="background:#458298; color:#fff;">查看效果</div>
+      </div>
+      <div class="preview-card" style="background: linear-gradient(135deg, #5da0b4, #82bdd0);">
+        <div class="preview-title" style="color:#fff">碧波渐变</div>
+        <div class="preview-text" style="color:rgba(255,255,255,0.8)">烟岚与碧波的自然过渡，适合头部banner与视觉焦点区域。</div>
+        <div class="preview-btn" style="background:#fff; color:#2a4a5e;">探索更多</div>
+      </div>
+      <div class="preview-card" style="background: #DAEEF5;">
+        <div class="preview-title" style="color:#2a4a5e">晨雾浅色</div>
+        <div class="preview-text" style="color:#5a8a9a">如清晨山间的薄雾，温柔通透。适合大面积内容区域的底色。</div>
+        <div class="preview-btn" style="background:#35647a; color:#fff;">进入编辑</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案四：苍苍竹色 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案四 · 苍苍竹色</span>
+      <span class="scheme-tag" style="background:#e5ede0; color:#4a6a45;">竹林清韵</span>
+    </div>
+    <p class="scheme-desc">
+      从竹子的青绿中提取灵感，色相偏绿而非偏蓝，带来更多自然生机感。这套色系与原LOGO的青蓝色系有一定跨度，但同属东方美学中的"青"色范畴，是从蓝色向绿色的东方转调方案。适合希望品牌形象更加鲜活、有生命力的方向。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1C3328, #2D5040, #3E6B58, #528A72, #6BA58D, #8FC0A5, #B5D9C3, #DAF0E2)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1C3328" data-hex="#1C3328"></div>
+        <div class="info">
+          <div class="color-name">竹墨</div>
+          <div class="color-hex">#1C3328</div>
+          <div class="color-role">最深色 / 深色底</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2D5040" data-hex="#2D5040"></div>
+        <div class="info">
+          <div class="color-name">翠竹</div>
+          <div class="color-hex">#2D5040</div>
+          <div class="color-role">深色主调</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#3E6B58" data-hex="#3E6B58"></div>
+        <div class="info">
+          <div class="color-name">竹青</div>
+          <div class="color-hex">#3E6B58</div>
+          <div class="color-role">LOGO主色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#528A72" data-hex="#528A72"></div>
+        <div class="info">
+          <div class="color-name">新篁</div>
+          <div class="color-hex">#528A72</div>
+          <div class="color-role">强调色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#8FC0A5" data-hex="#8FC0A5"></div>
+        <div class="info">
+          <div class="color-name">竹叶</div>
+          <div class="color-hex">#8FC0A5</div>
+          <div class="color-role">辅助色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#DAF0E2" data-hex="#DAF0E2"></div>
+        <div class="info">
+          <div class="color-name">竹露</div>
+          <div class="color-hex">#DAF0E2</div>
+          <div class="color-role">极浅背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#EDE8D8" data-hex="#EDE8D8"></div>
+        <div class="info">
+          <div class="color-name">竹编</div>
+          <div class="color-hex">#EDE8D8</div>
+          <div class="color-role">暖底色 / 卡片</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#C8A96E" data-hex="#C8A96E"></div>
+        <div class="info">
+          <div class="color-name">金竹</div>
+          <div class="color-hex">#C8A96E</div>
+          <div class="color-role">点缀 / 高亮</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: #1C3328;">
+        <div class="preview-title" style="color:#DAF0E2">竹墨深色</div>
+        <div class="preview-text" style="color:rgba(218,240,226,0.6)">竹墨色沉稳深邃，如竹林深处的光影，适合暗色模式的沉浸式写作。</div>
+        <div class="preview-btn" style="background:#3E6B58; color:#DAF0E2;">体验暗色</div>
+      </div>
+      <div class="preview-card" style="background: #DAF0E2;">
+        <div class="preview-title" style="color:#2D5040">竹露浅色</div>
+        <div class="preview-text" style="color:#5a8a72">如竹叶上的晨露，清新通透，适合大面积编辑区域的背景色。</div>
+        <div class="preview-btn" style="background:#3E6B58; color:#fff;">开始创作</div>
+      </div>
+      <div class="preview-card" style="background: linear-gradient(135deg, #EDE8D8, #E5DFD0);">
+        <div class="preview-title" style="color:#5a4a30">竹编暖色</div>
+        <div class="preview-text" style="color:#8a7a5a">仿竹编纹理的暖色底，与竹青色搭配产生自然温润的对比效果。</div>
+        <div class="preview-btn" style="background:#C8A96E; color:#fff;">了解更多</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案五：月白黛蓝 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案五 · 月白黛蓝</span>
+      <span class="scheme-tag" style="background:#e8e5ef; color:#4a456a;">月夜诗境</span>
+    </div>
+    <p class="scheme-desc">
+      以"月白"与"黛蓝"为核心，取自东方美学中的月夜意境。这套色系在青蓝基础上增加了微妙的紫色倾向（靛蓝），营造出夜晚月光的冷清美感。与原LOGO的青色同属冷色系，但层次更加丰富，带有诗意与神秘感。适合面向年轻创作者或文学类应用。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1a1f35, #2a3055, #3a4575, #4a5e95, #6a80b5, #8ea2ce, #b5c4e0, #dde5f0)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1a1f35" data-hex="#1A1F35"></div>
+        <div class="info">
+          <div class="color-name">玄夜</div>
+          <div class="color-hex">#1A1F35</div>
+          <div class="color-role">最深色 / 深色底</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2a3055" data-hex="#2A3055"></div>
+        <div class="info">
+          <div class="color-name">靛蓝</div>
+          <div class="color-hex">#2A3055</div>
+          <div class="color-role">深色主调</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#4a5e95" data-hex="#4A5E95"></div>
+        <div class="info">
+          <div class="color-name">黛蓝</div>
+          <div class="color-hex">#4A5E95</div>
+          <div class="color-role">LOGO主色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#6a80b5" data-hex="#6A80B5"></div>
+        <div class="info">
+          <div class="color-name">暮霞</div>
+          <div class="color-hex">#6A80B5</div>
+          <div class="color-role">强调色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#8ea2ce" data-hex="#8EA2CE"></div>
+        <div class="info">
+          <div class="color-name">月白</div>
+          <div class="color-hex">#8EA2CE</div>
+          <div class="color-role">辅助色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#dde5f0" data-hex="#DDE5F0"></div>
+        <div class="info">
+          <div class="color-name">霜月</div>
+          <div class="color-hex">#DDE5F0</div>
+          <div class="color-role">极浅背景</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#EDE5D8" data-hex="#EDE5D8"></div>
+        <div class="info">
+          <div class="color-name">素月</div>
+          <div class="color-hex">#EDE5D8</div>
+          <div class="color-role">暖底色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#C4956A" data-hex="#C4956A"></div>
+        <div class="info">
+          <div class="color-name">琥珀</div>
+          <div class="color-hex">#C4956A</div>
+          <div class="color-role">暖色点缀</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: #1a1f35;">
+        <div class="preview-title" style="color:#dde5f0">玄夜深色</div>
+        <div class="preview-text" style="color:rgba(221,229,240,0.6)">深夜天际的深邃蓝黑，营造专注创作的沉浸氛围。</div>
+        <div class="preview-btn" style="background:#4a5e95; color:#dde5f0;">切换暗色</div>
+      </div>
+      <div class="preview-card" style="background: #dde5f0;">
+        <div class="preview-title" style="color:#2a3055">霜月浅色</div>
+        <div class="preview-text" style="color:#5a6080">如月光洒落的清冷白，适合阅读与编辑区域，宁静而优雅。</div>
+        <div class="preview-btn" style="background:#4a5e95; color:#fff;">开始阅读</div>
+      </div>
+      <div class="preview-card" style="background: linear-gradient(135deg, #4a5e95, #6a80b5);">
+        <div class="preview-title" style="color:#fff">黛蓝渐变</div>
+        <div class="preview-text" style="color:rgba(255,255,255,0.8)">靛蓝到暮霞的渐变，适合封面、引导页等视觉展示区域。</div>
+        <div class="preview-btn" style="background:#EDE5D8; color:#2a3055;">浏览作品</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 方案六：古墨流金 ====== -->
+<div class="section">
+  <div class="scheme-section">
+    <div class="scheme-header">
+      <span class="scheme-name">方案六 · 古墨流金</span>
+      <span class="scheme-tag" style="background:#ede5d8; color:#6a5a40;">金墨华章</span>
+    </div>
+    <p class="scheme-desc">
+      以黑墨与金色为核心，以青色为辅助色。这套色系最为大胆，将原LOGO的青蓝色降为辅助角色，主色调转向黑金配色，呈现出东方美学中最为经典的金石篆刻气质。适合追求高端、专业品牌形象的定位。
+    </p>
+
+    <div class="gradient-bar" style="background: linear-gradient(to right, #1a1a1a, #2d2d2d, #404040, #555555, #808080, #aaaaaa, #d0d0d0, #f0f0f0)"></div>
+
+    <div class="palette-grid">
+      <div class="palette-card">
+        <div class="swatch" style="background:#1a1a1a" data-hex="#1A1A1A"></div>
+        <div class="info">
+          <div class="color-name">玄墨</div>
+          <div class="color-hex">#1A1A1A</div>
+          <div class="color-role">最深色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#2d2d2d" data-hex="#2D2D2D"></div>
+        <div class="info">
+          <div class="color-name">浓墨</div>
+          <div class="color-hex">#2D2D2D</div>
+          <div class="color-role">深色模式底</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#3D8B9E" data-hex="#3D8B9E"></div>
+        <div class="info">
+          <div class="color-name">天青</div>
+          <div class="color-hex">#3D8B9E</div>
+          <div class="color-role">辅助色 / LOGO</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#C49A3C" data-hex="#C49A3C"></div>
+        <div class="info">
+          <div class="color-name">古金</div>
+          <div class="color-hex">#C49A3C</div>
+          <div class="color-role">主强调色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#D4AD5A" data-hex="#D4AD5A"></div>
+        <div class="info">
+          <div class="color-name">流金</div>
+          <div class="color-hex">#D4AD5A</div>
+          <div class="color-role">高亮点缀</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#F5F0E8" data-hex="#F5F0E8"></div>
+        <div class="info">
+          <div class="color-name">象牙</div>
+          <div class="color-hex">#F5F0E8</div>
+          <div class="color-role">浅色底</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#E8E0D0" data-hex="#E8E0D0"></div>
+        <div class="info">
+          <div class="color-name">古卷</div>
+          <div class="color-hex">#E8E0D0</div>
+          <div class="color-role">卡片底色</div>
+        </div>
+      </div>
+      <div class="palette-card">
+        <div class="swatch" style="background:#8B4513" data-hex="#8B4513"></div>
+        <div class="info">
+          <div class="color-name">赭石</div>
+          <div class="color-hex">#8B4513</div>
+          <div class="color-role">警告 / 暖色</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-row">
+      <div class="preview-card" style="background: #1a1a1a;">
+        <div class="preview-title" style="color:#D4AD5A">玄墨金辉</div>
+        <div class="preview-text" style="color:rgba(212,173,90,0.5)">黑金搭配，尽显高端。如古卷上的金字，沉稳而典雅。</div>
+        <div class="preview-btn" style="background: linear-gradient(135deg, #C49A3C, #D4AD5A); color:#1a1a1a;">尊享体验</div>
+      </div>
+      <div class="preview-card" style="background: #F5F0E8;">
+        <div class="preview-title" style="color:#2d2d2d">象牙白底</div>
+        <div class="preview-text" style="color:#6a6050">象牙色的温暖底色，配合天青色辅助元素，既有东方韵味又不失现代感。</div>
+        <div class="preview-btn" style="background:#3D8B9E; color:#fff;">开始写作</div>
+      </div>
+      <div class="preview-card" style="background: #E8E0D0;">
+        <div class="preview-title" style="color:#5a4a30">古卷卡片</div>
+        <div class="preview-text" style="color:#7a6a50">古卷色的温润质感，适合文档卡片与笔记区域，如翻阅古籍。</div>
+        <div class="preview-btn" style="background:#C49A3C; color:#fff;">查看笔记</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"><hr></div>
+
+<!-- ====== 四方案对比 ====== -->
+<div class="section">
+  <div class="section-title">方案总览对比</div>
+  <p class="section-desc">六套方案各具东方美学特色，以下为各方案主色（LOGO色）的直观对比，帮助你快速选择适合品牌定位的色系方向。</p>
+
+  <div class="comparison-grid">
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #2A6478, #3D8B9E);"></div>
+      <div class="comp-info">
+        <div class="comp-name">天青釉色 <span class="recommend-badge">&#10022;</span></div>
+        <div class="comp-sub">最接近原色 · 饱和度适中</div>
+      </div>
+    </div>
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #2d4a47, #3e6360);"></div>
+      <div class="comp-info">
+        <div class="comp-name">青瓷墨韵 <span class="recommend-badge">&#10022;</span></div>
+        <div class="comp-sub">文人气质 · 低饱和沉稳</div>
+      </div>
+    </div>
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #2a4a5e, #458298);"></div>
+      <div class="comp-info">
+        <div class="comp-name">云山黛色</div>
+        <div class="comp-sub">山水意境 · 中高饱和</div>
+      </div>
+    </div>
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #2D5040, #3E6B58);"></div>
+      <div class="comp-info">
+        <div class="comp-name">苍苍竹色</div>
+        <div class="comp-sub">偏绿自然 · 生命活力</div>
+      </div>
+    </div>
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #2a3055, #4a5e95);"></div>
+      <div class="comp-info">
+        <div class="comp-name">月白黛蓝</div>
+        <div class="comp-sub">偏紫靛蓝 · 诗意神秘</div>
+      </div>
+    </div>
+    <div class="comparison-item">
+      <div class="color-strip" style="background: linear-gradient(135deg, #C49A3C, #D4AD5A);"></div>
+      <div class="comp-info">
+        <div class="comp-name">古墨流金</div>
+        <div class="comp-sub">黑金高端 · 金石气质</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 底部 ====== -->
+<div class="footer">
+  QMaiWrite 东方美学配色方案 · 仅供品牌升级参考
+</div>
+
+</body>
+</html>

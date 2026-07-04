@@ -40,6 +40,7 @@ import {
   collectWebResearch,
   shouldUseWebResearch,
 } from "@/lib/web-research"
+import { parseAgentResponse } from "@/lib/novel/agent-parser"
 
 const OUTLINE_CHAT_DISABLED_TOOLS = ["write_chapter", "write_memory"]
 
@@ -277,7 +278,6 @@ function OutlineAssistantMessage({ msg, index, isStreaming, streamingContent, ac
   // Parse for file edits
   const parsed = useMemo(() => {
     if (!answer) return { textContent: "", edits: [], hasEdits: false }
-    const { parseAgentResponse } = require("@/lib/novel/agent-parser") as typeof import("@/lib/novel/agent-parser")
     return parseAgentResponse(answer)
   }, [answer])
 

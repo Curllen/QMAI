@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>未提交内容功能清单</title>
+  <style>
+    :root {
+      --bg: #f6f7f8;
+      --panel: #ffffff;
+      --text: #182026;
+      --muted: #64717d;
+      --line: #d9dee3;
+      --accent: #0f766e;
+      --accent-2: #8a5a12;
+      --danger: #b42318;
+      --code: #25313c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    header {
+      background: #1f2933;
+      color: #ffffff;
+      padding: 28px 32px;
+      border-bottom: 4px solid var(--accent);
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+
+    header p {
+      margin: 0;
+      color: #d8dee4;
+      max-width: 980px;
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px 32px 48px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .notice {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #5f390d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 220px 180px;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #eef2f5;
+      color: #33414d;
+      z-index: 1;
+      font-weight: 700;
+    }
+
+    tbody tr:hover {
+      background: #f8fafb;
+    }
+
+    .col-status {
+      width: 86px;
+    }
+
+    .col-path {
+      width: 360px;
+    }
+
+    .col-group {
+      width: 160px;
+    }
+
+    .badge {
+      display: inline-block;
+      min-width: 58px;
+      text-align: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .status-M {
+      background: #e0f2fe;
+      color: #075985;
+    }
+
+    .status-D {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    .status-U {
+      background: #ecfdf3;
+      color: #067647;
+    }
+
+    code {
+      color: var(--code);
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+      word-break: break-all;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 980px) {
+      header,
+      main {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .summary,
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        min-width: 980px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>未提交内容功能清单</h1>
+    <p>当前分支：gongjudiaoyongyouhua。此报告按“展开到文件级”的方式整理未提交内容，并为每个文件标注对应功能或用途。</p>
+  </header>
+
+  <main>
+    <section class="summary" aria-label="统计摘要">
+      <div class="metric"><strong id="totalCount">0</strong><span>展开后文件总数</span></div>
+      <div class="metric"><strong id="modifiedCount">0</strong><span>已修改文件</span></div>
+      <div class="metric"><strong id="deletedCount">0</strong><span>已删除文件</span></div>
+      <div class="metric"><strong id="untrackedCount">0</strong><span>新增未跟踪文件</span></div>
+      <div class="metric"><strong>165</strong><span>git status 原始条目</span></div>
+    </section>
+
+    <section class="notice">
+      说明：git status 会把部分未跟踪目录折叠显示；本页已展开到具体文件，因此总数为 193。此 HTML 报告本身是新生成的本地文档，不属于原始统计，当前未执行 git 提交、清理或回退。
+    </section>
+
+    <section class="toolbar" aria-label="筛选工具">
+      <input id="searchInput" type="search" placeholder="搜索路径、功能、用途" />
+      <select id="groupFilter">
+        <option value="">全部功能模块</option>
+      </select>
+      <select id="statusFilter">
+        <option value="">全部状态</option>
+        <option value="M">已修改</option>
+        <option value="D">已删除</option>
+        <option value="U">新增未跟踪</option>
+      </select>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-status">状态</th>
+            <th class="col-path">文件</th>
+            <th class="col-group">功能模块</th>
+            <th>对应功能或用途</th>
+            <th>提交建议</th>
+          </tr>
+        </thead>
+        <tbody id="changeRows"></tbody>
+      </table>
+    </section>
+
+    <p class="footer-note">功能归因依据：git 状态、diff 统计、文件路径、文件命名和分支说明中的阶段记录。对未跟踪新文件的说明为静态归类，不等同于完整代码审计结论。</p>
+  </main>
+
+  <script>
+    const changes = [
+      { status: "M", path: "gongjudiaoyongyouhua-分支说明.md", group: "分支文档", feature: "记录 AI 工具调用优化分支的目标、阶段实现、验证记录和最近启动崩溃修复。", note: "文档类，提交前需确认是否随功能记录一起提交。" },
+      { status: "D", path: "shurukuanggaizao.md", group: "历史文档", feature: "旧输入框改造说明文档已在工作区删除。", note: "删除文档需确认是否确实不再保留。" },
+      { status: "D", path: "zitishezhi-分支说明.md", group: "历史文档", feature: "旧字体设置分支说明文档已在工作区删除。", note: "删除文档需确认是否确实不再保留。" },
+
+      { status: "M", path: "src-tauri/src/commands/file_sync.rs", group: "Tauri 后端", feature: "项目文件同步后端命令发生大范围变更，影响前端读写项目文件的底层能力。", note: "核心后端文件，建议单独复核后提交。" },
+      { status: "M", path: "src-tauri/src/commands/mod.rs", group: "Tauri 后端", feature: "注册新的 MCP stdio 命令模块。", note: "应和 mcp_stdio.rs 同批提交。" },
+      { status: "M", path: "src-tauri/src/lib.rs", group: "Tauri 后端", feature: "把 MCP stdio 状态或命令接入 Tauri 应用初始化流程。", note: "应和 MCP 真实连接能力同批提交。" },
+      { status: "M", path: "src-tauri/src/main.rs", group: "Tauri 后端", feature: "把 MCP stdio 后端注册到主进程启动入口。", note: "应和 MCP 真实连接能力同批提交。" },
+      { status: "U", path: "src-tauri/src/commands/mcp_stdio.rs", group: "Tauri 后端", feature: "新增 MCP stdio 进程管理命令，支持 spawn、write、read、kill，用于连接真实 MCP 服务。", note: "功能代码，建议随 Stage G MCP 真实连接提交。" },
+
+      { status: "M", path: "src/App.tsx", group: "应用启动", feature: "应用启动阶段恢复项目级 MCP 配置，并把配置写入 wiki-store。", note: "应和 MCP 设置持久化同批提交。" },
+      { status: "M", path: "src/stores/wiki-store.ts", group: "状态管理", feature: "新增 AI 工作流模式、MCP 配置、写作 Skill 视图状态，并同步严格模式与深度章节开关。", note: "核心状态文件，建议按功能拆分提交。" },
+      { status: "M", path: "src/stores/chat-store.ts", group: "状态管理", feature: "新增最近任务断点状态，供 ChatPanel 展示和恢复未完成任务。", note: "应和断点恢复功能同批提交。" },
+
+      { status: "M", path: "src/components/layout/content-area.tsx", group: "导航与布局", feature: "接入独立写作 Skill 管理视图。", note: "应和写作 Skill 管理页同批提交。" },
+      { status: "M", path: "src/components/layout/icon-sidebar.tsx", group: "导航与布局", feature: "侧边栏新增或调整写作 Skill 等导航入口。", note: "应和导航偏好同步提交。" },
+      { status: "M", path: "src/components/layout/sidebar-panel.tsx", group: "导航与布局", feature: "侧栏面板支持写作 Skill 管理页或相关入口。", note: "应和写作 Skill 管理页同批提交。" },
+      { status: "M", path: "src/lib/sidebar-nav-preferences.ts", group: "导航与布局", feature: "导航显示偏好新增写作 Skill 项。", note: "应和侧边栏入口同批提交。" },
+      { status: "M", path: "src/lib/sidebar-nav-preferences.spec.ts", group: "导航与布局", feature: "覆盖新增导航项的偏好回归测试。", note: "测试文件，随导航变更提交。" },
+
+      { status: "M", path: "src/components/settings/settings-view.tsx", group: "设置页", feature: "设置页新增 MCP 工具、classification 等配置分类入口。", note: "应和对应设置 section 同批提交。" },
+      { status: "M", path: "src/components/settings/sections/interface-section.tsx", group: "设置页", feature: "界面设置中补充导航显示配置项。", note: "应和侧边栏偏好同批提交。" },
+      { status: "U", path: "src/components/settings/mcp-section.spec.tsx", group: "设置页", feature: "MCP 设置区的组件测试，覆盖添加示例、校验、启用、删除和保存。", note: "测试文件，随 MCP 设置页提交。" },
+      { status: "U", path: "src/components/settings/sections/mcp-section.tsx", group: "设置页", feature: "新增 MCP 工具设置区，支持配置服务、编辑工具 JSON、查看 warnings 和持久化。", note: "功能代码，随 Stage 9 MCP 配置 UI 提交。" },
+      { status: "U", path: "src/components/settings/sections/classification-section.tsx", group: "设置页", feature: "新增 classification.md 编辑入口，支持格式校验和恢复默认。", note: "功能代码，随 Stage E classification 提交。" },
+      { status: "U", path: "src/components/settings/sections/classification-section.spec.tsx", group: "设置页", feature: "classification 设置区测试，覆盖编辑、保存、校验和恢复默认。", note: "测试文件，随 classification 设置页提交。" },
+
+      { status: "M", path: "src/i18n/zh.json", group: "多语言", feature: "补充 AI 工作流、MCP、写作 Skill、classification 等中文文案。", note: "用户可见文案，需随对应功能提交。" },
+      { status: "M", path: "src/i18n/en.json", group: "多语言", feature: "补充 AI 工作流、MCP、写作 Skill、classification 等英文文案。", note: "应和中文文案保持同步。" },
+
+      { status: "M", path: "src/components/reference/ReferenceInput.tsx", group: "@ 引用", feature: "修复 Shift+@ 无法触发引用选择窗口的问题。", note: "小型 bug 修复，可独立提交。" },
+      { status: "M", path: "src/components/reference/ReferenceInput.spec.tsx", group: "@ 引用", feature: "新增 Shift+@ 触发引用窗口的回归测试。", note: "测试文件，随 @ 引用修复提交。" },
+      { status: "M", path: "src/lib/reference/types.ts", group: "@ 引用", feature: "扩展引用类型，支持消息携带 attachedReferences 等引用元数据。", note: "应和聊天消息渲染同批提交。" },
+      { status: "M", path: "src/lib/reference/providers.ts", group: "@ 引用", feature: "扩展引用来源提供器，供 AI 会话和大纲会话引用更多对象。", note: "应和引用显示/发送能力同批提交。" },
+      { status: "M", path: "src/lib/reference/providers.spec.ts", group: "@ 引用", feature: "引用来源提供器的回归测试。", note: "测试文件，随引用能力提交。" },
+
+      { status: "M", path: "src/components/chat/agent-tool-call-message.tsx", group: "AI 会话 UI", feature: "调整工具调用消息渲染，避免工具调用流式更新时触发 React Hook 顺序错误。", note: "bug 修复，可和 tool-call-timeline 同批提交。" },
+      { status: "M", path: "src/components/chat/agent-tool-call-message.spec.tsx", group: "AI 会话 UI", feature: "覆盖工具调用从空到非空更新的渲染回归测试。", note: "测试文件，随工具调用渲染修复提交。" },
+      { status: "M", path: "src/components/chat/chat-message.tsx", group: "AI 会话 UI", feature: "聊天消息渲染附带 @ 引用、工具调用和结构化结果展示。", note: "应和引用发送显示同批提交。" },
+      { status: "M", path: "src/components/chat/chat-message.spec.tsx", group: "AI 会话 UI", feature: "聊天消息 @ 引用、工具调用显示的回归测试。", note: "测试文件，随 chat-message 提交。" },
+      { status: "M", path: "src/components/chat/chat-panel.tsx", group: "AI 会话运行时", feature: "接入 AI 工作流模式、MCP 能力、写作 Skill、章节计划确认、AI 写后自检、断点恢复，并修复 agentSkillConfig 为空导致启动崩溃。", note: "核心入口，建议拆成阶段提交；最近启动崩溃修复也在此文件。" },
+      { status: "M", path: "src/components/chat/chat-panel.spec.tsx", group: "AI 会话运行时", feature: "覆盖 ChatPanel 的工作流、MCP、skill、断点和崩溃修复相关行为。", note: "测试文件，应随 ChatPanel 变更提交。" },
+      { status: "U", path: "src/components/chat/chat-panel.mount.spec.tsx", group: "AI 会话运行时", feature: "新增 ChatPanel 挂载测试，包含 agentSkillConfig 为空仍可打开的启动崩溃回归。", note: "测试文件，随启动崩溃修复提交。" },
+      { status: "U", path: "src/test/chat-panel-mount.ts", group: "测试基础设施", feature: "新增 ChatPanel 挂载测试 helper，可注入空 Agent skill 配置等场景。", note: "测试工具，随挂载测试提交。" },
+      { status: "U", path: "src/components/chat/agent-workflow-panel.tsx", group: "AI 会话 UI", feature: "新增 Agent 工作流面板，用于展示工作流阶段、能力和状态。", note: "功能组件，随 AI 工作流可视化提交。" },
+      { status: "U", path: "src/components/chat/context-trace-panel.tsx", group: "AI 会话追踪", feature: "新增上下文追踪面板，展示上下文包、能力选择、外部搜索、MCP 调用和写后检查摘要。", note: "功能组件，随追踪能力提交。" },
+      { status: "U", path: "src/components/chat/context-trace-panel.spec.tsx", group: "AI 会话追踪", feature: "上下文追踪面板测试，覆盖能力、搜索、MCP、自检展示。", note: "测试文件，随追踪面板提交。" },
+      { status: "U", path: "src/components/chat/intent-clarification-dialog.tsx", group: "AI 会话 UI", feature: "新增意图澄清弹窗，供 AI 会话在不确定任务时向用户确认。", note: "功能组件，需确认当前是否已接入完整流程。" },
+      { status: "U", path: "src/components/chat/modify-confirm-dialog.tsx", group: "AI 会话 UI", feature: "新增修改确认弹窗，复用于章节计划修改、断点恢复等确认场景。", note: "功能组件，随确认交互提交。" },
+      { status: "U", path: "src/components/chat/tool-call-timeline.tsx", group: "AI 会话 UI", feature: "新增工具调用时间线组件，稳定展示工具调用开始、完成、失败、取消状态。", note: "功能组件，随工具调用渲染修复提交。" },
+
+      { status: "M", path: "src/components/sources/outline-chat-panel.tsx", group: "AI 大纲", feature: "AI 大纲会话支持显示已发送 @ 引用和工具调用更新。", note: "应和大纲引用修复同批提交。" },
+      { status: "M", path: "src/components/sources/outline-chat-panel.spec.tsx", group: "AI 大纲", feature: "AI 大纲引用显示和工具调用渲染回归测试。", note: "测试文件，随大纲会话修复提交。" },
+
+      { status: "M", path: "src/hooks/use-agent-config.ts", group: "Agent 配置", feature: "加载去 AI 味配置、用户写作 Skill、搜索配置和 MCP runtime，并构建 Agent 可用工具与能力。", note: "核心 hook，建议和 MCP/写作 Skill 能力分批提交。" },
+      { status: "M", path: "src/hooks/use-agent-config.spec.ts", group: "Agent 配置", feature: "覆盖用户写作 Skill、MCP runtime、工具注册和配置加载的回归测试。", note: "测试文件，随 useAgentConfig 提交。" },
+      { status: "M", path: "src/lib/agent/types.ts", group: "Agent 核心", feature: "扩展 AgentConfig，加入项目路径、任务目标、写作 Skill、MCP 工具、草稿模式等字段。", note: "类型层变更，应和 runner/config 调整同批提交。" },
+      { status: "M", path: "src/lib/agent/runner.ts", group: "Agent 核心", feature: "AgentRunner 支持任务断点保存/清理、取消工具调用、工具不支持错误识别和 requestOverrides。", note: "核心运行时，建议单独严格复核。" },
+      { status: "M", path: "src/lib/agent/runner.spec.ts", group: "Agent 核心", feature: "AgentRunner 断点、取消、工具错误等行为测试。", note: "测试文件，随 runner 提交。" },
+      { status: "M", path: "src/lib/agent/tool-events.ts", group: "Agent 核心", feature: "补充工具事件状态处理，支持运行中工具调用结算或取消。", note: "应和 runner/tool timeline 同批提交。" },
+      { status: "M", path: "src/lib/agent/tool-events.spec.ts", group: "Agent 核心", feature: "工具事件状态转换测试。", note: "测试文件，随 tool-events 提交。" },
+      { status: "U", path: "src/lib/agent/workflow-mode.ts", group: "Agent 工作流", feature: "定义快速、标准、严格三档 AI 工作流模式。", note: "基础类型，随工作流模式提交。" },
+      { status: "U", path: "src/lib/agent/workflow-mode.spec.ts", group: "Agent 工作流", feature: "AI 工作流模式的类型和默认值测试。", note: "测试文件，随 workflow-mode 提交。" },
+      { status: "U", path: "src/lib/agent/workflow-trace.ts", group: "Agent 工作流", feature: "定义 AI 工作流追踪结构，用于记录任务路由、能力选择、上下文构建等阶段。", note: "应和追踪面板同批提交。" },
+      { status: "U", path: "src/lib/agent/workflow-trace.spec.ts", group: "Agent 工作流", feature: "工作流追踪结构测试。", note: "测试文件，随 workflow trace 提交。" },
+      { status: "U", path: "src/lib/agent/trace-builder.ts", group: "Agent 工作流", feature: "提供追踪构建辅助函数，统一生成上下文追踪或工作流追踪片段。", note: "基础工具，随追踪能力提交。" },
+      { status: "U", path: "src/lib/agent/types.spec.ts", group: "Agent 核心", feature: "Agent 类型约束和兼容性测试。", note: "测试文件，随类型变更提交。" },
+      { status: "U", path: "src/lib/agent/task-breakpoint.ts", group: "Agent 断点恢复", feature: "保存、加载、更新和清理 AI 任务断点，用于软件重开后继续未完成任务。", note: "Stage F 断点恢复核心文件。" },
+      { status: "U", path: "src/lib/agent/task-breakpoint.spec.ts", group: "Agent 断点恢复", feature: "任务断点保存、恢复和清理测试。", note: "测试文件，随 task-breakpoint 提交。" },
+
+      { status: "U", path: "src/lib/agent/capabilities/types.ts", group: "AI 能力层", feature: "定义内置工具、用户 Skill、外部搜索、MCP 工具等能力类型。", note: "Stage 5 能力层基础文件。" },
+      { status: "U", path: "src/lib/agent/capabilities/registry.ts", group: "AI 能力层", feature: "把工具、Skill、MCP descriptor 转换为可选择的 AI 能力记录。", note: "Stage 5 能力层基础文件。" },
+      { status: "U", path: "src/lib/agent/capabilities/selector.ts", group: "AI 能力层", feature: "根据工作流模式和任务类型选择可用能力，严格模式可包含 MCP 占位能力。", note: "Stage 5 能力选择核心。" },
+      { status: "U", path: "src/lib/agent/capabilities/selector.spec.ts", group: "AI 能力层", feature: "能力选择器测试，覆盖快速、标准、严格和 classification 禁载场景。", note: "测试文件，随能力层提交。" },
+      { status: "U", path: "src/lib/agent/plugins/select-capabilities-plugin.ts", group: "Agent 插件链", feature: "预插件链中的能力选择插件，输出 selectedCapabilities 和 enabledToolNames。", note: "Stage 5 能力层插件。" },
+      { status: "U", path: "src/lib/agent/plugins/select-capabilities-plugin.spec.ts", group: "Agent 插件链", feature: "能力选择插件测试。", note: "测试文件，随 select-capabilities 提交。" },
+      { status: "U", path: "src/lib/agent/tool-scope.ts", group: "AI 能力层", feature: "根据 enabledToolNames 收窄模型可见工具列表，避免追踪选择与实际工具不一致。", note: "Stage 7 工作流收口文件。" },
+      { status: "U", path: "src/lib/agent/tool-scope.spec.ts", group: "AI 能力层", feature: "工具收窄测试。", note: "测试文件，随 tool-scope 提交。" },
+
+      { status: "U", path: "src/lib/agent/context-trace.ts", group: "AI 会话追踪", feature: "定义上下文追踪模型，记录上下文包、能力、搜索、MCP、自检等摘要。", note: "应和 ContextTracePanel 同批提交。" },
+      { status: "U", path: "src/lib/agent/context-trace-builders.ts", group: "AI 会话追踪", feature: "构建初始上下文追踪信息和转换展示数据。", note: "应和追踪面板同批提交。" },
+      { status: "U", path: "src/lib/agent/context-trace-builders.spec.ts", group: "AI 会话追踪", feature: "上下文追踪构建器测试。", note: "测试文件，随追踪能力提交。" },
+      { status: "U", path: "src/lib/agent/mcp-trace.ts", group: "AI 会话追踪", feature: "把 MCP 工具调用结果压缩成安全摘要写入追踪。", note: "Stage 7 MCP 追踪文件。" },
+      { status: "U", path: "src/lib/agent/mcp-trace.spec.ts", group: "AI 会话追踪", feature: "MCP 调用追踪测试。", note: "测试文件，随 mcp-trace 提交。" },
+
+      { status: "U", path: "src/lib/agent/pipeline.ts", group: "Agent 插件链", feature: "定义或组织 Agent 预插件链流水线。", note: "插件链基础设施，需和各插件一起提交。" },
+      { status: "U", path: "src/lib/agent/novel-pre-plugin-chain.ts", group: "Agent 插件链", feature: "小说写作任务的预处理插件链，串联路由、上下文、Skill、能力和确认。", note: "核心链路，建议单独复核。" },
+      { status: "U", path: "src/lib/agent/novel-pre-plugin-chain.spec.ts", group: "Agent 插件链", feature: "小说预插件链顺序和输出测试。", note: "测试文件，随插件链提交。" },
+      { status: "U", path: "src/lib/agent/plugin-config.spec.ts", group: "Agent 插件链", feature: "插件配置测试，保证插件开关和默认配置稳定。", note: "测试文件，随插件配置提交。" },
+      { status: "U", path: "src/lib/agent/plugin-scenarios.ts", group: "Agent 插件链", feature: "定义插件链场景数据，支持工作流收敛测试。", note: "测试/场景辅助文件。" },
+      { status: "U", path: "src/lib/agent/plugin-scenarios.spec.ts", group: "Agent 插件链", feature: "插件场景测试。", note: "测试文件，随 plugin-scenarios 提交。" },
+      { status: "U", path: "src/lib/agent/ai-chat-workflow-convergence.spec.ts", group: "Agent 插件链", feature: "普通用户端到端工作流收口测试，覆盖快速润色、标准下一章、搜索、MCP、classification 禁载。", note: "Stage 7 总体验证测试。" },
+
+      { status: "U", path: "src/lib/agent/plugins/route-task-plugin.ts", group: "Agent 插件链", feature: "把用户输入路由为写章节、续写、搜索、修改等任务。", note: "插件链核心，随 Stage 7/路由提交。" },
+      { status: "U", path: "src/lib/agent/plugins/resolve-chapter-plugin.ts", group: "Agent 插件链", feature: "解析任务目标章节，辅助下一章生成和续写。", note: "随路由/章节生成提交。" },
+      { status: "U", path: "src/lib/agent/plugins/build-context-pack-plugin.ts", group: "Agent 插件链", feature: "在插件链中构建小说上下文包，并支持分类过滤和上下文裁剪。", note: "随上下文引擎提交。" },
+      { status: "U", path: "src/lib/agent/plugins/build-context-pack-plugin.spec.ts", group: "Agent 插件链", feature: "构建上下文包插件测试。", note: "测试文件，随插件提交。" },
+      { status: "U", path: "src/lib/agent/plugins/build-system-prompt-plugin.ts", group: "Agent 插件链", feature: "根据工作流模式、上下文、Skill 和能力生成系统提示词。", note: "随系统提示词构建提交。" },
+      { status: "U", path: "src/lib/agent/plugins/build-system-prompt-plugin.spec.ts", group: "Agent 插件链", feature: "系统提示词构建插件测试。", note: "测试文件，随插件提交。" },
+      { status: "U", path: "src/lib/agent/plugins/confidence-gate-plugin.ts", group: "Agent 插件链", feature: "置信度门控，任务信息不足时触发澄清或降级策略。", note: "需确认 UI 接入是否完整。" },
+      { status: "U", path: "src/lib/agent/plugins/confidence-gate-plugin.spec.ts", group: "Agent 插件链", feature: "置信度门控插件测试。", note: "测试文件，随插件提交。" },
+      { status: "U", path: "src/lib/agent/plugins/select-skills-plugin.ts", group: "Agent 插件链", feature: "选择去 AI 味 Skill 和用户写作 Skill，并生成可注入提示词的 Skill 摘要。", note: "随写作 Skill 和能力层提交。" },
+      { status: "U", path: "src/lib/agent/plugins/select-skills-plugin.spec.ts", group: "Agent 插件链", feature: "Skill 选择插件测试，覆盖内置和用户上传技巧。", note: "测试文件，随 select-skills 提交。" },
+      { status: "U", path: "src/lib/agent/plugins/soul-dialog-plugin.ts", group: "Agent 插件链", feature: "灵魂/角色对话相关插件，辅助写作前的角色理解或确认。", note: "需确认当前功能是否已完整接入。" },
+      { status: "U", path: "src/lib/agent/plugins/trim-context-plugin.ts", group: "Agent 插件链", feature: "按 token 预算裁剪上下文，避免提示词过长。", note: "随上下文裁剪提交。" },
+      { status: "U", path: "src/lib/agent/plugins/trim-context-plugin.spec.ts", group: "Agent 插件链", feature: "上下文裁剪插件测试。", note: "测试文件，随 trim-context 提交。" },
+      { status: "M", path: "src/lib/agent/plugins/post-write-check-plugin.spec.ts", group: "写后检查", feature: "规则版写后检查测试扩展。", note: "测试文件，随写后检查提交。" },
+      { status: "U", path: "src/lib/agent/plugins/post-write-check-plugin.ts", group: "写后检查", feature: "规则版写后剧情自检实现或降级基础，用于 AI 自检不可用时兜底。", note: "随 Stage D 写后检查提交。" },
+      { status: "U", path: "src/lib/agent/plugins/post-write-check-ai.ts", group: "写后检查", feature: "AI 推理版写后剧情自检，返回检查来源、降级原因和结构化自检结果。", note: "随 Stage D AI 自检升级提交。" },
+      { status: "U", path: "src/lib/agent/plugins/post-write-check-ai.spec.ts", group: "写后检查", feature: "AI 写后自检测试，覆盖 AI 结果和规则降级。", note: "测试文件，随 post-write-check-ai 提交。" },
+
+      { status: "M", path: "src/lib/agent/tools/index.ts", group: "Agent 工具", feature: "注册更多内置工具，支持 web_search、read_web_page、MCP 工具、load_context 等注入。", note: "工具注册核心，建议随工具批次提交。" },
+      { status: "U", path: "src/lib/agent/tools/index.spec.ts", group: "Agent 工具", feature: "工具注册测试，覆盖禁用、白名单、MCP 和搜索工具。", note: "测试文件，随工具注册提交。" },
+      { status: "M", path: "src/lib/agent/tools/apply-skill.ts", group: "Agent 工具", feature: "应用写作 Skill 或去 AI 味 Skill 的工具逻辑调整。", note: "随 Skill 选择能力提交。" },
+      { status: "M", path: "src/lib/agent/tools/write-chapter.ts", group: "Agent 工具", feature: "写章节工具支持草稿确认、结果协议和保存前校验。", note: "写入类核心工具，需重点复核。" },
+      { status: "M", path: "src/lib/agent/tools/write-memory.ts", group: "Agent 工具", feature: "写入记忆工具加入更严格的确认或作用域控制。", note: "写入类工具，需确认不会绕过用户确认。" },
+      { status: "M", path: "src/lib/agent/tools/write-outline-node.ts", group: "Agent 工具", feature: "写大纲节点工具加入确认、范围或结果协议调整。", note: "写入类工具，需确认不会绕过用户确认。" },
+      { status: "M", path: "src/lib/agent/tools/write-tools.spec.ts", group: "Agent 工具", feature: "写入类工具确认、校验和结果行为测试。", note: "测试文件，随写入工具提交。" },
+      { status: "U", path: "src/lib/agent/tools/load-context.ts", group: "Agent 工具", feature: "新增 load_context 工具，让 Agent 可按任务读取小说上下文。", note: "只读工具，随上下文工具提交。" },
+      { status: "U", path: "src/lib/agent/tools/route-task.ts", group: "Agent 工具", feature: "新增 route_task 工具或工具封装，用于让模型显式路由任务。", note: "随任务路由提交。" },
+      { status: "U", path: "src/lib/agent/tools/trim-context.ts", group: "Agent 工具", feature: "新增 trim_context 工具，让 Agent 可裁剪过长上下文。", note: "随上下文裁剪提交。" },
+      { status: "U", path: "src/lib/agent/tools/summarize-search-results.ts", group: "Agent 工具", feature: "新增搜索结果压缩工具，把外部搜索结果变成适合 AI 上下文的摘要。", note: "Stage A-B 搜索辅助工具。" },
+      { status: "U", path: "src/lib/agent/tools/summarize-search-results.spec.ts", group: "Agent 工具", feature: "搜索结果压缩工具测试。", note: "测试文件，随 summarize-search-results 提交。" },
+      { status: "U", path: "src/lib/agent/tools/web-search.ts", group: "外部搜索", feature: "新增 web_search 只读工具，复用现有搜索配置，失败时中文降级。", note: "Stage 4 外部搜索功能。" },
+      { status: "U", path: "src/lib/agent/tools/web-search.spec.ts", group: "外部搜索", feature: "web_search 工具测试，覆盖未配置、成功和失败。", note: "测试文件，随 web_search 提交。" },
+      { status: "U", path: "src/lib/agent/tools/read-web-page.ts", group: "外部搜索", feature: "新增 read_web_page 只读工具，读取 http/https 页面并清洗正文。", note: "Stage 4 外部资料读取功能。" },
+      { status: "U", path: "src/lib/agent/tools/read-web-page.spec.ts", group: "外部搜索", feature: "read_web_page 工具测试。", note: "测试文件，随 read-web-page 提交。" },
+      { status: "U", path: "src/lib/agent/tools/mcp-tool.ts", group: "MCP", feature: "把 MCP descriptor 包装成 Agent Tool，未连接时返回中文降级信息。", note: "Stage 6 MCP Adapter 文件。" },
+      { status: "U", path: "src/lib/agent/tools/mcp-tool.spec.ts", group: "MCP", feature: "MCP 工具封装测试。", note: "测试文件，随 mcp-tool 提交。" },
+
+      { status: "U", path: "src/lib/mcp/types.ts", group: "MCP", feature: "定义 MCP 服务、工具 descriptor、权限和调用结果类型。", note: "MCP 基础类型。" },
+      { status: "U", path: "src/lib/mcp/adapter.ts", group: "MCP", feature: "把 MCP schema 适配为 Agent 工具参数模型，并拦截不支持的危险类型。", note: "Stage 6 MCP Adapter 核心。" },
+      { status: "U", path: "src/lib/mcp/adapter.spec.ts", group: "MCP", feature: "MCP adapter 测试。", note: "测试文件，随 adapter 提交。" },
+      { status: "U", path: "src/lib/mcp/config.ts", group: "MCP", feature: "MCP 配置模型、归一化、默认配置和示例 Graph MCP server。", note: "Stage 9 MCP 设置基础。" },
+      { status: "U", path: "src/lib/mcp/config.spec.ts", group: "MCP", feature: "MCP 配置归一化测试。", note: "测试文件，随 config 提交。" },
+      { status: "U", path: "src/lib/mcp/runtime.ts", group: "MCP", feature: "把启用的 MCP 配置转换为 Agent 工具、AI 能力和 warning；有 command 时接入真实 connector。", note: "Stage 8/9 MCP runtime 核心。" },
+      { status: "U", path: "src/lib/mcp/runtime.spec.ts", group: "MCP", feature: "MCP runtime 测试，覆盖启用、禁用、危险工具和降级。", note: "测试文件，随 runtime 提交。" },
+      { status: "U", path: "src/lib/mcp/real-connector.ts", group: "MCP", feature: "真实 MCP 连接器，基于 stdio transport 和 JSON-RPC 调用外部 MCP 服务。", note: "Stage G 真实连接核心。" },
+      { status: "U", path: "src/lib/mcp/real-connector.spec.ts", group: "MCP", feature: "真实 MCP 连接器测试。", note: "测试文件，随 real-connector 提交。" },
+      { status: "U", path: "src/lib/mcp/transport/json-rpc.ts", group: "MCP", feature: "JSON-RPC 消息封装、请求响应匹配和错误处理。", note: "Stage G MCP transport 基础。" },
+      { status: "U", path: "src/lib/mcp/transport/json-rpc.spec.ts", group: "MCP", feature: "JSON-RPC transport 测试。", note: "测试文件，随 json-rpc 提交。" },
+      { status: "U", path: "src/lib/mcp/transport/stdio.ts", group: "MCP", feature: "前端调用 Tauri MCP stdio 命令的传输层。", note: "Stage G MCP stdio transport。" },
+      { status: "U", path: "src/lib/mcp/transport/stdio.spec.ts", group: "MCP", feature: "stdio transport 测试。", note: "测试文件，随 stdio transport 提交。" },
+
+      { status: "M", path: "src/lib/project-store.ts", group: "项目存储", feature: "新增 MCP 配置等项目级配置的保存和加载能力。", note: "应和 App 启动恢复/MCP 设置页同批提交。" },
+
+      { status: "M", path: "src/components/skill-library/skill-library-view.tsx", group: "Skill 管理", feature: "原去 AI 味技能库 UI 做兼容调整，保持与写作 Skill 管理分离。", note: "应和 Skill 管理边界一起提交。" },
+      { status: "M", path: "src/components/skill-library/skill-library-view.spec.tsx", group: "Skill 管理", feature: "原技能库回归测试，防止新增写作 Skill 管理影响旧功能。", note: "测试文件，随 Skill 管理变更提交。" },
+      { status: "U", path: "src/components/skill-library/writing-skill-library-view.tsx", group: "Skill 管理", feature: "新增独立写作 Skill 管理页，支持创建、编辑、启用、禁用、删除和脏草稿保护。", note: "Stage 10 写作 Skill 管理页核心。" },
+      { status: "U", path: "src/components/skill-library/writing-skill-library-view.spec.tsx", group: "Skill 管理", feature: "写作 Skill 管理页测试。", note: "测试文件，随 writing-skill-library 提交。" },
+      { status: "M", path: "src/lib/novel/de-ai-skill-library.ts", group: "Skill 管理", feature: "去 AI 味 Skill 配置兼容或内置 Skill 处理调整。", note: "应确认不影响旧去 AI 味功能。" },
+      { status: "U", path: "src/lib/novel/skill-library.ts", group: "Skill 管理", feature: "定义通用用户写作 Skill 模型和解析逻辑。", note: "Stage 10 写作 Skill 基础。" },
+      { status: "U", path: "src/lib/novel/skill-library.spec.ts", group: "Skill 管理", feature: "写作 Skill 模型测试。", note: "测试文件，随 skill-library 提交。" },
+      { status: "U", path: "src/lib/novel/skill-seed.ts", group: "Skill 管理", feature: "内置写作 Skill 种子模板，source 为 built-in，用户不可删除。", note: "Stage A-B 内置写作 Skill 种子。" },
+      { status: "U", path: "src/lib/novel/user-skill-store.ts", group: "Skill 管理", feature: "项目级 writing-skills.json 存储，支持写作 Skill 保存、加载、启用和删除。", note: "Stage 10 写作 Skill 存储核心。" },
+      { status: "U", path: "src/lib/novel/user-skill-store.spec.ts", group: "Skill 管理", feature: "用户写作 Skill 存储测试。", note: "测试文件，随 user-skill-store 提交。" },
+
+      { status: "M", path: "src/lib/novel/task-router.ts", group: "小说任务路由", feature: "扩展小说任务识别，用于下一章、续写、修改、外部搜索等工作流路由。", note: "应和 route-task 插件同批提交。" },
+      { status: "M", path: "src/lib/novel/outline-generation.ts", group: "小说生成", feature: "大纲/章节生成提示词调整，接入工作流上下文或黄金三章指令。", note: "应和上下文引擎变更同批提交。" },
+      { status: "M", path: "src/lib/novel/outline-generation.spec.ts", group: "小说生成", feature: "大纲/章节生成提示词回归测试。", note: "测试文件，随 outline-generation 提交。" },
+
+      { status: "M", path: "src/lib/novel/context-data-source.ts", group: "小说上下文", feature: "定义上下文数据源分类或数据源元信息。", note: "应和 classification/context-data-sources 同批提交。" },
+      { status: "M", path: "src/lib/novel/context-data-sources.ts", group: "小说上下文", feature: "上下文数据源注册支持按 classification 分类过滤，并接入 retrieval 数据源。", note: "Stage E/检索上下文核心。" },
+      { status: "M", path: "src/lib/novel/context-data-sources.spec.ts", group: "小说上下文", feature: "上下文数据源分类过滤和检索来源测试。", note: "测试文件，随 context-data-sources 提交。" },
+      { status: "M", path: "src/lib/novel/context-engine.ts", group: "小说上下文", feature: "构建上下文包时优先使用 retrieval，支持分类过滤和 token 预算裁剪。", note: "核心上下文引擎，建议重点复核。" },
+      { status: "M", path: "src/lib/novel/context-engine.spec.ts", group: "小说上下文", feature: "上下文包构建、检索优先和裁剪测试。", note: "测试文件，随 context-engine 提交。" },
+      { status: "M", path: "src/lib/novel/chapter-ingest.ts", group: "小说数据生命周期", feature: "章节导入后补充检索索引、快照或上下文数据更新。", note: "应和 retrieval/snapshot projection 同批提交。" },
+      { status: "U", path: "src/lib/novel/chapter-ingest.retrieval.spec.ts", group: "小说数据生命周期", feature: "章节导入与 retrieval 更新的回归测试。", note: "测试文件，随 chapter-ingest 提交。" },
+      { status: "U", path: "src/lib/novel/lifecycle-types.ts", group: "小说数据生命周期", feature: "定义小说资料生命周期相关类型，区分源数据、快照、检索索引等阶段。", note: "基础类型，随生命周期功能提交。" },
+
+      { status: "U", path: "src/lib/novel/classification/types.ts", group: "Classification", feature: "定义 classification.md 分类规则、数据源类别和路由类型。", note: "Stage E classification 基础。" },
+      { status: "U", path: "src/lib/novel/classification/default-routes.ts", group: "Classification", feature: "内置默认分类路由，用于控制上下文加载的数据源。", note: "Stage E classification 基础。" },
+      { status: "U", path: "src/lib/novel/classification/markdown-serializer.ts", group: "Classification", feature: "classification.md 的序列化和解析。", note: "Stage E classification 基础。" },
+      { status: "U", path: "src/lib/novel/classification/classification-loader.ts", group: "Classification", feature: "读取、保存和恢复项目 classification.md。", note: "Stage E classification 读写核心。" },
+      { status: "U", path: "src/lib/novel/classification/route-applier.ts", group: "Classification", feature: "把分类规则应用到任务上下文，决定启用或禁载的数据源。", note: "Stage E classification 路由核心。" },
+      { status: "U", path: "src/lib/novel/classification/index.ts", group: "Classification", feature: "classification 模块统一导出入口。", note: "随 classification 模块提交。" },
+      { status: "U", path: "src/lib/novel/classification/classification.spec.ts", group: "Classification", feature: "classification 解析、默认规则、路由应用测试。", note: "测试文件，随 classification 提交。" },
+
+      { status: "U", path: "src/lib/novel/retrieval/types.ts", group: "Retrieval", feature: "定义小说检索索引、检索条目和快照投影类型。", note: "Retrieval 基础类型。" },
+      { status: "U", path: "src/lib/novel/retrieval/index.ts", group: "Retrieval", feature: "retrieval 模块统一导出入口。", note: "随 retrieval 模块提交。" },
+      { status: "U", path: "src/lib/novel/retrieval/markdown-serializer.ts", group: "Retrieval", feature: "检索索引 markdown 序列化和解析。", note: "Retrieval 存储基础。" },
+      { status: "U", path: "src/lib/novel/retrieval/markdown-serializer.spec.ts", group: "Retrieval", feature: "检索索引 markdown 序列化测试。", note: "测试文件，随 retrieval 提交。" },
+      { status: "U", path: "src/lib/novel/retrieval/retrieval-store.ts", group: "Retrieval", feature: "项目级检索索引读写存储。", note: "Retrieval 核心存储。" },
+      { status: "U", path: "src/lib/novel/retrieval/retrieval-store.spec.ts", group: "Retrieval", feature: "检索索引存储测试。", note: "测试文件，随 retrieval-store 提交。" },
+      { status: "U", path: "src/lib/novel/retrieval/snapshot-projection.ts", group: "Retrieval", feature: "把章节导入或快照数据投影成 retrieval 可用的摘要、人物状态、伏笔等索引。", note: "Retrieval 与上下文引擎连接点。" },
+      { status: "U", path: "src/lib/novel/retrieval/snapshot-projection.spec.ts", group: "Retrieval", feature: "快照投影测试。", note: "测试文件，随 snapshot-projection 提交。" },
+      { status: "U", path: "src/components/novel/retrieval-status-indicator.tsx", group: "Retrieval", feature: "新增检索状态展示组件，提示 retrieval 索引或加载状态。", note: "UI 组件，需确认是否已接入页面。" },
+
+      { status: "U", path: "src/lib/novel/draft-manager.ts", group: "写入安全", feature: "管理 AI 写入草稿和确认流程，避免未确认内容直接覆盖正文。", note: "写入安全核心，需重点复核。" },
+      { status: "U", path: "src/lib/novel/result-parser.ts", group: "写入安全", feature: "解析 AI 输出结果协议，区分正文、计划、工具结果和保存指令。", note: "写入安全/结果协议基础。" },
+      { status: "U", path: "src/lib/novel/result-parser.spec.ts", group: "写入安全", feature: "AI 结果协议解析测试。", note: "测试文件，随 result-parser 提交。" },
+      { status: "U", path: "src/lib/novel/result-save-guard.ts", group: "写入安全", feature: "保存章节前进行校验，阻止章节计划或空内容误保存为正文。", note: "写入安全核心，随保存保护提交。" },
+      { status: "U", path: "src/lib/novel/result-save-guard.spec.ts", group: "写入安全", feature: "保存保护测试。", note: "测试文件，随 result-save-guard 提交。" },
+      { status: "U", path: "src/lib/utils/diff.ts", group: "写入安全", feature: "提供文本 diff 工具，用于修改确认或展示 AI 修改差异。", note: "工具函数，随确认弹窗或写入安全提交。" },
+
+      { status: "U", path: "(1) 分析文档并添加功能.md", group: "本地文档", feature: "需求分析或功能补充记录文档。", note: "文档类，按项目上传规则通常不上传。" },
+      { status: "U", path: "@引用与内容发送AI-PRD.md", group: "本地文档", feature: "@ 引用和内容发送 AI 的 PRD。", note: "PRD 文档，提交或上传前需用户确认。" },
+      { status: "U", path: "@引用与内容发送AI-实现规划.md", group: "本地文档", feature: "@ 引用和内容发送 AI 的实现规划。", note: "规划文档，提交或上传前需用户确认。" },
+      { status: "U", path: "AI-Agent架构-PRD.md", group: "本地文档", feature: "AI Agent 架构需求文档。", note: "PRD 文档，按上传规则通常排除。" },
+      { status: "U", path: "AI-Agent架构-问答记录.md", group: "本地文档", feature: "AI Agent 架构讨论问答记录。", note: "文档类，按上传规则通常排除。" },
+      { status: "U", path: "AI会话工作流与测试标准整理.md", group: "本地文档", feature: "AI 会话工作流和测试标准整理。", note: "文档类，提交前需确认用途。" },
+      { status: "U", path: "jinengku-xinjianskill-xiufu-分支说明.md", group: "本地文档", feature: "技能库新建 skill 修复分支说明。", note: "分支说明类文档，上传时通常排除。" },
+      { status: "U", path: "ui-design-optimization-plan.md", group: "本地文档", feature: "UI 视觉优化计划。", note: "规划文档，提交前需确认。" },
+      { status: "U", path: "ui-shijue-youhua-分支说明.md", group: "本地文档", feature: "UI 视觉优化分支说明。", note: "分支说明类文档，上传时通常排除。" },
+      { status: "U", path: "ui-shijue-youhua/说明.md", group: "本地文档", feature: "UI 视觉优化目录说明。", note: "文档类，提交前需确认。" },
+
+      { status: "U", path: "ui-design-mockups.html", group: "UI 草图", feature: "UI 设计 mockup 页面。", note: "设计草图，通常不进入软件发布提交。" },
+      { status: "U", path: "ui-design-mockups-v2.html", group: "UI 草图", feature: "UI 设计 mockup 第二版。", note: "设计草图，通常不进入软件发布提交。" },
+      { status: "U", path: "ui-design-mockups-v3.html", group: "UI 草图", feature: "UI 设计 mockup 第三版。", note: "设计草图，通常不进入软件发布提交。" },
+      { status: "U", path: "ui-design-mockups-v4.html", group: "UI 草图", feature: "UI 设计 mockup 第四版。", note: "设计草图，通常不进入软件发布提交。" },
+      { status: "U", path: "东方美学配色方案.html", group: "UI 草图", feature: "东方美学配色方案展示页面。", note: "设计参考页，提交前需确认。" },
+
+      { status: "U", path: "qmai-portable-screenshot.png", group: "截图/验证", feature: "便携版运行或打包验证截图。", note: "截图类，按上传规则通常排除。" },
+      { status: "U", path: "qmai-runtime-screenshot.png", group: "截图/验证", feature: "源码运行时验证截图。", note: "截图类，按上传规则通常排除。" },
+      { status: "U", path: "upload-screenshot-1.png", group: "截图/验证", feature: "上传或发布流程截图 1。", note: "截图类，按上传规则通常排除。" },
+      { status: "U", path: "upload-screenshot-2.png", group: "截图/验证", feature: "上传或发布流程截图 2。", note: "截图类，按上传规则通常排除。" },
+      { status: "U", path: "upload-screenshot-3.png", group: "截图/验证", feature: "上传或发布流程截图 3。", note: "截图类，按上传规则通常排除。" },
+      { status: "U", path: "scripts/capture-qmai-window.py", group: "截图/验证", feature: "本地截图脚本，用于捕获 QMaiWrite 窗口验证运行状态。", note: "临时验证脚本，提交前需确认是否保留。" }
+    ];
+
+    const statusLabels = {
+      M: "已修改",
+      D: "已删除",
+      U: "新增"
+    };
+
+    function statusBadge(status) {
+      return `<span class="badge status-${status}">${statusLabels[status]}</span>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function render() {
+      const search = document.getElementById("searchInput").value.trim().toLowerCase();
+      const group = document.getElementById("groupFilter").value;
+      const status = document.getElementById("statusFilter").value;
+      const rows = changes.filter((item) => {
+        const haystack = `${item.path} ${item.group} ${item.feature} ${item.note}`.toLowerCase();
+        return (!search || haystack.includes(search))
+          && (!group || item.group === group)
+          && (!status || item.status === status);
+      });
+
+      document.getElementById("changeRows").innerHTML = rows.map((item) => `
+        <tr>
+          <td>${statusBadge(item.status)}</td>
+          <td><code>${escapeHtml(item.path)}</code></td>
+          <td>${escapeHtml(item.group)}</td>
+          <td>${escapeHtml(item.feature)}</td>
+          <td>${escapeHtml(item.note)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function init() {
+      const groups = [...new Set(changes.map((item) => item.group))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+      const groupFilter = document.getElementById("groupFilter");
+      for (const group of groups) {
+        const option = document.createElement("option");
+        option.value = group;
+        option.textContent = group;
+        groupFilter.appendChild(option);
+      }
+
+      document.getElementById("totalCount").textContent = changes.length;
+      document.getElementById("modifiedCount").textContent = changes.filter((item) => item.status === "M").length;
+      document.getElementById("deletedCount").textContent = changes.filter((item) => item.status === "D").length;
+      document.getElementById("untrackedCount").textContent = changes.filter((item) => item.status === "U").length;
+
+      document.getElementById("searchInput").addEventListener("input", render);
+      document.getElementById("groupFilter").addEventListener("change", render);
+      document.getElementById("statusFilter").addEventListener("change", render);
+      render();
+    }
+
+    init();
+  </script>
+</body>
+</html>

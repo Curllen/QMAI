@@ -78,6 +78,33 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   },
 }
 
+const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
+  version: "2.2.32",
+  date: "2026-07-04",
+  highlights: {
+    en: [
+      "Chat model and background-task model are now separate: the model in the chat box is only for conversation and writing prose; review, summary, de-AI, and similar tasks follow the Default Model unless you pick something else for that step.",
+      "De-AI can use its own model, so you no longer have to share the chat model for every de-AI pass.",
+      "Default Model moved to the top of Novel settings with clearer wording about what it actually controls.",
+      "Model-setting labels are easier to read, and Follow default model and Follow chat model are now two separate checkboxes so they cannot mean opposite things in different places.",
+      "Duplicate-entity detection is smoother: pick a model before scanning, last scan results are remembered, merged entries disappear right away, and the merge button no longer gets stuck doing nothing.",
+      "Duplicate-entity scans and merges run faster, with progress that tells you what is happening; the most likely duplicates show up first.",
+      "macOS and Linux no longer check for automatic updates — the settings page points you to manual download instead, and the install guide covers common macOS setup issues.",
+      "Some settings pages no longer need a Save button; changes take effect as you go.",
+    ],
+    zh: [
+      "聊天用的模型和后台任务用的模型分开了：聊天框里选的只管对话和写正文，审稿、摘要、去 AI 味等默认走「默认模型」；需要的话，也可以给单个环节单独指定模型。",
+      "去 AI 味可以单独选一个模型，不必再和聊天模型绑在一起。",
+      "「默认模型」提到小说设置最上面，说明也写清楚了——它负责除写正文以外的各种后台任务。",
+      "各处的模型设置说明改写了，「跟随默认模型」和「跟随聊天模型」分开勾选，不再搞混。",
+      "重复角色/实体检测更好用了：扫描前可以选模型，上次结果会保留，合并后条目马上消失；也修复了点击合并没反应的问题。",
+      "重复实体扫描和合并更快了，进度会告诉你当前在干什么；最可能重复的会排在前面。",
+      "macOS 和 Linux 版暂不支持自动更新，设置里会提示去官网手动下载；安装说明也补充了 macOS 常见问题。",
+      "部分设置页不再需要点保存，改动即时生效。",
+    ],
+  },
+}
+
 const TWO_POINT_TWO_THIRTY_ONE_CHANGELOG: ChangelogEntry = {
   version: "2.2.31",
   date: "2026-06-30",
@@ -717,6 +744,7 @@ export const CHANGELOG: ChangelogEntry[] = [
 ]
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === TWO_POINT_TWO_THIRTY_TWO_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_TWO_CHANGELOG]
   if (version === TWO_POINT_TWO_THIRTY_ONE_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_ONE_CHANGELOG]
   if (version === TWO_POINT_TWO_THIRTY_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_CHANGELOG]
   if (version === TWO_POINT_TWO_TWENTY_NINE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_NINE_CHANGELOG]
@@ -752,6 +780,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    TWO_POINT_TWO_THIRTY_TWO_CHANGELOG,
     TWO_POINT_TWO_THIRTY_ONE_CHANGELOG,
     TWO_POINT_TWO_THIRTY_CHANGELOG,
     TWO_POINT_TWO_TWENTY_NINE_CHANGELOG,
