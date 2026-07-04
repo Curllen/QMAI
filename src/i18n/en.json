@@ -12,7 +12,7 @@
     "expandChat": "Expand Chat",
     "chatWidth": "Chat width",
     "saveApiKey": "API key saved",
-    "invalidProject": "The selected folder does not look like an LLM Wiki project. It should contain a 'wiki' directory.",
+    "invalidProject": "The selected folder does not look like a QMAI project. It should contain a 'wiki' directory.",
     "status": {
       "connected": "Connected to Daemon",
       "connecting": "Connecting to Daemon...",

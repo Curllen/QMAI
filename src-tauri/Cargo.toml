@@ -1,8 +1,8 @@
 [package]
-name = "llm-wiki"
+name = "qmai"
 version = "2.2.32"
-description = "LLM Wiki - A personal knowledge base for LLM concepts"
-authors = []
+description = "QMAI - AI writing system for long-form novels"
+authors = ["Mochocyang"]
 edition = "2021"
 default-run = "qmai"
 

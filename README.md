@@ -12,9 +12,9 @@
   <a href="https://github.com/Mochocyang/QMAI/releases">
     <img src="https://img.shields.io/github/v/release/Mochocyang/QMAI?style=flat-square" alt="Release" />
   </a>
-  <img src="https://img.shields.io/badge/version-2.2.22-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-2.2.32-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="Platform" />
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square" alt="License" />
 </p>
 
 ---
@@ -466,7 +466,7 @@ npm run build:github-release
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE) 开源许可证。
+本项目采用 [GNU General Public License v3.0](LICENSE) 开源许可证（基于 [LLM Wiki](https://github.com/nashsu/llm_wiki) 衍生开发）。
 
 ---
 
