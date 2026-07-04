@@ -58,19 +58,21 @@ export function WelcomeScreen({
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background">
+    <div className="fixed inset-0 flex items-center justify-center bg-brand-50">
       <div className="flex flex-col items-center gap-8 px-4">
         <div className="flex flex-col items-center gap-4 text-center">
-          <img
-            src={logoImg}
-            alt={t(novelMode ? "novel.app.title" : "app.title")}
-            className="h-12 w-12 rounded-[22%]"
-          />
+          <div className="rounded-2xl bg-brand-100/60 p-3 ring-1 ring-brand-200/40">
+            <img
+              src={logoImg}
+              alt={t(novelMode ? "novel.app.title" : "app.title")}
+              className="h-12 w-12 rounded-[22%]"
+            />
+          </div>
           <div>
             <h1 className="text-3xl font-bold text-foreground">
               {t(novelMode ? "novel.app.title" : "app.title")}
             </h1>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-2 text-brand-500/80">
               {t(novelMode ? "novel.app.subtitle" : "app.subtitle")}
             </p>
           </div>

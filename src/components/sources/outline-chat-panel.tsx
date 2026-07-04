@@ -127,10 +127,12 @@ function OutlineAssistantMessage({ msg, index, isStreaming, streamingContent, ac
   const actionContent = answer || displayContent
 
   // Parse for file edits
-  const parsed = useMemo(() => {
-    if (!answer) return { textContent: "", edits: [], hasEdits: false }
-    const { parseAgentResponse } = require("@/lib/novel/agent-parser") as typeof import("@/lib/novel/agent-parser")
-    return parseAgentResponse(answer)
+  const [parsed, setParsed] = useState<{ textContent: string; edits: import("@/lib/novel/agent-parser").FileEditAction[]; hasEdits: boolean }>({ textContent: "", edits: [], hasEdits: false })
+  useEffect(() => {
+    if (!answer) { setParsed({ textContent: "", edits: [], hasEdits: false }); return }
+    import("@/lib/novel/agent-parser").then(({ parseAgentResponse }) => {
+      setParsed(parseAgentResponse(answer))
+    })
   }, [answer])
 
   const handleApplyEdits = useCallback(async (edits: import("@/lib/novel/agent-parser").FileEditAction[]) => {

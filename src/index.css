@@ -39,6 +39,15 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+    --color-brand-50: var(--brand-50);
+    --color-brand-100: var(--brand-100);
+    --color-brand-200: var(--brand-200);
+    --color-brand-300: var(--brand-300);
+    --color-brand-400: var(--brand-400);
+    --color-brand-500: var(--brand-500);
+    --color-brand-600: var(--brand-600);
+    --color-brand-700: var(--brand-700);
+    --color-brand-800: var(--brand-800);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -48,108 +57,186 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ====================================================
+   苍苍竹色 · 三色系东方美学配色
+   主色：竹绿（竹墨→翠竹→竹青→新篁→竹叶→竹露）
+   副色：竹编（EDE8D8 暖纸/米色）
+   点缀：金竹（C8A96E 暖金）
+   源自「东方美学配色方案」方案四「苍苍竹色」
+   ==================================================== */
+
+/* ---------- 浅色主题 ---------- */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.55 0.055 195);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.55 0.055 195);
-    --chart-1: oklch(0.68 0.06 195);
-    --chart-2: oklch(0.55 0.05 230);
-    --chart-3: oklch(0.45 0.04 260);
-    --chart-4: oklch(0.5 0.06 30);
-    --chart-5: oklch(0.4 0.03 340);
+    /* 页面表层 */
+    --background: #F5F1E8;
+    --foreground: #1C3328;
+    --card: #FAF8F2;
+    --card-foreground: #1C3328;
+    --popover: #FFFFFF;
+    --popover-foreground: #1C3328;
+
+    /* 交互主色：竹青 */
+    --primary: #3E6B58;
+    --primary-foreground: #FAFAFA;
+
+    /* 次级表面：竹露暖化 */
+    --secondary: #E3F0EA;
+    --secondary-foreground: #2D5040;
+
+    /* 弱化/禁用：竹编 */
+    --muted: #EDE8D8;
+    --muted-foreground: #5A7A6A;
+
+    /* 强调/高亮：金竹 */
+    --accent: #C8A96E;
+    --accent-foreground: #1C3328;
+
+    /* 危险/删除 */
+    --destructive: #B54242;
+
+    /* 边框分隔：竹编深 */
+    --border: #DCD6C6;
+    --input: #DCD6C6;
+    --ring: #3E6B58;
+
+    /* 图表颜色 */
+    --chart-1: #3E6B58;
+    --chart-2: #528A72;
+    --chart-3: #8FC0A5;
+    --chart-4: #C8A96E;
+    --chart-5: #2D5040;
+
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+
+    /* 侧边栏 */
+    --sidebar: #EDE8D8;
+    --sidebar-foreground: #1C3328;
+    --sidebar-primary: #3E6B58;
+    --sidebar-primary-foreground: #FAFAFA;
+    --sidebar-accent: #DAF0E2;
+    --sidebar-accent-foreground: #1C3328;
+    --sidebar-border: #DCD6C6;
+    --sidebar-ring: #3E6B58;
+
+    /* 品牌色阶：竹绿 */
+    --brand-50: #F5F7F4;
+    --brand-100: #DAF0E2;
+    --brand-200: #C5DECC;
+    --brand-300: #8FC0A5;
+    --brand-400: #528A72;
+    --brand-500: #3E6B58;
+    --brand-600: #2D5040;
+    --brand-700: #244234;
+    --brand-800: #1C3328;
 }
 
+/* ---------- 深色主题 ---------- */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.65 0.05 195);
-    --primary-foreground: oklch(0.145 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.65 0.05 195);
-    --chart-1: oklch(0.7 0.06 195);
-    --chart-2: oklch(0.58 0.05 230);
-    --chart-3: oklch(0.5 0.04 260);
-    --chart-4: oklch(0.55 0.06 30);
-    --chart-5: oklch(0.48 0.03 340);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: #1C3328;
+    --foreground: #DAF0E2;
+    --card: #244234;
+    --card-foreground: #DAF0E2;
+    --popover: #2D5040;
+    --popover-foreground: #DAF0E2;
+
+    /* 深色模式下主色提亮为竹叶 */
+    --primary: #8FC0A5;
+    --primary-foreground: #1C3328;
+
+    --secondary: #2D5040;
+    --secondary-foreground: #DAF0E2;
+
+    --muted: #2D5040;
+    --muted-foreground: #8FC0A5;
+
+    /* 金竹在深色下更温暖 */
+    --accent: #D9C69A;
+    --accent-foreground: #1C3328;
+
+    --destructive: #E06C6C;
+
+    --border: #3A5446;
+    --input: #3A5446;
+    --ring: #8FC0A5;
+
+    --chart-1: #8FC0A5;
+    --chart-2: #528A72;
+    --chart-3: #DAF0E2;
+    --chart-4: #D9C69A;
+    --chart-5: #2D5040;
+
+    --sidebar: #1C3328;
+    --sidebar-foreground: #DAF0E2;
+    --sidebar-primary: #8FC0A5;
+    --sidebar-primary-foreground: #1C3328;
+    --sidebar-accent: #244234;
+    --sidebar-accent-foreground: #DAF0E2;
+    --sidebar-border: #3A5446;
+    --sidebar-ring: #8FC0A5;
+
+    /* 深色模式下品牌色阶反转：浅→深 */
+    --brand-50: #244234;
+    --brand-100: #2D5040;
+    --brand-200: #3E6B58;
+    --brand-300: #528A72;
+    --brand-400: #8FC0A5;
+    --brand-500: #A5D4BC;
+    --brand-600: #C2E4D2;
+    --brand-700: #DAF0E2;
+    --brand-800: #F0F8F3;
 }
 
-/* 深蓝护眼主题 */
+/* ---------- 深蓝护眼主题 ---------- */
 .deep-blue {
-    --background: oklch(0.17 0.045 240);
-    --foreground: oklch(0.96 0.015 230);
-    --card: oklch(0.22 0.06 238);
-    --card-foreground: oklch(0.95 0.02 230);
-    --popover: oklch(0.22 0.06 238);
-    --popover-foreground: oklch(0.95 0.02 230);
-    --primary: oklch(0.6 0.06 195);
-    --primary-foreground: oklch(0.98 0 0);
-    --secondary: oklch(0.28 0.07 235);
-    --secondary-foreground: oklch(0.95 0.02 230);
-    --muted: oklch(0.28 0.07 235);
-    --muted-foreground: oklch(0.75 0.05 232);
-    --accent: oklch(0.32 0.08 233);
-    --accent-foreground: oklch(0.95 0.02 230);
-    --destructive: oklch(0.65 0.2 20);
-    --border: oklch(0.4 0.06 235);
-    --input: oklch(0.32 0.07 233);
-    --ring: oklch(0.55 0.12 238);
-    --chart-1: oklch(0.7 0.15 240);
-    --chart-2: oklch(0.6 0.12 235);
-    --chart-3: oklch(0.5 0.1 230);
-    --chart-4: oklch(0.4 0.08 228);
-    --chart-5: oklch(0.35 0.07 225);
-    --sidebar: oklch(0.2 0.055 236);
-    --sidebar-foreground: oklch(0.95 0.02 230);
-    --sidebar-primary: oklch(0.5 0.06 195);
-    --sidebar-primary-foreground: oklch(0.98 0 0);
-    --sidebar-accent: oklch(0.26 0.065 234);
-    --sidebar-accent-foreground: oklch(0.95 0.02 230);
-    --sidebar-border: oklch(0.32 0.06 235);
-    --sidebar-ring: oklch(0.55 0.12 238);
+    --background: #1A2E2B;
+    --foreground: #D8EEE6;
+    --card: #203B36;
+    --card-foreground: #D8EEE6;
+    --popover: #264A43;
+    --popover-foreground: #D8EEE6;
+
+    --primary: #528A72;
+    --primary-foreground: #FAFAFA;
+
+    --secondary: #244234;
+    --secondary-foreground: #D8EEE6;
+
+    --muted: #244234;
+    --muted-foreground: #8FC0A5;
+
+    --accent: #C8A96E;
+    --accent-foreground: #1C3328;
+
+    --destructive: #E06C6C;
+
+    --border: #35554A;
+    --input: #35554A;
+    --ring: #528A72;
+
+    --chart-1: #528A72;
+    --chart-2: #6BA58D;
+    --chart-3: #8FC0A5;
+    --chart-4: #C8A96E;
+    --chart-5: #2D5040;
+
+    --sidebar: #1A2E2B;
+    --sidebar-foreground: #D8EEE6;
+    --sidebar-primary: #528A72;
+    --sidebar-primary-foreground: #FAFAFA;
+    --sidebar-accent: #244234;
+    --sidebar-accent-foreground: #D8EEE6;
+    --sidebar-border: #35554A;
+    --sidebar-ring: #528A72;
+
+    --brand-50: #203B36;
+    --brand-100: #264A43;
+    --brand-200: #2D5040;
+    --brand-300: #3E6B58;
+    --brand-400: #528A72;
+    --brand-500: #6BA58D;
+    --brand-600: #8FC0A5;
+    --brand-700: #B5D9C3;
+    --brand-800: #DAF0E2;
 }
 
 @layer base {
@@ -162,42 +249,58 @@
   html {
     @apply font-sans;
     }
+
+  /* 文字选中：竹露色 */
+  ::selection {
+    background: #DAF0E2;
+    color: #1C3328;
+  }
 }
 
 @layer components {
+  /* 选中项：竹青底 + 竹墨字 + 左边金竹线 */
   .qm-selected {
-    background: color-mix(in oklch, var(--primary) 38%, transparent);
-    color: #0f3f42;
+    background: rgba(62, 107, 88, 0.14);
+    color: #1C3328;
+    border-left: 2px solid #C8A96E;
   }
 
   .qm-selected:hover {
-    background: color-mix(in oklch, var(--primary) 46%, transparent);
+    background: rgba(62, 107, 88, 0.2);
   }
 
   .qm-selected-muted {
-    color: color-mix(in oklch, #0f3f42 72%, var(--foreground));
+    color: #2D5040;
   }
 
+  /* 悬停项：竹青淡底 */
   .qm-hover:hover {
-    background: color-mix(in oklch, var(--primary) 18%, transparent);
-    color: var(--foreground);
+    background: rgba(62, 107, 88, 0.08);
+    color: #1C3328;
   }
 
+  /* 深色主题下的选中/悬停 */
   .dark .qm-selected,
   .deep-blue .qm-selected {
-    background: color-mix(in oklch, var(--primary) 27%, transparent);
-    color: #e8ffff;
+    background: rgba(143, 192, 165, 0.18);
+    color: #DAF0E2;
+    border-left: 2px solid #D9C69A;
+  }
+
+  .dark .qm-selected:hover,
+  .deep-blue .qm-selected:hover {
+    background: rgba(143, 192, 165, 0.26);
   }
 
   .dark .qm-selected-muted,
   .deep-blue .qm-selected-muted {
-    color: color-mix(in oklch, #e8ffff 78%, var(--foreground));
+    color: #B5D9C3;
   }
 
   .dark .qm-hover:hover,
   .deep-blue .qm-hover:hover {
-    background: color-mix(in oklch, var(--primary) 17%, transparent);
-    color: var(--foreground);
+    background: rgba(143, 192, 165, 0.1);
+    color: #DAF0E2;
   }
 }
 
@@ -216,7 +319,7 @@
 }
 
 .legend-scroll::-webkit-scrollbar-thumb {
-  background: oklch(0.55 0 0);
+  background: #8FC0A5;
   border-radius: 2px;
 }
 
@@ -239,7 +342,7 @@
 }
 
 .model-selector-dropdown::-webkit-scrollbar-thumb {
-  background: oklch(0.55 0 0);
+  background: #8FC0A5;
   border-radius: 2px;
 }
 

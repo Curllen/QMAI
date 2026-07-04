@@ -555,9 +555,11 @@ function AgentAwareContent({ content, projectPath }: { content: string; projectP
   const [results, setResults] = useState<import("@/lib/novel/agent-tools").FileEditResult[]>([])
   const [dismissed, setDismissed] = useState(false)
 
-  const parsed = useMemo(() => {
-    const { parseAgentResponse } = require("@/lib/novel/agent-parser") as typeof import("@/lib/novel/agent-parser")
-    return parseAgentResponse(content)
+  const [parsed, setParsed] = useState<import("@/lib/novel/agent-parser").ParsedAgentResponse | null>(null)
+  useEffect(() => {
+    import("@/lib/novel/agent-parser").then(({ parseAgentResponse }) => {
+      setParsed(parseAgentResponse(content))
+    })
   }, [content])
 
   const handleApply = useCallback(async (edits: import("@/lib/novel/agent-parser").FileEditAction[]) => {
@@ -573,8 +575,8 @@ function AgentAwareContent({ content, projectPath }: { content: string; projectP
 
   return (
     <>
-      <MarkdownContent content={parsed.textContent || content} />
-      {parsed.hasEdits && !dismissed && projectPath ? (
+      <MarkdownContent content={parsed?.textContent || content} />
+      {parsed?.hasEdits && !dismissed && projectPath ? (
         <FileEditPreview
           edits={parsed.edits}
           onApply={handleApply}
