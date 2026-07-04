@@ -21,7 +21,7 @@ import { normalizePath } from "@/lib/path-utils"
 import { getProjectPathById } from "@/lib/project-identity"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
 import { resolveDefaultModel, resolveModelConfig } from "@/lib/novel/model-resolver"
-import { executeMerge } from "@/lib/dedup-runner"
+import { executeMerge, type DedupMergeStage } from "@/lib/dedup-runner"
 import type { DuplicateGroup } from "@/lib/dedup"
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ let processing = false
 let currentProjectId = ""
 let currentProjectPath = ""
 let currentAbortController: AbortController | null = null
+let currentMergeProgress: { taskId: string; stage: DedupMergeStage } | null = null
 
 type MergeCompleteListener = (task: DedupTask) => void
 const mergeCompleteListeners = new Set<MergeCompleteListener>()
@@ -213,6 +214,7 @@ export async function cancelTask(taskId: string): Promise<void> {
       currentAbortController = null
     }
     processing = false
+    currentMergeProgress = null
   }
 
   queue = queue.filter((t) => t.id !== taskId)
@@ -222,6 +224,11 @@ export async function cancelTask(taskId: string): Promise<void> {
 
 export function getQueue(): readonly DedupTask[] {
   return queue
+}
+
+/** In-memory merge stage for the currently processing task (not persisted). */
+export function getMergeProgress(): { taskId: string; stage: DedupMergeStage } | null {
+  return currentMergeProgress
 }
 
 export function getQueueSummary(): {
@@ -252,6 +259,7 @@ export function clearQueueState(): void {
   currentProjectId = ""
   currentProjectPath = ""
   currentAbortController = null
+  currentMergeProgress = null
 }
 
 /**
@@ -269,6 +277,7 @@ export async function pauseQueue(): Promise<void> {
     currentAbortController = null
   }
   processing = false
+  currentMergeProgress = null
 
   for (const task of queue) {
     if (task.status === "processing") {
@@ -382,6 +391,7 @@ async function processNext(projectId: string): Promise<void> {
     next.status = "failed"
     next.error = "LLM 未配置，请在设置中配置大模型提供方"
     processing = false
+    currentMergeProgress = null
     await saveQueue(pp)
     return
   }
@@ -391,14 +401,19 @@ async function processNext(projectId: string): Promise<void> {
   )
 
   currentAbortController = new AbortController()
+  currentMergeProgress = { taskId: next.id, stage: "loading" }
 
   try {
     await executeMerge(pp, next.group, next.canonicalSlug, llmConfig, {
       signal: currentAbortController.signal,
+      onProgress: (stage) => {
+        currentMergeProgress = { taskId: next.id, stage }
+      },
     })
     if (currentProjectId !== projectId) return
 
     currentAbortController = null
+    currentMergeProgress = null
     const completedTask = { ...next }
     queue = queue.filter((t) => t.id !== next.id)
     await saveQueue(pp)
@@ -410,6 +425,7 @@ async function processNext(projectId: string): Promise<void> {
   } catch (err) {
     if (currentProjectId !== projectId) return
     currentAbortController = null
+    currentMergeProgress = null
     const message = err instanceof Error ? err.message : String(err)
     next.retryCount++
     next.error = message

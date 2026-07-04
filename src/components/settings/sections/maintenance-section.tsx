@@ -23,7 +23,7 @@ import { useWikiStore, type ProviderConfigs } from "@/stores/wiki-store"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
 import { normalizePath } from "@/lib/path-utils"
 import { resolveDefaultModel, resolveModelConfig } from "@/lib/novel/model-resolver"
-import { loadAllEntitySummaries, runDuplicateDetection } from "@/lib/dedup-runner"
+import { runDuplicateDetection, type DedupScanStage } from "@/lib/dedup-runner"
 import { addNotDuplicate } from "@/lib/dedup-storage"
 import {
   loadDedupScanCache,
@@ -36,13 +36,33 @@ import {
   cancelTask,
   retryTask,
   getQueue,
+  getMergeProgress,
   groupKey,
   ensureQueueActive,
   onDedupMergeComplete,
   type DedupTask,
 } from "@/lib/dedup-queue"
+import type { DedupMergeStage } from "@/lib/dedup-runner"
 import type { WikiProject } from "@/types/wiki"
 import type { DuplicateGroup } from "@/lib/dedup"
+
+function confidenceRank(confidence: DuplicateGroup["confidence"]): number {
+  switch (confidence) {
+    case "high":
+      return 0
+    case "medium":
+      return 1
+    case "low":
+      return 2
+  }
+}
+
+function sortGroupEntriesByConfidence(entries: GroupUiEntry[]): GroupUiEntry[] {
+  return [...entries].sort(
+    (a, b) =>
+      confidenceRank(a.group.confidence) - confidenceRank(b.group.confidence),
+  )
+}
 
 interface GroupUiEntry {
   group: DuplicateGroup
@@ -162,6 +182,7 @@ export function MaintenanceSection() {
 
   const [dedupModelId, setDedupModelId] = useState("")
   const [isScanning, setIsScanning] = useState(false)
+  const [scanStage, setScanStage] = useState<DedupScanStage | null>(null)
   const [scanState, setScanState] = useState<MaintenanceScanState>(sharedScanState)
   const [localScanState, setLocalScanState] = useState<MaintenanceScanState | null>(null)
 
@@ -249,23 +270,34 @@ export function MaintenanceSection() {
   // that completed while the user was on a different settings tab).
   // Same pattern activity-panel uses for ingest-queue.
   const [tasks, setTasks] = useState<readonly DedupTask[]>([])
+  const [mergeProgress, setMergeProgress] = useState<{
+    taskId: string
+    stage: DedupMergeStage
+  } | null>(null)
   const [enqueueingKey, setEnqueueingKey] = useState<string | null>(null)
   const [mergeErrors, setMergeErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!project) {
       setTasks([])
+      setMergeProgress(null)
       return
     }
     let cancelled = false
     void ensureQueueActive(project.id, project.path)
       .then(() => {
-        if (!cancelled) setTasks([...getQueue()])
+        if (!cancelled) {
+          setTasks([...getQueue()])
+          setMergeProgress(getMergeProgress())
+        }
       })
       .catch((err) => {
         console.error("[Maintenance] ensureQueueActive failed:", err)
       })
-    const id = setInterval(() => setTasks([...getQueue()]), 500)
+    const id = setInterval(() => {
+      setTasks([...getQueue()])
+      setMergeProgress(getMergeProgress())
+    }, 500)
     return () => {
       cancelled = true
       clearInterval(id)
@@ -359,6 +391,7 @@ export function MaintenanceSection() {
     }
 
     setIsScanning(true)
+    setScanStage("loading")
     applyScanState({
       projectId,
       projectPath,
@@ -369,20 +402,11 @@ export function MaintenanceSection() {
       scannedPageCount: null,
     })
     try {
-      const summaries = await loadAllEntitySummaries(projectPath)
-      if (summaries.length < 2) {
-        applyScanState({
-          projectId,
-          projectPath,
-          scanning: false,
-          groups: [],
-          scanCompleted: true,
-          scannedPageCount: summaries.length,
-        })
-        return
-      }
-
-      const detected = await runDuplicateDetection(projectPath, effectiveDedupConfig)
+      const { groups: detected, scannedPageCount } = await runDuplicateDetection(
+        projectPath,
+        effectiveDedupConfig,
+        { onProgress: setScanStage },
+      )
       applyScanState({
         projectId,
         projectPath,
@@ -393,7 +417,7 @@ export function MaintenanceSection() {
           skipped: false,
         })),
         scanCompleted: true,
-        scannedPageCount: summaries.length,
+        scannedPageCount,
       })
     } catch (err) {
       applyScanState({
@@ -406,6 +430,7 @@ export function MaintenanceSection() {
       })
     } finally {
       setIsScanning(false)
+      setScanStage(null)
     }
   }, [project, effectiveDedupConfig, providerConfigs, t, applyScanState])
 
@@ -484,7 +509,7 @@ export function MaintenanceSection() {
   )
 
   const visibleGroups = useMemo(
-    () => groups.filter((entry) => !entry.skipped),
+    () => sortGroupEntriesByConfidence(groups.filter((entry) => !entry.skipped)),
     [groups],
   )
 
@@ -598,9 +623,18 @@ export function MaintenanceSection() {
           <div className="flex items-start gap-1.5 rounded border border-border/60 bg-background/80 px-2 py-1.5 text-xs text-muted-foreground">
             <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
             <div>
-              {t("settings.sections.maintenance.dedup.scanningHint", {
-                defaultValue: "正在扫描实体 / 概念页面并调用模型分析，可能需要一会儿…",
-              })}
+              {scanStage === "loading"
+                ? t("settings.sections.maintenance.dedup.scanStageLoading", {
+                    defaultValue: "正在读取实体 / 概念页面…",
+                  })
+                : scanStage === "detecting"
+                  ? t("settings.sections.maintenance.dedup.scanStageDetecting", {
+                      defaultValue: "正在调用模型分析…",
+                    })
+                  : t("settings.sections.maintenance.dedup.scanningHint", {
+                      defaultValue:
+                        "正在扫描实体 / 概念页面并调用模型分析，可能需要一会儿…",
+                    })}
             </div>
           </div>
         )}
@@ -651,6 +685,7 @@ export function MaintenanceSection() {
       <QueueOrphanList
         tasks={tasks}
         groups={groups}
+        mergeProgress={mergeProgress}
         onCancel={(id) => void handleCancel(id)}
         onRetry={(id) => void handleRetry(id)}
         pendingPositionByTaskId={pendingPositionByTaskId}
@@ -665,6 +700,7 @@ export function MaintenanceSection() {
             key={entry.group.slugs.join(",")}
             entry={entry}
             task={task}
+            mergeProgress={mergeProgress}
             enqueueing={enqueueingKey === entryKey}
             mergeError={mergeErrors[entryKey] ?? null}
             pendingPosition={
@@ -689,6 +725,7 @@ export function MaintenanceSection() {
 interface QueueOrphanListProps {
   tasks: readonly DedupTask[]
   groups: GroupUiEntry[]
+  mergeProgress: { taskId: string; stage: DedupMergeStage } | null
   onCancel: (taskId: string) => void
   onRetry: (taskId: string) => void
   pendingPositionByTaskId: Map<string, number>
@@ -704,6 +741,7 @@ interface QueueOrphanListProps {
 function QueueOrphanList({
   tasks,
   groups,
+  mergeProgress,
   onCancel,
   onRetry,
   pendingPositionByTaskId,
@@ -744,6 +782,9 @@ function QueueOrphanList({
             <TaskStatusChip
               task={task}
               pendingPosition={pendingPositionByTaskId.get(task.id) ?? 0}
+              mergeStage={
+                mergeProgress?.taskId === task.id ? mergeProgress.stage : null
+              }
             />
             {task.status === "failed" && (
               <Button
@@ -778,17 +819,42 @@ function QueueOrphanList({
 interface ChipProps {
   task: DedupTask
   pendingPosition: number
+  mergeStage?: DedupMergeStage | null
 }
 
-function TaskStatusChip({ task, pendingPosition }: ChipProps) {
+function mergeStageLabel(
+  stage: DedupMergeStage,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  switch (stage) {
+    case "loading":
+      return t("settings.sections.maintenance.dedup.mergeStageLoading", {
+        defaultValue: "正在读取 wiki…",
+      })
+    case "merging":
+      return t("settings.sections.maintenance.dedup.mergeStageMerging", {
+        defaultValue: "正在合并内容（LLM）…",
+      })
+    case "writing":
+      return t("settings.sections.maintenance.dedup.mergeStageWriting", {
+        defaultValue: "正在写入文件…",
+      })
+  }
+}
+
+function TaskStatusChip({ task, pendingPosition, mergeStage }: ChipProps) {
   const { t } = useTranslation()
   if (task.status === "processing") {
+    const label =
+      mergeStage != null
+        ? mergeStageLabel(mergeStage, t)
+        : t("settings.sections.maintenance.dedup.merging", {
+            defaultValue: "合并中...",
+          })
     return (
       <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-400">
         <Loader2 className="h-3 w-3 animate-spin" />
-        {t("settings.sections.maintenance.dedup.merging", {
-          defaultValue: "合并中...",
-        })}
+        {label}
       </span>
     )
   }
@@ -828,6 +894,7 @@ function TaskStatusChip({ task, pendingPosition }: ChipProps) {
 interface CardProps {
   entry: GroupUiEntry
   task: DedupTask | undefined
+  mergeProgress: { taskId: string; stage: DedupMergeStage } | null
   enqueueing: boolean
   mergeError: string | null
   pendingPosition: number
@@ -841,6 +908,7 @@ interface CardProps {
 function DuplicateGroupCard({
   entry,
   task,
+  mergeProgress,
   enqueueing,
   mergeError,
   pendingPosition,
@@ -887,7 +955,13 @@ function DuplicateGroupCard({
         )}
         {task && !finished && (
           <span className="ml-auto">
-            <TaskStatusChip task={task} pendingPosition={pendingPosition} />
+            <TaskStatusChip
+              task={task}
+              pendingPosition={pendingPosition}
+              mergeStage={
+                mergeProgress?.taskId === task.id ? mergeProgress.stage : null
+              }
+            />
           </span>
         )}
       </div>
