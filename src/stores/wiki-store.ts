@@ -308,6 +308,8 @@ export interface NovelConfig {
   reviewModel: string
   summaryModel: string
   extractModel: string
+  /** 去 AI 味：章节预览去 AI 味、深度生成阶段6。空字符串表示跟随默认模型。 */
+  deAiModel: string
   /** 社区摘要自动提取：开启后每 N 章用 LLM 为图谱社区生成叙事摘要，用于回答全局性问题（默认开）。 */
   communitySummaryEnabled: boolean
   /** 社区摘要提取间隔：每摄取多少章后自动重建一次社区摘要（默认 5）。 */
@@ -334,6 +336,7 @@ export const DEFAULT_NOVEL_CONFIG: NovelConfig = {
   reviewModel: "",
   summaryModel: "",
   extractModel: "",
+  deAiModel: "",
   communitySummaryEnabled: true,
   communitySummaryInterval: 5,
   communitySummaryAsync: true,

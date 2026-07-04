@@ -2,7 +2,7 @@ import { type CSSProperties, Suspense, lazy, useEffect, useCallback, useRef, use
 import { useTranslation } from "react-i18next"
 import { Check, MoreHorizontal, X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
-import { resolveDefaultModel } from "@/lib/novel/model-resolver"
+import { resolveDefaultModel, resolveNovelModel } from "@/lib/novel/model-resolver"
 import type { FinalChapterSavePhase } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { deleteFile, fileExists, readFile, writeFile, writeFileAtomic, listDirectory } from "@/commands/fs"
@@ -827,7 +827,7 @@ export function PreviewPanel() {
     setDeAiProcessing(true)
     setDeAiSkillName(skillName)
     const state = useWikiStore.getState()
-    const llmConfig = resolveDefaultModel(state.llmConfig)
+    const llmConfig = resolveNovelModel(state.llmConfig, state.novelConfig, "deAi")
     if (!hasUsableLlm(llmConfig, state.providerConfigs)) {
       setDeAiProcessing(false)
       setSaveStatus("未配置可用的 AI 模型，无法去AI味")
@@ -900,7 +900,9 @@ export function PreviewPanel() {
   ) => {
     if (!selection.text.trim()) return
     const state = useWikiStore.getState()
-    const llmConfig = resolveDefaultModel(state.llmConfig)
+    const llmConfig = action === "de-ai"
+      ? resolveNovelModel(state.llmConfig, state.novelConfig, "deAi")
+      : resolveDefaultModel(state.llmConfig)
     if (!hasUsableLlm(llmConfig, state.providerConfigs)) {
       setSaveStatus("未配置可用的 AI 模型，无法处理选中文本")
       return

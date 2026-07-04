@@ -83,12 +83,14 @@ const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
   date: "2026-07-04",
   highlights: {
     en: [
-      "Reworked how novel-writing tasks pick a model into one consistent rule: per-step model > Default Model > chat model (fallback). The model selected in the chat box is now used only for chatting and writing prose; review, summary, and extract follow the Default Model by default.",
+      "Reworked how novel-writing tasks pick a model into one consistent rule: per-step model > Default Model > chat model (fallback). The model selected in the chat box is now used only for chatting and writing prose; review, summary, extract, and de-AI follow the Default Model by default.",
+      "Added a dedicated De-AI Model in Novel settings for chapter preview de-AI, selection de-AI, and deep generation stage 6.",
       "Moved the Default Model to the top of Novel settings and clarified that it drives every feature other than writing prose (review, summary, extract, Dismantling, deduplication, source import, etc.).",
       "Rewrote all model-setting descriptions in plain language, and split the single checkbox into Follow default model and Follow chat model so the same control no longer means opposite things in different places.",
     ],
     zh: [
-      "重构写小说的模型选择逻辑，统一为「该环节单独设置 > 默认模型 > 聊天模型兜底」：聊天框选中的模型只用于聊天和写正文，审稿、摘要、提取等环节默认跟随「默认模型」。",
+      "重构写小说的模型选择逻辑，统一为「该环节单独设置 > 默认模型 > 聊天模型兜底」：聊天框选中的模型只用于聊天和写正文，审稿、摘要、提取、去 AI 味等环节默认跟随「默认模型」。",
+      "小说设置新增「去 AI 味模型」，可单独指定章节预览去 AI 味、选区去 AI 味与深度生成阶段6使用的模型。",
       "设置页各模型说明全部改写为通俗易懂的表述；「跟随」复选框拆分为「跟随默认模型」与「跟随聊天模型」，避免同一控件在不同位置含义相反。",
     ],
   },

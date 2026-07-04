@@ -3,7 +3,7 @@ import { LLM_PRESETS } from "@/components/settings/llm-presets"
 import { resolveConfig } from "@/components/settings/preset-resolver"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
 
-export type NovelTaskType = "writing" | "review" | "summary" | "extract" | "lint"
+export type NovelTaskType = "writing" | "review" | "summary" | "extract" | "lint" | "deAi"
 
 const UNUSABLE_LLM_CONFIG: Pick<LlmConfig, "provider" | "apiKey" | "model"> = {
   provider: "openai",
@@ -125,6 +125,7 @@ export function resolveNovelModel(
     summary: novelConfig.summaryModel,
     extract: novelConfig.extractModel,
     lint: novelConfig.reviewModel,
+    deAi: novelConfig.deAiModel,
   }
 
   const { providerConfigs, aiChatModel } = useWikiStore.getState()

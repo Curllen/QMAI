@@ -58,6 +58,8 @@ interface Category {
    *  switching language in Settings → Interface takes effect without
    *  remounting this component (Bug #53). */
   labelKey: string
+  /** Optional muted subtitle under the label (e.g. novel → model setup). */
+  hintKey?: string
   icon: typeof Bot
 }
 
@@ -67,7 +69,7 @@ const CATEGORIES: Category[] = [
   { id: "embedding", labelKey: "settings.categories.embedding", icon: Database },
   { id: "network", labelKey: "settings.categories.network", icon: Network },
   { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
-  { id: "novel", labelKey: "settings.categories.novel", icon: BookOpen },
+  { id: "novel", labelKey: "settings.categories.novel", hintKey: "settings.categories.novelHint", icon: BookOpen },
   { id: "usage-guide", labelKey: "settings.categories.usageGuide", icon: HelpCircle },
   { id: "maintenance", labelKey: "settings.categories.maintenance", icon: Wrench },
   { id: "data-management", labelKey: "settings.categories.dataManagement", icon: Archive },
@@ -571,7 +573,14 @@ export function SettingsView() {
                     isActive ? "text-primary" : "text-muted-foreground/80 group-hover:text-accent-foreground"
                   }`}
                 />
-                <span className="truncate">{t(c.labelKey)}</span>
+                <span className="flex min-w-0 flex-1 flex-col items-start">
+                  <span className="truncate">{t(c.labelKey)}</span>
+                  {c.hintKey ? (
+                    <span className="truncate text-[10px] leading-tight text-muted-foreground/80">
+                      {t(c.hintKey)}
+                    </span>
+                  ) : null}
+                </span>
               </button>
             )
           })}

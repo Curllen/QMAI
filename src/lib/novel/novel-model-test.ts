@@ -2,7 +2,7 @@ import { streamChat } from "@/lib/llm-client"
 import { resolveDefaultModel, resolveNovelModel } from "@/lib/novel/model-resolver"
 import type { LlmConfig, NovelConfig } from "@/stores/wiki-store"
 
-export type TestableNovelModelTask = "writing" | "review" | "summary" | "extract" | "workflow"
+export type TestableNovelModelTask = "writing" | "review" | "summary" | "extract" | "deAi" | "workflow"
 
 export interface NovelModelTestResult {
   model: string
@@ -16,6 +16,7 @@ const TEST_PROMPTS: Record<TestableNovelModelTask, string> = {
   review: "你正在执行小说审稿模型测试。请只回复“审稿模型测试成功”。",
   summary: "你正在执行小说摘要模型测试。请只回复“摘要模型测试成功”。",
   extract: "你正在执行小说资料提取模型测试。请只回复“提取模型测试成功”。",
+  deAi: "你正在执行小说去AI味模型测试。请只回复“去AI味模型测试成功”。",
 }
 
 export async function testNovelModel(
@@ -63,7 +64,7 @@ export async function testNovelModel(
     ? !novelConfig.defaultLlmModel.trim()
     : taskType === "writing"
       ? true
-      : !novelConfig[`${taskType}Model` as "reviewModel" | "summaryModel" | "extractModel"].trim()
+      : !novelConfig[`${taskType}Model` as "reviewModel" | "summaryModel" | "extractModel" | "deAiModel"].trim()
 
   return {
     model,

@@ -123,6 +123,7 @@ export function NovelSection({ draft, setDraft }: Props) {
     review: undefined,
     summary: undefined,
     extract: undefined,
+    deAi: undefined,
   })
 
   const updateNovelConfig = async (patch: Partial<NovelConfig>) => {
@@ -141,6 +142,7 @@ export function NovelSection({ draft, setDraft }: Props) {
     { task: "review", field: "reviewModel" },
     { task: "summary", field: "summaryModel" },
     { task: "extract", field: "extractModel" },
+    { task: "deAi", field: "deAiModel" },
   ] as const), [])
 
   const settingTooltip = (key: string) => (
