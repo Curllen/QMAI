@@ -32,6 +32,12 @@ import {
 } from "@/lib/novel/de-ai-skill-library"
 import { startOutlineIngestTask } from "@/lib/novel/outline-generation"
 import { streamChat } from "@/lib/llm-client"
+import {
+  extractChapterNumberFromMarkdown,
+  getDraftChapterPath,
+  resolveChapterFlushMarkdown,
+  shouldSyncChapterOnLeave,
+} from "@/lib/novel/chapter-path-sync"
 import { makeChapterFileName, makeDefaultChapterTitle } from "@/lib/wiki-filename"
 import { getPreviewContentContainerClass, shouldUseCompactChapterToolbar } from "@/lib/workspace-layout"
 import { useOutlineGenerationStore, type OutlineGenerationTask } from "@/stores/outline-generation-store"
@@ -93,17 +99,6 @@ async function getCanonicalChapterPath(currentPath: string, markdown: string, ch
     : body.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? ""
   if (!title) return currentPath
   return getUniqueSiblingPath(getDirName(currentPath), makeChapterFileName(title, chapterNumber), currentPath)
-}
-
-/** Avoid flushing an empty in-memory snapshot over a chapter that still has disk content. */
-export function shouldSkipEmptyChapterFlush(markdown: string, lastLoaded: string): boolean {
-  return !markdown.trim() && Boolean(lastLoaded.trim())
-}
-
-function extractChapterNumberFromMarkdown(markdown: string): number | null {
-  const { frontmatter } = parseFrontmatter(markdown)
-  if (!frontmatter || typeof frontmatter !== "object") return null
-  return parseChapterMeta(frontmatter as Record<string, unknown>)?.chapterNumber ?? null
 }
 
 function formatWritingBodyWithIndent(markdown: string): string {
@@ -201,6 +196,7 @@ export function PreviewPanel() {
   const setFinalChapterSave = useWikiStore((s) => s.setFinalChapterSave)
   const outlineTasks = useOutlineGenerationStore((s) => s.tasks)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveGenerationRef = useRef(0)
   const [isSavingFinal, setIsSavingFinal] = useState(false)
   const [saveStatus, setSaveStatus] = useState<string>("")
   const [showSnapshot, setShowSnapshot] = useState(false)
@@ -236,6 +232,7 @@ export function PreviewPanel() {
   // marker if read_file had returned one for a missing/locked file. We
   // skip save when the incoming markdown equals the last-loaded content.
   const lastLoadedRef = useRef<string>("")
+  const lastLoadedByPathRef = useRef<Map<string, string>>(new Map())
   const fileContentRef = useRef(fileContent)
   const selectedFileRef = useRef<string | null>(selectedFile)
   const deAiSkillMemoryWarningRef = useRef("")
@@ -251,6 +248,11 @@ export function PreviewPanel() {
   useEffect(() => {
     fileContentRef.current = fileContent
   }, [fileContent])
+
+  const rememberLoadedChapter = useCallback((path: string, markdown: string) => {
+    lastLoadedRef.current = markdown
+    lastLoadedByPathRef.current.set(path, markdown)
+  }, [])
 
   useEffect(() => {
     setChapterDeAiSkillId(undefined)
@@ -277,18 +279,31 @@ export function PreviewPanel() {
     }
   }, [deAiSkillPickerOpen])
 
-  const syncChapterToCanonicalPath = useCallback(async (path: string, markdown: string) => {
+  const syncChapterToCanonicalPath = useCallback(async (
+    path: string,
+    markdown: string,
+    options?: { renameToCanonical?: boolean },
+  ) => {
     const normalized = normalizeChapterWriting(markdown)
     const chapterNumber = extractChapterNumberFromMarkdown(normalized)
-    const targetPath = await getCanonicalChapterPath(path, normalized, chapterNumber)
+    const renameToCanonical = options?.renameToCanonical ?? false
+    const targetPath = renameToCanonical
+      ? await getCanonicalChapterPath(path, normalized, chapterNumber)
+      : path
 
     await writeFileAtomic(targetPath, normalized)
-    if (targetPath !== path) {
+    if (renameToCanonical && targetPath !== path) {
       if (useWikiStore.getState().selectedFile === path) {
         selectedFileRef.current = targetPath
         useWikiStore.getState().setSelectedFile(targetPath)
       }
       await deleteFile(path)
+      if (chapterNumber !== null) {
+        const draftPath = getDraftChapterPath(getDirName(targetPath), chapterNumber)
+        if (draftPath !== targetPath && draftPath !== path && await fileExists(draftPath)) {
+          await deleteFile(draftPath)
+        }
+      }
       if (project) {
         try {
           const tree = await listDirectory(normalizePath(project.path))
@@ -299,15 +314,15 @@ export function PreviewPanel() {
       }
     }
 
+    rememberLoadedChapter(targetPath, normalized)
     if (useWikiStore.getState().selectedFile === targetPath) {
       setFileContent(normalized)
       fileContentRef.current = normalized
-      lastLoadedRef.current = normalized
     }
 
     bumpDataVersion()
     return { targetPath, markdown: normalized }
-  }, [project, setFileContent, setFileTree, bumpDataVersion])
+  }, [project, rememberLoadedChapter, setFileContent, setFileTree, bumpDataVersion])
 
   const flushChapterBeforeLeave = useCallback(async (path: string | null, markdown: string) => {
     if (!path || !isChapterPath(path)) return
@@ -316,14 +331,11 @@ export function PreviewPanel() {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
-    const storeMarkdown = useWikiStore.getState().fileContent
-    const resolvedMarkdown = markdown.trim()
-      ? markdown
-      : (storeMarkdown.trim() || lastLoadedRef.current)
-    if (shouldSkipEmptyChapterFlush(resolvedMarkdown, lastLoadedRef.current)) return
-    if (resolvedMarkdown === lastLoadedRef.current) return
+    const lastLoadedForPath = lastLoadedByPathRef.current.get(path) ?? ""
+    const resolvedMarkdown = resolveChapterFlushMarkdown(path, markdown, lastLoadedByPathRef.current)
+    if (!shouldSyncChapterOnLeave(path, markdown, lastLoadedForPath)) return
     try {
-      await syncChapterToCanonicalPath(path, resolvedMarkdown)
+      await syncChapterToCanonicalPath(path, resolvedMarkdown, { renameToCanonical: false })
     } catch (err) {
       console.error("切换章节前同步文件失败:", err)
     }
@@ -331,6 +343,11 @@ export function PreviewPanel() {
 
   useEffect(() => {
     let cancelled = false
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    saveGenerationRef.current += 1
     const previousFile = selectedFileRef.current
     const previousContent = fileContentRef.current
     console.log("[PreviewPanel][debug] useEffect triggered", { selectedFile, previousFile, previousContentLength: previousContent?.length })
@@ -369,14 +386,13 @@ export function PreviewPanel() {
 
     setFileContent("")
     fileContentRef.current = ""
-    lastLoadedRef.current = ""
     setSaveStatus("")
 
     readFile(selectedFile)
       .then((content) => {
         console.log("[PreviewPanel][debug] readFile success", { selectedFile, contentLength: content?.length, cancelled, storeSelectedFile: useWikiStore.getState().selectedFile })
         if (cancelled || useWikiStore.getState().selectedFile !== selectedFile) return
-        lastLoadedRef.current = content
+        rememberLoadedChapter(selectedFile, content)
         setFileContent(content)
         setSaveStatus("")
         setLoadedFilePath(selectedFile)
@@ -385,6 +401,7 @@ export function PreviewPanel() {
         console.log("[PreviewPanel][debug] readFile error", { selectedFile, err, cancelled, storeSelectedFile: useWikiStore.getState().selectedFile })
         if (cancelled || useWikiStore.getState().selectedFile !== selectedFile) return
         lastLoadedRef.current = ""
+        lastLoadedByPathRef.current.delete(selectedFile)
         setFileContent(`Error loading file: ${err}`)
         setSaveStatus("")
         setLoadedFilePath(selectedFile)
@@ -393,7 +410,7 @@ export function PreviewPanel() {
       console.log("[PreviewPanel][debug] useEffect cleanup", { selectedFile })
       cancelled = true
     }
-  }, [selectedFile, setFileContent, flushChapterBeforeLeave])
+  }, [selectedFile, rememberLoadedChapter, setFileContent, flushChapterBeforeLeave])
 
   useEffect(() => {
     return () => {
@@ -406,30 +423,29 @@ export function PreviewPanel() {
 
   const handleSave = useCallback(
     (markdown: string) => {
-      if (!selectedFile) return
-      const persistedMarkdown = isChapterPath(selectedFile)
+      const pathAtSave = selectedFileRef.current
+      if (!pathAtSave) return
+      const persistedMarkdown = isChapterPath(pathAtSave)
         ? normalizeChapterWriting(markdown)
         : markdown
       setFileContent(markdown)
       fileContentRef.current = markdown
-      // Ignore no-op saves from the editor's initial re-emit. Only write
-      // when the user has actually changed the content relative to the
-      // last disk read.
-      if (persistedMarkdown === lastLoadedRef.current) return
+      const lastLoadedForPath = lastLoadedByPathRef.current.get(pathAtSave) ?? lastLoadedRef.current
+      if (persistedMarkdown === lastLoadedForPath) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      const generation = saveGenerationRef.current
       saveTimerRef.current = setTimeout(() => {
-        writeFileAtomic(selectedFile, persistedMarkdown)
+        if (generation !== saveGenerationRef.current) return
+        if (pathAtSave !== selectedFileRef.current) return
+        writeFileAtomic(pathAtSave, persistedMarkdown)
           .then(() => {
-            // Our own write becomes the new "last loaded" — subsequent
-            // re-emits from Milkdown that match this content must not
-            // trigger another save.
-            lastLoadedRef.current = persistedMarkdown
+            rememberLoadedChapter(pathAtSave, persistedMarkdown)
             bumpDataVersion()
           })
           .catch((err) => console.error("保存失败:", err))
       }, 1000)
     },
-    [selectedFile, setFileContent, bumpDataVersion]
+    [rememberLoadedChapter, setFileContent, bumpDataVersion]
   )
 
   const chapterFrontmatter = useMemo(() => {
@@ -623,7 +639,7 @@ export function PreviewPanel() {
     setChapterTitleEditing(false)
     if (nextTitle === chapterDisplayTitle) return
     try {
-      await syncChapterToCanonicalPath(selectedFile, updateChapterHeading(fileContent, nextTitle))
+      await syncChapterToCanonicalPath(selectedFile, updateChapterHeading(fileContent, nextTitle), { renameToCanonical: true })
     } catch (error) {
       console.error("章节标题同步失败:", error)
     }
@@ -696,7 +712,7 @@ export function PreviewPanel() {
         saveTimerRef.current = null
       }
 
-      const markdownToSave = fileContent.trim() ? fileContent : lastLoadedRef.current
+      const markdownToSave = fileContent.trim() ? fileContent : (lastLoadedByPathRef.current.get(selectedFile) ?? lastLoadedRef.current)
       if (!markdownToSave.trim()) {
         updatePhase(false, null)
         setSaveStatus("章节内容为空，无法保存为正式章节")
@@ -705,10 +721,10 @@ export function PreviewPanel() {
       }
 
       const updatedMarkdown = updateChapterStatus(markdownToSave, "final")
-      const syncResult = await syncChapterToCanonicalPath(selectedFile, updatedMarkdown)
+      const syncResult = await syncChapterToCanonicalPath(selectedFile, updatedMarkdown, { renameToCanonical: true })
       const targetPath = syncResult.targetPath
       savePath = targetPath
-      lastLoadedRef.current = syncResult.markdown
+      rememberLoadedChapter(targetPath, syncResult.markdown)
       fileContentRef.current = syncResult.markdown
       setFileContent(syncResult.markdown)
 
@@ -826,14 +842,14 @@ export function PreviewPanel() {
     if (!selectedFile || !canFormatWriting) return
     const formatted = normalizeChapterWriting(fileContent)
     setFileContent(formatted)
-    lastLoadedRef.current = formatted
+    rememberLoadedChapter(selectedFile, formatted)
     try {
       await writeFileAtomic(selectedFile, formatted)
       bumpDataVersion()
     } catch (err) {
       console.error("格式化写作内容失败:", err)
     }
-  }, [canFormatWriting, fileContent, selectedFile, setFileContent, bumpDataVersion])
+  }, [canFormatWriting, fileContent, rememberLoadedChapter, selectedFile, setFileContent, bumpDataVersion])
 
   const handleIngestOutline = useCallback(() => {
     if (!project || !selectedFile || !canIngestOutline || isOutlineIngesting) return
