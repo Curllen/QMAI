@@ -1,10 +1,10 @@
 export interface ChangelogEntry {
-  version: string
-  date: string
+  version: string;
+  date: string;
   highlights: {
-    en: string[]
-    zh: string[]
-  }
+    en: string[];
+    zh: string[];
+  };
 }
 
 const TWO_POINT_TWO_TEN_CHANGELOG: ChangelogEntry = {
@@ -18,7 +18,7 @@ const TWO_POINT_TWO_TEN_CHANGELOG: ChangelogEntry = {
       "恢复大语言/LLM 模型中的拉取模型入口：拉取后可从下拉框选择模型，点击测试模型时会测试当前选中的模型。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWELVE_CHANGELOG: ChangelogEntry = {
   version: "2.2.12",
@@ -27,7 +27,7 @@ const TWO_POINT_TWO_TWELVE_CHANGELOG: ChangelogEntry = {
     en: [
       "Fixed continue-next-chapter regenerating chapter 1: incidental 开篇/第一章 wording inside prompts no longer hijacks the target chapter.",
       "Continue-next-chapter now remembers the chapter just generated in this conversation, so an empty chapter library no longer resets the target back to chapter 1.",
-      "Fixed AI chapter editing failing with \"missing frontmatter, write-back stopped\": the original chapter frontmatter is reattached automatically, and fenced output or missing headings are tolerated.",
+      'Fixed AI chapter editing failing with "missing frontmatter, write-back stopped": the original chapter frontmatter is reattached automatically, and fenced output or missing headings are tolerated.',
       "Added a per-chapter target character setting: chapter drafting, expansion thresholds, and the continue-next-chapter prompt all follow the configured target.",
       "Fixed the review stage being unstoppable when the stop signal fired before the review started.",
       "Fixed contradictory outline refinement checks by uniformly testing whether the target directory already contains .md files.",
@@ -47,7 +47,7 @@ const TWO_POINT_TWO_TWELVE_CHANGELOG: ChangelogEntry = {
       "AI 会话界面重做：深度思考与普通模式互斥切换，普通模式支持正常对话与编辑章节。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.11",
@@ -76,36 +76,56 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
       "补充本地 CLI 配置读取、空模型回退、以及 CLI 启动参数的回归测试，避免后续再次出现“本地环境读不到”或“走不到本地代理模式”的回退。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
   version: "2.2.32",
   date: "2026-07-04",
   highlights: {
     en: [
-      "Chapter saving is more reliable: switching chapters no longer deletes drafts or writes to the wrong file; saving as a final chapter is when the Chinese filename is applied.",
-      "Chat model and background-task model are separate: the chat box is for conversation and prose; review, summary, de-AI, and similar steps use the Default Model unless you pick another for that step.",
+      "Chapter saving is more reliable: switching chapters no longer deletes chapter-NNN drafts or writes to the wrong file; renaming to Chinese title only happens when saving as a finalized chapter.",
+      "Stale autosaves are cancelled, and old drafts are automatically cleaned up after rename.",
+      "Fixed chapter title/status edits sometimes failing to save due to frontmatter type mismatches.",
+      "Chat model and background-task model are separate: the chat box is for conversation and prose writing; review, summary, de-AI, and similar steps use the Default Model unless you pick another for that step.",
       "De-AI can use its own model instead of always sharing the chat model.",
-      "Duplicate-entity detection: pick a model before scanning, last results are remembered, merged entries disappear right away, and progress is clearer.",
-      "The editor polls disk every 2 seconds so external edits show up; fixed sync stopping after you edit locally.",
-      "Faster startup and safer project switching so data from the previous project does not leak in.",
-      "Fixed chapter title and status edits sometimes failing to save because of mismatched value types.",
-      "macOS and Linux no longer auto-check for updates; the settings page points you to manual download.",
+      "Duplicate-entity detection: pick a model before scanning, results are cached, merged entries disappear immediately, and progress shows read/LLM/write stages.",
+      "The editor polls disk every 2 seconds so external edits show up; fixed disk sync stopping after local edits.",
+      "Cmd+F / Ctrl+F find bar in the editor with overlay highlights and navigation.",
+      "Faster startup and safer project switching: deferred non-critical hydration, normalized path comparison.",
+      "Fixed chapter title/status edits sometimes failing to save because of mismatched value types.",
+      "macOS and Linux no longer auto-check for updates; the settings page points to manual download.",
       "Some settings take effect immediately without a Save button.",
+      "Special thanks to darknessomi for the support and contributions that made this release better!",
     ],
     zh: [
-      "章节保存更稳了：切换章节不会再误删草稿或存错文件；只有点「保存为正式章节」才会改成中文文件名。",
-      "聊天模型和后台任务模型分开了：聊天框里选的只管对话和写正文；审稿、摘要、去 AI 味等默认用「默认模型」，也可以给某个环节单独指定。",
-      "去 AI 味可以单独选模型，不用和聊天模型绑在一起。",
-      "重复角色/实体检测更好用：扫描前可选模型，上次结果会保留，合并后条目马上消失，进度也更清楚。",
-      "编辑器每 2 秒检查一次磁盘，用别的软件改了文件会自动刷新；也修好了本地改完字之后不再同步的问题。",
-      "启动更快，快速切换项目时不会再串上一个项目的数据。",
-      "修好了改章节标题或状态时，偶尔保存失败的问题。",
-      "macOS 和 Linux 版暂不支持软件内自动更新，设置里会提示去官网手动下载。",
-      "部分设置改了立刻生效，不用点保存。",
+      "章节保存更稳了：切换章节不再误删 chapter-NNN 草稿，也不会把内容写到错误的章节文件里。",
+      "只有点击「保存为正式章节」才会将文件名改为中文标题，切换章节时不再自动重命名。",
+      "取消过期自动保存，草稿重命名后自动清理旧草稿。",
+      "修复改章节标题或状态时偶尔保存失败的问题（frontmatter 类型不一致导致）。",
+      "聊天模型只管 AI 会话中的对话和写正文；审稿、摘要、记忆提取等后台任务默认使用「默认模型」，可在小说设置页配置。",
+      "去 AI 味可以单独选择一个模型，不必再和聊天模型绑定。",
+      "小说设置中的模型说明已改写，「跟随默认模型」和「跟随聊天模型」分开勾选，不易混淆。",
+      "重复实体检测扫描前可选择模型，结果自动缓存，合并后条目立即消失。",
+      "扫描和合并更快：并行 I/O，进度区分读盘/LLM 分析/写盘阶段。",
+      "编辑器每 2 秒轮询检测磁盘外部修改——用其他软件修改文件后自动刷新。",
+      "支持 Cmd+F（Ctrl+F）查找：查找条、overlay 高亮、上下条导航。",
+      "优化启动速度、快速切换项目不再串数据。",
+      "macOS/Linux 暂不支持自动更新，设置页提示去官网手动下载。",
+      "部分设置页无需点保存，改动即时生效。",
+      "！！！特别感谢 darknessomi 的支持与帮助，是他让软件变得更加完美！！！",
+      "",
+      "提前预告！！！最新 3.0.0 版本正在构建中！",
+      "这个版本将 AI 会话工作流模式彻底取消，换了更强大的 AGENT 架构，这个架构可以调用工具、调用 skill、调用 MCP。",
+      "在 AI 会话当中可以指定某个章节、某个记忆、某个 skill 等输入，让 AI 生成内容更加灵活。",
+      "同时在 AI 会话当中增加了快速/标准/严格三种模式，每种模式都会走不同的 AGENT 流程，对 AI 会话内容产生更加严谨。",
+      "并且 3.0.0 版本增加了自定义 skill 技能，增加了 MCP 功能，优化了剧情推演室。",
+      "剧情推演室是一个类似小说平行世界模拟的工具，你可以选中小说章节，AI 会读取小说章节中的角色内容，提取角色性格等特征，为每一个角色赋予专有 AGENT。",
+      "在剧情推演室的平行模拟世界当中，每个角色都是一个真实的人物，他们有自己的情绪、自己的视角，会按照自己的思维去推动剧情故事发展。",
+      "相当于每一个角色都在找自己的路，于是故事发生了！剧情推演便是如此而来。",
+      "最新 3.0.0 版本敬请期待。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_THIRTY_ONE_CHANGELOG: ChangelogEntry = {
   version: "2.2.31",
@@ -132,7 +152,7 @@ const TWO_POINT_TWO_THIRTY_ONE_CHANGELOG: ChangelogEntry = {
       "修复便携版打包相关问题、聊天输入框若干交互细节、大纲聊天面板相关功能。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_THIRTY_CHANGELOG: ChangelogEntry = {
   version: "2.2.30",
@@ -151,7 +171,7 @@ const TWO_POINT_TWO_THIRTY_CHANGELOG: ChangelogEntry = {
       "旧便携版 exe 已归档到 QMdelete，避免用户误打开旧包。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_NINE_CHANGELOG: ChangelogEntry = {
   version: "2.2.29",
@@ -171,7 +191,7 @@ const TWO_POINT_TWO_TWENTY_NINE_CHANGELOG: ChangelogEntry = {
       "导入 UI 全面优化：新增全选/取消全选功能，导入结果详细展示，进度分阶段展示。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.27",
@@ -184,7 +204,7 @@ const TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG: ChangelogEntry = {
       "修复队列错误信息为中文：合并任务失败时的错误提示改为中文。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_SIX_CHANGELOG: ChangelogEntry = {
   version: "2.2.26",
@@ -198,7 +218,7 @@ const TWO_POINT_TWO_TWENTY_SIX_CHANGELOG: ChangelogEntry = {
       "新增下拉框细滚动条样式，与项目整体风格统一。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG: ChangelogEntry = {
   version: "2.2.25",
@@ -230,7 +250,7 @@ const TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG: ChangelogEntry = {
       "故事框架标题旁添加帮助图标，链接到剧情推演室使用说明。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG: ChangelogEntry = {
   version: "2.2.24",
@@ -261,7 +281,7 @@ const TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG: ChangelogEntry = {
       "AI 大纲会话面板底部布局调整：停靠图标在最左侧，模型选择下拉框在最右侧。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_THREE_CHANGELOG: ChangelogEntry = {
   version: "2.2.23",
@@ -286,7 +306,7 @@ const TWO_POINT_TWO_TWENTY_THREE_CHANGELOG: ChangelogEntry = {
       "修复嵌套路径虚拟化导致部分条目无法删除的问题：路径中包含多个 wiki/QM 段时全量替换，而非仅替换最后一个。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_TWO_CHANGELOG: ChangelogEntry = {
   version: "2.2.22",
@@ -321,7 +341,7 @@ const TWO_POINT_TWO_TWENTY_TWO_CHANGELOG: ChangelogEntry = {
       "自定义模型卡片输入框内的失败模型标签会高亮变红并带红框，用户可直接点击「×」移除；移除后该模型会从失败列表中清除。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_CHANGELOG: ChangelogEntry = {
   version: "2.2.20",
@@ -364,7 +384,7 @@ const TWO_POINT_TWO_TWENTY_CHANGELOG: ChangelogEntry = {
       "优化Windows更新安装流程，减少文件占用导致的更新失败。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_NINETEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.19",
@@ -381,7 +401,7 @@ const TWO_POINT_TWO_NINETEEN_CHANGELOG: ChangelogEntry = {
       "新增角色识别回归测试，覆盖中文字段返回格式，防止同类问题再次出现。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_EIGHTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.18",
@@ -400,7 +420,7 @@ const TWO_POINT_TWO_EIGHTEEN_CHANGELOG: ChangelogEntry = {
       "优化修复一些其他小问题",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_SEVENTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.17",
@@ -421,7 +441,7 @@ const TWO_POINT_TWO_SEVENTEEN_CHANGELOG: ChangelogEntry = {
       "修复拆书测试版与模型配置流程中反馈的若干问题。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_SIXTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.16",
@@ -440,7 +460,7 @@ const TWO_POINT_TWO_SIXTEEN_CHANGELOG: ChangelogEntry = {
       "修复一些其他问题。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_FOURTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.14",
@@ -454,14 +474,14 @@ const TWO_POINT_TWO_FOURTEEN_CHANGELOG: ChangelogEntry = {
       "Enhanced de-AI rules with Chinese novel adaptation notes: preserve character voice, dialogue edges, narrative rhythm, and necessary pauses; don't apply non-fiction article rules to delete adverbs or compress to fixed word count.",
     ],
     zh: [
-      "修复 Issue #10：AI 修改章节时不再报错\"返回内容缺少 frontmatter，已停止写回\"，现在自动沿用原章节 frontmatter，并容错代码围栏与缺失标题。",
-      "修复 Issue #9：\"继续生成下一章\"不再重复生成第一章；提示词中顺带出现的\"开篇/第一章\"字样不再把目标章节劫持为第1章；本会话记住刚生成、尚未保存的章节号。",
+      '修复 Issue #10：AI 修改章节时不再报错"返回内容缺少 frontmatter，已停止写回"，现在自动沿用原章节 frontmatter，并容错代码围栏与缺失标题。',
+      '修复 Issue #9："继续生成下一章"不再重复生成第一章；提示词中顺带出现的"开篇/第一章"字样不再把目标章节劫持为第1章；本会话记住刚生成、尚未保存的章节号。',
       "修复 Issue #6：大纲细化生成逻辑统一按目录是否已有 .md 文件判断；hasOutlineForRefinement 从基于搜索改为直接文件系统检查。",
-      "修复 Issue #8：新增\"单章目标字数\"设置，章节生成、扩写阈值和\"继续生成下一章\"提示词都按设置目标执行。",
+      '修复 Issue #8：新增"单章目标字数"设置，章节生成、扩写阈值和"继续生成下一章"提示词都按设置目标执行。',
       "增强去AI味规则的中文小说适配说明：保留角色声线、对白毛边、叙事节奏和必要停顿；不要按非虚构文章规则硬删副词或压缩到固定字数。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_THIRTEEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.13",
@@ -496,7 +516,7 @@ const TWO_POINT_TWO_THIRTEEN_CHANGELOG: ChangelogEntry = {
       "深度思考和普通模式互斥切换，普通模式下可以正常对话不走深度思考流程。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_NINE_CHANGELOG: ChangelogEntry = {
   version: "2.2.9",
@@ -509,7 +529,7 @@ const TWO_POINT_TWO_NINE_CHANGELOG: ChangelogEntry = {
       "修复 AI 大纲深度思考生成报错：当大纲上下文或对话字段缺失时，不会再因为 undefined 的 length / trim 报错而直接生成失败。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_EIGHT_CHANGELOG: ChangelogEntry = {
   version: "2.2.8",
@@ -532,7 +552,7 @@ const TWO_POINT_TWO_EIGHT_CHANGELOG: ChangelogEntry = {
       "深度章节长度重写失败上限提升到 6000 字，连续压缩失败时可保留可用长稿继续审查。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_SEVEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.7",
@@ -555,7 +575,7 @@ const TWO_POINT_TWO_SEVEN_CHANGELOG: ChangelogEntry = {
       "继续未完成时即使切换模型，也会重新加载原始请求和恢复快照后再继续后续阶段。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_ZERO_CHANGELOG: ChangelogEntry = {
   version: "2.2.0",
@@ -582,7 +602,7 @@ const TWO_POINT_TWO_ZERO_CHANGELOG: ChangelogEntry = {
       "修复 AI 会话停止生成不及时的问题，思考阶段和流式阶段都能立即收口。",
     ],
   },
-}
+};
 
 const TWO_POINT_ONE_ZERO_CHANGELOG: ChangelogEntry = {
   version: "2.1.0",
@@ -629,7 +649,7 @@ const TWO_POINT_ONE_ZERO_CHANGELOG: ChangelogEntry = {
       "补强 AI 审查改写落地逻辑，换行或空格变化后仍能定位原文片段。",
     ],
   },
-}
+};
 
 const TWO_POINT_ZERO_CHANGELOG: ChangelogEntry = {
   version: "2.0.0",
@@ -658,7 +678,7 @@ const TWO_POINT_ZERO_CHANGELOG: ChangelogEntry = {
       "反馈提交流程增加兜底通道，桌面端 HTTP 客户端异常时仍可尝试提交。",
     ],
   },
-}
+};
 
 const TWO_POINT_TWO_TWENTY_ONE_CHANGELOG: ChangelogEntry = {
   version: "2.2.21",
@@ -677,13 +697,13 @@ const TWO_POINT_TWO_TWENTY_ONE_CHANGELOG: ChangelogEntry = {
       "Clip 服务器安全：Mutex poison 处理、重启计数修复、projectPath 校验。",
     ],
   },
-}
+};
 
 function isMergedOnePointRelease(version: string): boolean {
-  const match = /^1\.0\.(\d+)$/.exec(version)
-  if (!match) return false
-  const patch = Number(match[1])
-  return patch >= 8 && patch <= 32
+  const match = /^1\.0\.(\d+)$/.exec(version);
+  if (!match) return false;
+  const patch = Number(match[1]);
+  return patch >= 8 && patch <= 32;
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
@@ -743,41 +763,68 @@ export const CHANGELOG: ChangelogEntry[] = [
       ],
     },
   },
-]
+];
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
-  if (version === TWO_POINT_TWO_THIRTY_TWO_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_TWO_CHANGELOG]
-  if (version === TWO_POINT_TWO_THIRTY_ONE_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_ONE_CHANGELOG]
-  if (version === TWO_POINT_TWO_THIRTY_CHANGELOG.version) return [TWO_POINT_TWO_THIRTY_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_NINE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_NINE_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_SIX_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_SIX_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_THREE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_THREE_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_TWO_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_TWO_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_ONE_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_ONE_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWENTY_CHANGELOG.version) return [TWO_POINT_TWO_TWENTY_CHANGELOG]
-  if (version === TWO_POINT_TWO_NINETEEN_CHANGELOG.version) return [TWO_POINT_TWO_NINETEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_EIGHTEEN_CHANGELOG.version) return [TWO_POINT_TWO_EIGHTEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_SEVENTEEN_CHANGELOG.version) return [TWO_POINT_TWO_SEVENTEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_SIXTEEN_CHANGELOG.version) return [TWO_POINT_TWO_SIXTEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_FOURTEEN_CHANGELOG.version) return [TWO_POINT_TWO_FOURTEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_THIRTEEN_CHANGELOG.version) return [TWO_POINT_TWO_THIRTEEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_TWELVE_CHANGELOG.version) return [TWO_POINT_TWO_TWELVE_CHANGELOG]
-  if (version === TWO_POINT_TWO_ELEVEN_CHANGELOG.version) return [TWO_POINT_TWO_ELEVEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_TEN_CHANGELOG.version) return [TWO_POINT_TWO_TEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_NINE_CHANGELOG.version) return [TWO_POINT_TWO_NINE_CHANGELOG]
-  if (version === TWO_POINT_TWO_EIGHT_CHANGELOG.version) return [TWO_POINT_TWO_EIGHT_CHANGELOG]
-  if (version === TWO_POINT_TWO_SEVEN_CHANGELOG.version) return [TWO_POINT_TWO_SEVEN_CHANGELOG]
-  if (version === TWO_POINT_TWO_ZERO_CHANGELOG.version) return [TWO_POINT_TWO_ZERO_CHANGELOG]
-  if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version) return [TWO_POINT_ONE_ZERO_CHANGELOG]
-  if (version === TWO_POINT_ZERO_CHANGELOG.version) return [TWO_POINT_ZERO_CHANGELOG]
-  if (/^2\.2\.[1-6]$/.test(version)) return []
-  if (/^2\.1\.(?:[1-9]|10)$/.test(version)) return []
-  if (/^2\.0\.(?:[1-9]|1[0-2])$/.test(version)) return []
-  if (isMergedOnePointRelease(version)) return []
-  return CHANGELOG.filter((entry) => entry.version === version)
+  if (version === TWO_POINT_TWO_THIRTY_TWO_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_TWO_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_ONE_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_ONE_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_NINE_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_NINE_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_SEVEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_SIX_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_SIX_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_FIVE_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_FOUR_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_THREE_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_THREE_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_TWO_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_TWO_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_ONE_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_ONE_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWENTY_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWENTY_CHANGELOG];
+  if (version === TWO_POINT_TWO_NINETEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_NINETEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_EIGHTEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_EIGHTEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_SEVENTEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_SEVENTEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_SIXTEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_SIXTEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_FOURTEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_FOURTEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTEEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTEEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_TWELVE_CHANGELOG.version)
+    return [TWO_POINT_TWO_TWELVE_CHANGELOG];
+  if (version === TWO_POINT_TWO_ELEVEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_ELEVEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_TEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_TEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_NINE_CHANGELOG.version)
+    return [TWO_POINT_TWO_NINE_CHANGELOG];
+  if (version === TWO_POINT_TWO_EIGHT_CHANGELOG.version)
+    return [TWO_POINT_TWO_EIGHT_CHANGELOG];
+  if (version === TWO_POINT_TWO_SEVEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_SEVEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_ZERO_CHANGELOG.version)
+    return [TWO_POINT_TWO_ZERO_CHANGELOG];
+  if (version === TWO_POINT_ONE_ZERO_CHANGELOG.version)
+    return [TWO_POINT_ONE_ZERO_CHANGELOG];
+  if (version === TWO_POINT_ZERO_CHANGELOG.version)
+    return [TWO_POINT_ZERO_CHANGELOG];
+  if (/^2\.2\.[1-6]$/.test(version)) return [];
+  if (/^2\.1\.(?:[1-9]|10)$/.test(version)) return [];
+  if (/^2\.0\.(?:[1-9]|1[0-2])$/.test(version)) return [];
+  if (isMergedOnePointRelease(version)) return [];
+  return CHANGELOG.filter((entry) => entry.version === version);
 }
 
 export function allChangelog(): ChangelogEntry[] {
@@ -810,5 +857,5 @@ export function allChangelog(): ChangelogEntry[] {
     TWO_POINT_ONE_ZERO_CHANGELOG,
     TWO_POINT_ZERO_CHANGELOG,
     ...CHANGELOG.filter((entry) => !isMergedOnePointRelease(entry.version)),
-  ]
+  ];
 }
