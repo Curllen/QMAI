@@ -249,6 +249,16 @@ describe("chat-panel agent reference integration", () => {
     expect(source).not.toContain("await streamChat(")
   })
 
+  it("clears confirmed chapter blueprint with finally after followup send", () => {
+    const sendIndex = source.indexOf('handleSendRef.current(followupText, [], "执行已确认计划")')
+    const clearIndex = source.indexOf("confirmedBlueprintRef.current = null", sendIndex)
+    const finallyIndex = source.lastIndexOf("finally", clearIndex)
+
+    expect(sendIndex).toBeGreaterThan(-1)
+    expect(clearIndex).toBeGreaterThan(sendIndex)
+    expect(finallyIndex).toBeGreaterThan(sendIndex)
+  })
+
   it("routes continue-unfinished through the ReAct send path with compact display text", () => {
     const continueIndex = source.indexOf("const handleContinueUnfinished")
 

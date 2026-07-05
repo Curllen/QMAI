@@ -49,7 +49,7 @@ const nextChapterPlanContent = `# 下一章计划
 
 ## 核心目标
 
-在本章正文动笔之前，生成一份结构化、可执行的章节蓝图，明确本章要写什么、为什么写、怎么写。这不仅是提纲，更是对"这一章存在的理由"的确认。
+在本章正文动笔之前，生成一份结构化、可执行的章节计划，明确本章要写什么、为什么写、怎么写。这不仅是提纲，更是对"这一章存在的理由"的确认。
 
 ## 适用场景
 
@@ -1611,7 +1611,7 @@ export const DEFAULT_BUILTIN_WRITING_SKILLS: UserSkill[] = [
   normalizeUserSkill({
     id: "builtin:next-chapter-plan",
     name: "下一章计划",
-    description: "生成包含目标、冲突、人物、事件、情绪、伏笔、钩子的完整章节蓝图。",
+    description: "生成包含目标、冲突、人物、事件、情绪、伏笔、钩子的完整章节计划。",
     kind: ["planning"],
     stages: ["planning"],
     modes: ["standard", "strict"],

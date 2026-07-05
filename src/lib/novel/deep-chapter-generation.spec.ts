@@ -142,6 +142,351 @@ describe("runDeepChapterGeneration", () => {
     expect(finalPolishPrompt).toContain("中文小说去 AI 味补充规则")
     expect(finalPolishPrompt).toContain("角色声线")
     expect(finalPolishPrompt).toContain("不要按非虚构文章规则硬删副词")
+    expect(planningPrompt).not.toContain("用户已确认的章节计划")
+    expect(planningPrompt).toContain("章节节奏曲线")
+    expect(planningPrompt).toContain("对话目标")
+    expect(planningPrompt).toContain("爽点/期待点")
+    expect(draftPrompt).toContain("不要写成说明文")
+    expect(draftPrompt).toContain("动作、对话、场景细节、人物反应")
+    expect(draftPrompt).toContain("开头")
+    expect(draftPrompt).toContain("结尾")
+  })
+
+  it("injects the confirmed chapter plan into the brief prompt as an execution summary", () => {
+    const plan = "维度四·场景序列编排：1. 雨夜旧屋揭示线索 2. 屋外脚步声悬念收束"
+    const promptWithPlan = buildDeepChapterBriefPrompt(
+      "",
+      "上下文包内容",
+      "生成第3章",
+      3,
+      undefined,
+      undefined,
+      plan,
+    )
+    const promptWithoutPlan = buildDeepChapterBriefPrompt("", "上下文包内容", "生成第3章", 3)
+
+    expect(promptWithPlan).toContain("用户已确认的章节计划执行摘要")
+    expect(promptWithPlan).toContain(plan)
+    expect(promptWithPlan).toContain("逐条展开 S1/S2/S3")
+    expect(promptWithPlan).toContain("不得合并、跳过或调换顺序")
+    expect(promptWithPlan).toContain("不得推翻")
+    expect(promptWithPlan).not.toContain("蓝图")
+    expect(promptWithoutPlan).not.toContain("用户已确认的章节计划")
+  })
+
+  it("runs a final plan compliance check with the compact execution summary when a confirmed plan is provided", async () => {
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async (
+        _config: LlmConfig,
+        _plan: string,
+        _content: string,
+        _signal?: AbortSignal,
+      ) => "履约度：基本符合"),
+    }
+    const events: Array<{ name: string; result?: string }> = []
+    const fullPlan = [
+      Array.from({ length: 80 }, (_, index) => `普通说明 ${index}：这行只是解释计划来源，不是执行约束。`).join("\n"),
+      "维度四·场景序列编排：旧屋揭示，章末脚步声钩子。",
+      "维度六·伏笔与边界禁忌：推进锈钥匙，不提前揭露旧屋主人。",
+      "维度七·节奏、字数与结尾钩子：结尾停在门外第二个人影。",
+    ].join("\n")
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: fullPlan,
+      },
+      { onWorkflowEvent: (event) => events.push(event) },
+      deps,
+    )
+
+    const compliancePlanArg = vi.mocked(deps.runChapterPlanComplianceCheck).mock.calls[0]?.[1] ?? ""
+    expect(deps.runChapterPlanComplianceCheck).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.stringContaining("用户已确认的章节计划执行摘要"),
+      expect.stringContaining("最终去AI味正文"),
+      undefined,
+    )
+    expect(compliancePlanArg.length).toBeLessThan(fullPlan.length)
+    expect(compliancePlanArg).toContain("旧屋揭示")
+    expect(compliancePlanArg).toContain("锈钥匙")
+    expect(result.planCompliance).toBe("履约度：基本符合")
+    expect(events.some((event) => event.name === "chapter_plan_compliance")).toBe(true)
+  })
+
+  it("publishes final content before waiting for blueprint compliance", async () => {
+    const order: string[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => {
+        order.push("compliance-start")
+        await Promise.resolve()
+        order.push("compliance-end")
+        return "履约度：基本符合"
+      }),
+    }
+
+    await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末脚步声钩子。",
+      },
+      { onFinalContent: () => order.push("final-content") },
+      deps,
+    )
+
+    expect(order).toEqual(["final-content", "compliance-start", "compliance-end"])
+  })
+
+  it("forwards the stop signal into plan compliance", async () => {
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => "履约度：基本符合"),
+    }
+    const controller = new AbortController()
+
+    await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末脚步声钩子。",
+      },
+      {},
+      deps,
+      controller.signal,
+    )
+
+    expect(deps.runChapterPlanComplianceCheck).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.stringContaining("确认计划：旧屋揭示，章末脚步声钩子。"),
+      expect.stringContaining("最终去AI味正文"),
+      controller.signal,
+    )
+  })
+
+  it("repairs final content once when plan compliance finds actionable deviations", async () => {
+    const repairedContent = chapterText("计划偏离返修后正文", 3000)
+    const finalContents: string[] = []
+    const activityEvents: AgentActivityEvent[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => JSON.stringify({
+        status: "partial_deviation",
+        summary: "结尾钩子缺失。",
+        deviations: [{
+          point: "章末钩子",
+          evidence: "正文没有门外第二个人影。",
+          suggestion: "只在结尾补入门外第二个人影，导向下一章。",
+        }],
+      })),
+      runChapterPlanDeviationRepair: vi.fn(async (
+        _config: LlmConfig,
+        plan: string,
+        content: string,
+        compliance: unknown,
+        _signal?: AbortSignal,
+      ) => {
+        expect(plan).toContain("用户已确认的章节计划执行摘要")
+        expect(content).toContain("最终去AI味正文")
+        expect(String(compliance)).toContain("章末钩子")
+        return repairedContent
+      }),
+    }
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末必须出现门外第二个人影。",
+      },
+      {
+        onFinalContent: (content) => finalContents.push(content),
+        onActivityEvent: (event) => activityEvents.push(event),
+      },
+      deps,
+    )
+
+    expect(deps.runChapterPlanDeviationRepair).toHaveBeenCalledOnce()
+    expect(result.finalContent).toBe(repairedContent)
+    expect(result.revised).toBe(true)
+    expect(finalContents[0]).toContain("最终去AI味正文")
+    expect(finalContents[finalContents.length - 1]).toBe(repairedContent)
+    const complianceEvent = activityEvents.find((event) => event.stageId === "plan_compliance")
+    expect(complianceEvent?.content).toContain("履约状态：部分偏离")
+    expect(complianceEvent?.content).toContain("偏离点数量：1")
+    expect(complianceEvent?.content).toContain("处理决定：触发轻量返修")
+    expect(complianceEvent?.content).toContain("章末钩子")
+    const repairEvent = activityEvents.find((event) => event.stageId === "plan_deviation_repair")
+    expect(repairEvent?.content).toContain("正文已更新")
+    expect(repairEvent?.content).toContain("返修前")
+    expect(repairEvent?.content).toContain("返修后")
+  })
+
+  it("does not repair final content when plan compliance is mostly compliant", async () => {
+    const activityEvents: AgentActivityEvent[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => "履约度：基本符合"),
+      runChapterPlanDeviationRepair: vi.fn(async () => chapterText("不应出现的返修正文", 3000)),
+    }
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末脚步声钩子。",
+      },
+      { onActivityEvent: (event) => activityEvents.push(event) },
+      deps,
+    )
+
+    expect(deps.runChapterPlanDeviationRepair).not.toHaveBeenCalled()
+    expect(result.finalContent).toContain("最终去AI味正文")
+    const complianceEvent = activityEvents.find((event) => event.stageId === "plan_compliance")
+    expect(complianceEvent?.content).toContain("履约状态：基本符合")
+    expect(complianceEvent?.content).toContain("处理决定：无需返修")
+  })
+
+  it("keeps the original final content when plan deviation repair returns abnormal content", async () => {
+    const finalContents: string[] = []
+    const activityEvents: AgentActivityEvent[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => JSON.stringify({
+        status: "clear_deviation",
+        summary: "章末钩子缺失。",
+        deviations: [{
+          point: "章末钩子",
+          evidence: "正文没有门外第二个人影。",
+          suggestion: "只在结尾补入门外第二个人影。",
+        }],
+      })),
+      runChapterPlanDeviationRepair: vi.fn(async () => "短正文"),
+    }
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末必须出现门外第二个人影。",
+      },
+      {
+        onFinalContent: (content) => finalContents.push(content),
+        onActivityEvent: (event) => activityEvents.push(event),
+      },
+      deps,
+    )
+
+    expect(deps.runChapterPlanDeviationRepair).toHaveBeenCalledOnce()
+    expect(result.finalContent).toContain("最终去AI味正文")
+    expect(result.finalContent).not.toBe("短正文")
+    expect(finalContents).toHaveLength(1)
+    const repairEvent = activityEvents.find((event) => event.stageId === "plan_deviation_repair")
+    expect(repairEvent?.content).toContain("返修结果异常，已保留原正文")
+    expect(repairEvent?.content).toContain("原因：返修后正文明显变短")
+  })
+
+  it("keeps the original final content when plan deviation repair becomes too long", async () => {
+    const activityEvents: AgentActivityEvent[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => JSON.stringify({
+        status: "partial_deviation",
+        summary: "缺少一个结尾动作。",
+        deviations: [{ point: "结尾动作", evidence: "未出现人影。", suggestion: "补入人影。" }],
+      })),
+      runChapterPlanDeviationRepair: vi.fn(async () => chapterText("返修异常长正文", 5200)),
+    }
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末必须出现门外第二个人影。",
+      },
+      { onActivityEvent: (event) => activityEvents.push(event) },
+      deps,
+    )
+
+    expect(result.finalContent).toContain("最终去AI味正文")
+    const repairEvent = activityEvents.find((event) => event.stageId === "plan_deviation_repair")
+    expect(repairEvent?.content).toContain("原因：返修后正文明显变长")
+  })
+
+  it("keeps the original final content when plan deviation repair drops the original main content", async () => {
+    const activityEvents: AgentActivityEvent[] = []
+    const unrelatedRepair = Array.from({ length: 90 }, (_, index) =>
+      `全新段落${index}：这里改写成完全不同的事件、地点、人物和线索，绕开旧屋、钥匙、脚步声。`,
+    ).join("\n")
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => JSON.stringify({
+        status: "partial_deviation",
+        summary: "缺少一个结尾动作。",
+        deviations: [{ point: "结尾动作", evidence: "未出现人影。", suggestion: "补入人影。" }],
+      })),
+      runChapterPlanDeviationRepair: vi.fn(async () => unrelatedRepair),
+    }
+
+    const result = await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末必须出现门外第二个人影。",
+      },
+      { onActivityEvent: (event) => activityEvents.push(event) },
+      deps,
+    )
+
+    expect(result.finalContent).toContain("最终去AI味正文")
+    const repairEvent = activityEvents.find((event) => event.stageId === "plan_deviation_repair")
+    expect(repairEvent?.content).toContain("原因：返修后未保留原正文主要内容")
+  })
+
+  it("explains why unknown plan compliance results do not trigger repair", async () => {
+    const activityEvents: AgentActivityEvent[] = []
+    const deps = {
+      ...createDeps(),
+      runChapterPlanComplianceCheck: vi.fn(async () => "模型输出混乱，未给出履约度。"),
+      runChapterPlanDeviationRepair: vi.fn(async () => chapterText("不应出现的返修正文", 3000)),
+    }
+
+    await runDeepChapterGeneration(
+      {
+        projectPath: "E:/Novel",
+        userRequest: "生成第3章",
+        chapterNumber: 3,
+        llmConfig,
+        planBlueprint: "确认计划：旧屋揭示，章末脚步声钩子。",
+      },
+      { onActivityEvent: (event) => activityEvents.push(event) },
+      deps,
+    )
+
+    expect(deps.runChapterPlanDeviationRepair).not.toHaveBeenCalled()
+    const complianceEvent = activityEvents.find((event) => event.stageId === "plan_compliance")
+    expect(complianceEvent?.content).toContain("履约状态：未知")
+    expect(complianceEvent?.content).toContain("处理决定：未触发返修")
+    expect(complianceEvent?.content).toContain("原因：模型未按结构返回，已避免误改正文")
   })
 
   it("enables the multi-task generation loop for all chapter writing routes", () => {

@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { X, Check, SkipForward, Edit3, ListChecks } from "lucide-react"
+export { buildChapterPlanSelfCheckPrompt } from "@/lib/novel/chapter-plan-self-check"
 
 export const CHAPTER_PLAN_MARKER_START = "<!-- chapter_plan -->"
 export const CHAPTER_PLAN_MARKER_END = "<!-- /chapter_plan -->"
@@ -20,7 +21,14 @@ export function extractChapterPlan(fullContent: string): { plan: string; body: s
 }
 
 export function buildPlanConfirmMessage(plan: string): string {
-  return `${CHAPTER_PLAN_CONFIRMED_PREFIX}，现在进入执行阶段。请按以下计划写正文。不要再次输出计划，不要再次等待确认，直接输出正文。\n\n=== 已确认的章节计划 ===\n${plan}`
+  return [
+    `${CHAPTER_PLAN_CONFIRMED_PREFIX}，现在进入执行阶段。`,
+    "请调用 run_chapter_workflow 工具生成正文，并把下面这份已确认的章节计划原文作为 planBlueprint 参数完整传入。",
+    "不要再次输出计划，不要再次等待确认，不要把计划改写或省略，直接进入正文生成。",
+    "",
+    "=== 已确认的章节计划 ===",
+    plan,
+  ].join("\n")
 }
 
 export function buildPlanSkipMessage(): string {
@@ -40,6 +48,8 @@ interface ChapterPlanConfirmDialogProps {
   onConfirm: () => void
   onSkip: () => void
   onModify?: (modifiedPlan: string) => void
+  onSelfCheck?: (planContent: string) => Promise<string> | string
+  onRevisePlan?: (planContent: string, selfCheckResult: string) => Promise<string> | string
   onCancel: () => void
 }
 
@@ -50,10 +60,27 @@ export function ChapterPlanConfirmDialog({
   onConfirm,
   onSkip,
   onModify,
+  onSelfCheck,
+  onRevisePlan,
   onCancel,
 }: ChapterPlanConfirmDialogProps) {
   const [editing, setEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(planContent)
+  const [selfChecking, setSelfChecking] = useState(false)
+  const [selfCheckResult, setSelfCheckResult] = useState("")
+  const [selfCheckError, setSelfCheckError] = useState("")
+  const [revisingPlan, setRevisingPlan] = useState(false)
+  const [reviseError, setReviseError] = useState("")
+  const selfCheckRequestRef = useRef(0)
+
+  useEffect(() => {
+    selfCheckRequestRef.current += 1
+    setSelfChecking(false)
+    setSelfCheckResult("")
+    setSelfCheckError("")
+    setRevisingPlan(false)
+    setReviseError("")
+  }, [open, planContent])
 
   const handleStartEdit = useCallback(() => {
     setEditedContent(planContent)
@@ -65,6 +92,44 @@ export function ChapterPlanConfirmDialog({
     onModify(editedContent)
     setEditing(false)
   }, [editedContent, onModify])
+
+  const handleSelfCheck = useCallback(async () => {
+    if (!onSelfCheck) return
+    const requestId = selfCheckRequestRef.current + 1
+    selfCheckRequestRef.current = requestId
+    setSelfChecking(true)
+    setSelfCheckResult("")
+    setSelfCheckError("")
+    try {
+      const targetPlan = editing ? editedContent : planContent
+      const result = await onSelfCheck(targetPlan)
+      if (selfCheckRequestRef.current !== requestId) return
+      setSelfCheckResult(result.trim() || "自检完成，未返回具体结果。")
+    } catch (error) {
+      if (selfCheckRequestRef.current !== requestId) return
+      setSelfCheckError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (selfCheckRequestRef.current === requestId) {
+        setSelfChecking(false)
+      }
+    }
+  }, [editedContent, editing, onSelfCheck, planContent])
+
+  const handleRevisePlan = useCallback(async () => {
+    if (!onRevisePlan || !selfCheckResult.trim()) return
+    setRevisingPlan(true)
+    setReviseError("")
+    try {
+      const targetPlan = editing ? editedContent : planContent
+      const revised = await onRevisePlan(targetPlan, selfCheckResult)
+      setEditedContent(revised.trim() || targetPlan)
+      setEditing(true)
+    } catch (error) {
+      setReviseError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRevisingPlan(false)
+    }
+  }, [editedContent, editing, onRevisePlan, planContent, selfCheckResult])
 
   if (!open) return null
 
@@ -98,6 +163,24 @@ export function ChapterPlanConfirmDialog({
               {planContent}
             </div>
           )}
+          {(selfChecking || selfCheckResult || selfCheckError) && (
+            <div className="mt-3 rounded-md border bg-background p-3 text-sm">
+              <div className="mb-2 font-medium">计划自检结果</div>
+              {selfChecking && <div className="text-muted-foreground">正在自检计划...</div>}
+              {selfCheckResult && <div className="whitespace-pre-wrap leading-relaxed">{selfCheckResult}</div>}
+              {selfCheckError && <div className="text-destructive">自检失败：{selfCheckError}</div>}
+              {reviseError && <div className="mt-2 text-destructive">修订失败：{reviseError}</div>}
+              {onRevisePlan && selfCheckResult && (
+                <button
+                  onClick={handleRevisePlan}
+                  disabled={revisingPlan}
+                  className="mt-3 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {revisingPlan ? "修订中..." : "按自检建议修正"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t px-4 py-3">
@@ -126,6 +209,16 @@ export function ChapterPlanConfirmDialog({
                   修改计划
                 </button>
               )
+            )}
+            {onSelfCheck && (
+              <button
+                onClick={handleSelfCheck}
+                disabled={selfChecking}
+                className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ListChecks className="h-4 w-4" />
+                {selfChecking ? "自检中..." : "自检计划"}
+              </button>
             )}
           </div>
           <div className="flex gap-2">
