@@ -3,6 +3,7 @@ export const DEFAULT_SIDEBAR_NAV_ORDER = [
   "sources",
   "graph",
   "lint",
+  "dismantling",
   "soul",
   "skillLibrary",
   "bookAnalysis",

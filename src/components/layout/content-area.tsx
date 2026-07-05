@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react"
+﻿import { Suspense, lazy } from "react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { WritingWorkspace } from "./writing-workspace"
 import { SearchView } from "@/components/search/search-view"
@@ -47,6 +47,11 @@ const ReviewCenterView = lazy(async () => {
 const BookAnalysisView = lazy(async () => {
   const mod = await import("@/components/novel/book-analysis-view")
   return { default: mod.BookAnalysisView }
+})
+
+const DismantlingView = lazy(async () => {
+  const mod = await import("@/components/novel/dismantling-view")
+  return { default: mod.DismantlingView }
 })
 
 const StorySimulationView = lazy(async () => {
@@ -129,6 +134,13 @@ export function ContentArea() {
         content = (
           <Suspense fallback={<LoadingView />}>
             <BookAnalysisView />
+          </Suspense>
+        )
+        break
+      case "dismantling":
+        content = (
+          <Suspense fallback={<LoadingView />}>
+            <DismantlingView />
           </Suspense>
         )
         break

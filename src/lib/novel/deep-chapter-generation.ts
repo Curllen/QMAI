@@ -14,7 +14,6 @@ import {
   withReasoningDisabled,
 } from "@/lib/reasoning-retry";
 import { computeNovelContextTokenBudget } from "@/lib/context-budget";
-import { resolveNovelModel } from "./model-resolver";
 import {
   buildContextPack,
   contextPackToPrompt,
@@ -411,7 +410,6 @@ export async function runDeepChapterGeneration(
   const workflowProfile = resolveChapterWorkflowProfile(input.aiWorkflowMode);
   const lengthSpec = resolveCurrentChapterLengthSpec();
   const novelConfig = useWikiStore.getState().novelConfig;
-  const deAiConfig = resolveNovelModel(input.llmConfig, novelConfig, "deAi");
   const { loadSmartDeAiSkill } = await import("./de-ai-adapter");
   const workflowBaseParams = {
     mode: workflowProfile.mode,
