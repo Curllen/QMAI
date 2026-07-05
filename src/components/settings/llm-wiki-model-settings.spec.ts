@@ -35,6 +35,7 @@ describe("QMAI model settings", () => {
       "google",
       "azure",
       "deepseek",
+      "atlascloud",
       "groq",
       "xai",
       "nvidia-nim",

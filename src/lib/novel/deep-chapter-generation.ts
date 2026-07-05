@@ -1,6 +1,7 @@
 ﻿import type { LlmConfig } from "@/stores/wiki-store"
 import { streamChat, type ChatMessage, type RequestOverrides, type StreamCallbacks } from "@/lib/llm-client"
 import { useWikiStore } from "@/stores/wiki-store"
+import { computeNovelContextTokenBudget } from "@/lib/context-budget"
 import { resolveNovelModel } from "./model-resolver"
 import { buildContextPack, contextPackToPrompt, type ContextPack } from "./context-engine"
 import { reviewChapter, type NovelReviewResult } from "./review-adapter"
@@ -83,6 +84,37 @@ const REPEAT_CHECK_MIN_CHARS = 600
 const REPEAT_WINDOW_CHARS = 120
 const REPEAT_HIT_LIMIT = 3
 const USER_ABORT_MESSAGE = "已停止生成"
+/** Legacy deep-chapter context budget (tokens). Kept as the upper bound;
+ *  computeNovelContextTokenBudget clamps it down for small context windows. */
+const DEEP_CHAPTER_CONTEXT_TOKEN_BUDGET = 32000
+/** chars/token approximation used to convert the token budget to characters
+ *  for the outline cap (mirrors context-budget.ts / contextPackToPrompt). */
+const DEEP_CHAPTER_CHARS_PER_TOKEN = 4
+/** The mandatory outline may consume at most this share of the total context
+ *  budget. The remainder is left for memory/settings/search context so the
+ *  outline can never crowd the whole window out on its own. */
+const DEEP_CHAPTER_OUTLINE_MAX_FRAC = 0.7
+/** Floor (tokens) for the non-outline context so a huge outline still leaves
+ *  some room for memory/settings/search hits. */
+const DEEP_CHAPTER_REST_TOKEN_FLOOR = 2000
+
+/**
+ * Trim the (mandatory) outline to a character cap so it can never overflow the
+ * context window on its own. Keeps the head — which carries the overall
+ * structure — and drops the tail with an explicit truncation marker so the
+ * model knows the outline was cut. Cuts on a line boundary when possible.
+ */
+function capOutlineToBudget(outline: string, charCap: number): string {
+  const trimmed = outline.trim()
+  if (charCap <= 0 || trimmed.length <= charCap) return trimmed
+
+  const marker = "\n\n【大纲过长，已按上下文窗口截断，仅保留前部】"
+  const room = Math.max(0, charCap - marker.length)
+  let head = trimmed.slice(0, room)
+  const lastBreak = head.lastIndexOf("\n")
+  if (lastBreak > room * 0.6) head = head.slice(0, lastBreak)
+  return `${head.trimEnd()}${marker}`
+}
 
 export function shouldUseDeepChapterGeneration(_route: TaskRouteResult | null, enabled: boolean): boolean {
   return enabled
@@ -194,8 +226,18 @@ export async function runDeepChapterGeneration(
   // 阶段1后：加载智能skill（传递contextPack用于场景检测）
   customDeAiSkill = await loadSmartDeAiSkill(input.projectPath, input.userRequest, contextPack)
 
+  // 大纲与其余上下文共用同一窗口预算（派生自 maxContextSize）。大纲优先，
+  // 但设有上限占比，避免其独占整个窗口；剩余额度再分给记忆/设定/检索上下文。
+  const totalContextTokenBudget = computeNovelContextTokenBudget(
+    input.llmConfig.maxContextSize,
+    DEEP_CHAPTER_CONTEXT_TOKEN_BUDGET,
+  )
+  const totalContextCharBudget = totalContextTokenBudget * DEEP_CHAPTER_CHARS_PER_TOKEN
+  const outlineCharCap = Math.floor(totalContextCharBudget * DEEP_CHAPTER_OUTLINE_MAX_FRAC)
+  const outlineText = capOutlineToBudget(contextPack.outline ?? "", outlineCharCap)
+
   // 独立提取大纲，不通过contextPackToPrompt
-  const outlinePrompt = contextPack.outline
+  const outlinePrompt = outlineText
     ? [
         "# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "# 【强制遵守】作品完整大纲",
@@ -205,17 +247,26 @@ export async function runDeepChapterGeneration(
         "你必须严格遵守大纲中的情节发展、角色行为、关键事件、故事走向。",
         "大纲内容必须完整体现在生成的章节中，不可偏离。",
         "",
-        contextPack.outline,
+        outlineText,
         "",
         "# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
       ].join("\n")
     : ""
 
-  // 其他上下文可以进行token预算管理，但大纲已被排除
+  // 其余上下文的预算 = 总预算 − 大纲已占用（换算成 token），并保留下限。
+  // 这样「大纲 + 其余上下文」整体不超过窗口派生的总预算。
+  const restContextTokenBudget = Math.max(
+    DEEP_CHAPTER_REST_TOKEN_FLOOR,
+    totalContextTokenBudget - Math.ceil(outlineText.length / DEEP_CHAPTER_CHARS_PER_TOKEN),
+  )
   const contextPrompt = [
     previousChaptersAnalysis ? `## 前情分析\n\n${previousChaptersAnalysis}` : "",
-    deps.contextPackToPrompt(contextPack, 32000, { excludeOutline: true }),
+    deps.contextPackToPrompt(
+      contextPack,
+      restContextTokenBudget,
+      { excludeOutline: true },
+    ),
     input.dismantlingReferenceDirective,
   ].filter(Boolean).join("\n\n")
 

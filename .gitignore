@@ -38,6 +38,8 @@ src/test-helpers/*
 !src/lib/web-fs.spec.ts
 !src/lib/graph-relevance.spec.ts
 !src/lib/chat-request-budget.test.ts
+!src/lib/context-budget.test.ts
+!src/lib/ingest.prompt.test.ts
 
 # === 根目录文档（仅本地保留）===
 /docs/
