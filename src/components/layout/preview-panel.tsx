@@ -2,7 +2,7 @@ import { type CSSProperties, Suspense, lazy, useEffect, useCallback, useRef, use
 import { useTranslation } from "react-i18next"
 import { Check, MoreHorizontal, X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
-import { resolveDefaultModel, resolveNovelModel } from "@/lib/novel/model-resolver"
+import { resolveDefaultModel, resolveNovelModel, formatResolvedModelLabel } from "@/lib/novel/model-resolver"
 import type { FinalChapterSavePhase } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { deleteFile, fileExists, readFile, writeFile, writeFileAtomic, listDirectory } from "@/commands/fs"
@@ -192,6 +192,7 @@ export function PreviewPanel() {
   const [deAiSourceContent, setDeAiSourceContent] = useState("")
   const [deAiCandidateContent, setDeAiCandidateContent] = useState("")
   const [deAiSkillName, setDeAiSkillName] = useState("")
+  const [deAiModelName, setDeAiModelName] = useState("")
   const [deAiSkillMemoryWarning, setDeAiSkillMemoryWarning] = useState("")
   const [selectionTransformOpen, setSelectionTransformOpen] = useState(false)
   const [selectionTransformAction, setSelectionTransformAction] = useState<ChapterSelectionAction | null>(null)
@@ -199,6 +200,7 @@ export function PreviewPanel() {
   const [selectionTransformSourceContent, setSelectionTransformSourceContent] = useState("")
   const [selectionTransformCandidateContent, setSelectionTransformCandidateContent] = useState("")
   const [selectionTransformSkillName, setSelectionTransformSkillName] = useState("")
+  const [selectionTransformModelName, setSelectionTransformModelName] = useState("")
   const [deAiSkillPickerOpen, setDeAiSkillPickerOpen] = useState(false)
   const [deAiSkillPickerPosition, setDeAiSkillPickerPosition] = useState<CSSProperties>(() => getDeAiSkillPickerPosition())
   const [chapterDeAiSkillId, setChapterDeAiSkillId] = useState<string | null | undefined>(undefined)
@@ -390,7 +392,9 @@ export function PreviewPanel() {
     setSelectionTransformOpen(false)
     setDeAiPreviewOpen(false)
     setDeAiSkillName("")
+    setDeAiModelName("")
     setSelectionTransformSkillName("")
+    setSelectionTransformModelName("")
     setLoadedFilePath(null)
 
     if (!selectedFile) {
@@ -949,12 +953,14 @@ export function PreviewPanel() {
     setDeAiSkillName(skillName)
     const state = useWikiStore.getState()
     const llmConfig = resolveNovelModel(state.llmConfig, state.novelConfig, "deAi")
+    const modelLabel = formatResolvedModelLabel(llmConfig, state.providerConfigs)
+    setDeAiModelName(modelLabel)
     if (!hasUsableLlm(llmConfig, state.providerConfigs)) {
       setDeAiProcessing(false)
       setSaveStatus("未配置可用的 AI 模型，无法去AI味")
       return
     }
-    setSaveStatus(formatDeAiStatus(`去AI味处理中，使用 Skill：${skillName}...`))
+    setSaveStatus(formatDeAiStatus(`去AI味处理中，使用 Skill：${skillName}，模型：${modelLabel}...`))
     let result = ""
     try {
       await streamChat(
@@ -969,7 +975,7 @@ export function PreviewPanel() {
             setDeAiCandidateContent(result)
             setDeAiPreviewOpen(true)
             setDeAiProcessing(false)
-            setSaveStatus(formatDeAiStatus(`本次使用 Skill：${skillName}`))
+            setSaveStatus(formatDeAiStatus(`本次使用 Skill：${skillName}，模型：${modelLabel}`))
           },
           onError: (error) => {
             console.error("去AI味处理失败:", error)
@@ -986,6 +992,7 @@ export function PreviewPanel() {
   const handleDeAiApply = useCallback(() => {
     setDeAiPreviewOpen(false)
     setDeAiSkillName("")
+    setDeAiModelName("")
     handleSave(replaceWholeChapterBody(fileContent, deAiCandidateContent))
   }, [deAiCandidateContent, fileContent, handleSave])
 
@@ -1010,6 +1017,7 @@ export function PreviewPanel() {
   const handleDeAiClose = useCallback(() => {
     setDeAiPreviewOpen(false)
     setDeAiSkillName("")
+    setDeAiModelName("")
   }, [])
 
   const runSelectionTransform = useCallback(async (
@@ -1033,9 +1041,11 @@ export function PreviewPanel() {
 
     const actionFile = selectedFileRef.current
     const actionLabel = action === "polish" ? "AI润色" : "去AI味"
+    const modelLabel = formatResolvedModelLabel(llmConfig, state.providerConfigs)
     setSelectionTransformSkillName(action === "de-ai" ? skillName ?? "" : "")
+    setSelectionTransformModelName(action === "de-ai" ? modelLabel : "")
     const transformStatus = action === "de-ai" && skillName
-      ? `${actionLabel}处理中，使用 Skill：${skillName}...`
+      ? `${actionLabel}处理中，使用 Skill：${skillName}，模型：${modelLabel}...`
       : `${actionLabel}处理中...`
     setSaveStatus(action === "de-ai" ? formatDeAiStatus(transformStatus) : transformStatus)
 
@@ -1645,6 +1655,7 @@ export function PreviewPanel() {
         sourceContent={deAiSourceContent}
         candidateContent={deAiCandidateContent}
         skillName={deAiSkillName}
+        modelName={deAiModelName}
         onApply={handleDeAiApply}
         onSaveDraft={() => void handleDeAiSaveDraft()}
         onClose={handleDeAiClose}
@@ -1653,7 +1664,7 @@ export function PreviewPanel() {
         open={selectionTransformOpen}
         title={selectionTransformAction === "polish" ? "AI润色预览" : "去AI味预览"}
         description={selectionTransformAction === "de-ai" && selectionTransformSkillName
-          ? `本次使用 Skill：${selectionTransformSkillName}。确认后会替换当前选中的正文片段。`
+          ? `本次使用 Skill：${selectionTransformSkillName}${selectionTransformModelName ? `，模型：${selectionTransformModelName}` : ""}。确认后会替换当前选中的正文片段。`
           : "确认后会替换当前选中的正文片段。"}
         sourceLabel="原文片段"
         candidateLabel={selectionTransformAction === "polish" ? "润色结果" : "去AI味结果"}
