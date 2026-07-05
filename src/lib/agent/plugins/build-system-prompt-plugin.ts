@@ -1,7 +1,8 @@
   import type { PrePlugin, PrePluginInput, PrePluginOutput } from "../pipeline"
-  import { buildTaskDirective } from "@/lib/novel/task-router"
-  import { buildSelectedSkillsPrompt } from "./select-skills-plugin"
-  import type { AiWorkflowMode } from "../workflow-mode"
+import { buildTaskDirective } from "@/lib/novel/task-router"
+import { buildSelectedSkillsPrompt } from "./select-skills-plugin"
+import type { AiWorkflowMode } from "../workflow-mode"
+import { WRITING_INTENTS } from "../plan-execute-policy"
 
   export interface BuildSystemPromptPluginDeps {
   baseSystemPrompt?: string
@@ -38,8 +39,7 @@ export function createBuildSystemPromptPlugin(deps: BuildSystemPromptPluginDeps 
 
         if (input.planExecuteEnabled && input.aiWorkflowMode) {
           const routeForPlan = input.effectiveTaskRoute || input.taskRoute
-          const isWritingTask = routeForPlan?.intent === "write_chapter" ||
-            routeForPlan?.intent === "continue_chapter"
+          const isWritingTask = routeForPlan?.intent && WRITING_INTENTS.has(routeForPlan.intent)
           if (isWritingTask) {
             parts.push(buildChapterPlanProtocol(input.aiWorkflowMode))
           }
