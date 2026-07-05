@@ -912,7 +912,12 @@
       "filesWritten": "{{count}} 个文件已写入",
       "filesWrittenWithReview": "{{fileCount}} 个文件已写入，{{reviewCount}} 条审阅项目",
       "noFilesGenerated": "未生成任何文件",
-      "analysisNotAvailable": "（分析结果不可用）"
+      "analysisNotAvailable": "（分析结果不可用）",
+      "consolidatingLongSource": "第 1/2 步：正在合并长文分析...",
+      "resumingLongSourceChunk": "从第 {{current}}/{{total}} 块恢复长文分析...",
+      "analyzingLongSourceChunk": "正在分析长文第 {{current}}/{{total}} 块...",
+      "chunkAnalysisFailed": "分块分析失败：{{message}}",
+      "cancelled": "提取已取消"
     }
   },
   "fileTree": {

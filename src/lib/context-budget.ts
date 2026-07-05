@@ -31,6 +31,8 @@
  * so the LLM has room to actually answer.
  */
 
+import i18n from "@/i18n"
+
 /** Result of `computeContextBudget`. All values are character counts. */
 export interface ContextBudget {
   /** The model's full context window (always populated; falls back
@@ -58,6 +60,39 @@ const PAGE_BUDGET_FRAC = 0.5
 const PER_PAGE_FRAC = 0.3
 const PER_PAGE_FLOOR = 5_000
 
+/** Approximate characters per token the whole budgeting layer assumes.
+ *  `maxContextSize` is expressed in CHARACTERS under the English-ish
+ *  assumption of ~4 chars/token (see contextPackToPrompt). */
+const CHARS_PER_TOKEN = 4
+/** Empirical chars/token for CJK (Chinese/Japanese/Korean) text. CJK is
+ *  ~2.3x denser than English, so the same character budget maps to far
+ *  more tokens and can overflow the model window. */
+const CHARS_PER_TOKEN_CJK = 1.7
+/** Effective-window multiplier for CJK UIs. Shrinks the character budget
+ *  so its TOKEN footprint matches what the English assumption expects,
+ *  keeping token usage comparable across languages. ≈ 0.425. */
+const CJK_CONTEXT_SCALE = CHARS_PER_TOKEN_CJK / CHARS_PER_TOKEN
+
+function isCjkLanguage(lang: string | undefined): boolean {
+  if (!lang) return false
+  const l = lang.toLowerCase()
+  return l.startsWith("zh") || l.startsWith("ja") || l.startsWith("ko")
+}
+
+/**
+ * Window scale for a UI language. English (and any non-CJK language)
+ * returns 1 → zero behavioural change. CJK returns `CJK_CONTEXT_SCALE`
+ * so the character budgets translate to a safe token footprint.
+ *
+ * `lang` defaults to the active i18n language; pass an explicit value
+ * (e.g. in tests) to keep the calculation deterministic.
+ */
+export function contextScaleForLanguage(lang?: string): number {
+  const resolved =
+    lang ?? (typeof i18n?.language === "string" ? i18n.language : undefined)
+  return isCjkLanguage(resolved) ? CJK_CONTEXT_SCALE : 1
+}
+
 /**
  * Compute character budgets from the LLM's max context window.
  *
@@ -66,11 +101,14 @@ const PER_PAGE_FLOOR = 5_000
  */
 export function computeContextBudget(
   maxContextSize: number | undefined,
+  langScale: number = contextScaleForLanguage(),
 ): ContextBudget {
-  const maxCtx =
+  const rawMaxCtx =
     typeof maxContextSize === "number" && maxContextSize > 0
       ? maxContextSize
       : DEFAULT_MAX_CTX
+  const scale = typeof langScale === "number" && langScale > 0 ? langScale : 1
+  const maxCtx = Math.max(1, Math.floor(rawMaxCtx * scale))
 
   const responseReserve = Math.floor(maxCtx * RESPONSE_RESERVE_FRAC)
   const indexBudget = Math.floor(maxCtx * INDEX_BUDGET_FRAC)
@@ -96,4 +134,43 @@ export function computeContextBudget(
     pageBudget,
     maxPageSize,
   }
+}
+
+/** Share of the window the novel context pack may occupy. Chosen so the
+ *  default 200K-char window preserves the legacy 32K-token deep-chapter
+ *  budget while smaller windows are capped down proportionally. */
+const NOVEL_CONTEXT_FRAC = 0.65
+/** Absolute floor so a tiny window still injects some context. */
+const NOVEL_CONTEXT_TOKEN_FLOOR = 4_000
+
+/**
+ * Token budget for the novel context pack (`contextPackToPrompt`).
+ *
+ * The novel context (memory, settings, search hits, character souls) is
+ * the bulk of the writing prompt and must scale with — and never exceed —
+ * the model's context window, leaving room for the chapter output and
+ * prompt scaffolding.
+ *
+ * `requestedTokenBudget` is the user's `novelConfig.contextTokenBudget`
+ * (0 / undefined = "no explicit limit"). When set it is honored but still
+ * clamped to the window-derived cap; when unset the cap itself is used so
+ * the injection is never truly unbounded.
+ *
+ * Unit note: `maxContextSize` is in CHARACTERS while `contextPackToPrompt`
+ * expects a TOKEN budget (~4 chars/token), hence the division.
+ */
+export function computeNovelContextTokenBudget(
+  maxContextSize: number | undefined,
+  requestedTokenBudget?: number,
+  langScale?: number,
+): number {
+  const { maxCtx } = computeContextBudget(maxContextSize, langScale)
+  const cap = Math.max(
+    NOVEL_CONTEXT_TOKEN_FLOOR,
+    Math.floor((maxCtx * NOVEL_CONTEXT_FRAC) / CHARS_PER_TOKEN),
+  )
+  if (requestedTokenBudget && requestedTokenBudget > 0) {
+    return Math.min(requestedTokenBudget, cap)
+  }
+  return cap
 }

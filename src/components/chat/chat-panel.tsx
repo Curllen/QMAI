@@ -26,7 +26,7 @@ import { normalizePath, getFileName, getRelativePath } from "@/lib/path-utils"
 import { refreshProjectState } from "@/lib/project-refresh"
 import { getOutputLanguage, buildLanguageReminder } from "@/lib/output-language"
 import { isGreeting } from "@/lib/greeting-detector"
-import { computeContextBudget } from "@/lib/context-budget"
+import { computeContextBudget, computeNovelContextTokenBudget } from "@/lib/context-budget"
 import { getConversationTabTitle, sortConversationsByUpdatedAt } from "@/lib/workspace-layout"
 import { resolveUserVisibleReasoning } from "@/lib/user-visible-reasoning"
 import { createDeepThinkingStreamRenderer } from "@/lib/deep-thinking-stream"
@@ -898,7 +898,7 @@ export function ChatPanel() {
             }
             }
             const novelConfig = useWikiStore.getState().novelConfig
-            const budget = novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined
+            const budget = computeNovelContextTokenBudget(llmConfig.maxContextSize, novelConfig.contextTokenBudget)
             novelContextPreamble = contextPackToPrompt(contextPack, budget)
             if (goldenDirective) {
               novelContextPreamble = goldenDirective + "\n" + novelContextPreamble
@@ -1346,7 +1346,7 @@ export function ChatPanel() {
              nextChapterAdvice: "",
              revisionDirectives: "",
            }))
-           const budget = novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined
+           const budget = computeNovelContextTokenBudget(llmConfig.maxContextSize, novelConfig.contextTokenBudget)
            const dismantlingDirective = await loadEnabledDismantlingDirective(pp).catch(() => "")
            continuationSystemPrompt = [
              continuationSystemPrompt,

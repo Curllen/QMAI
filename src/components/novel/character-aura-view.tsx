@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { streamChat, type ChatMessage } from "@/lib/llm-client"
 import { buildContextPack, contextPackToPrompt } from "@/lib/novel/context-engine"
+import { computeNovelContextTokenBudget } from "@/lib/context-budget"
 import { resolveNovelModel } from "@/lib/novel/model-resolver"
 import { useWikiStore } from "@/stores/wiki-store"
 import {
@@ -356,7 +357,7 @@ export function CharacterAuraView({ hideSidebar = false }: { hideSidebar?: boole
       }
       const contextPack = await buildContextPack(project.path, auraPreviewTask)
       const previewPack = { ...contextPack, characterAuras: characterAuraPreview }
-      const contextPrompt = contextPackToPrompt(previewPack, novelConfig.contextTokenBudget > 0 ? novelConfig.contextTokenBudget : undefined)
+      const contextPrompt = contextPackToPrompt(previewPack, computeNovelContextTokenBudget(llmConfig.maxContextSize, novelConfig.contextTokenBudget))
       const effectiveConfig = resolveNovelModel(llmConfig, novelConfig, "writing")
       const messages: ChatMessage[] = [
         {
