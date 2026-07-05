@@ -34,6 +34,11 @@ import {
 } from "@/lib/reference/providers"
 import type { ReferenceToken } from "@/lib/reference/types"
 import { runAiChatSession } from "@/lib/agent/ai-chat-session"
+import {
+  runChapterPlanRevision as runChapterPlanRevisionModel,
+  runChapterPlanSelfCheck as runChapterPlanSelfCheckModel,
+  type ChapterPlanSelfCheckContext,
+} from "@/lib/novel/chapter-plan-self-check"
 import type { AgentMessage, AgentRunRecord } from "@/lib/agent/types"
 import type { AgentToolEvent } from "@/lib/agent/types"
 import type { UserSkill } from "@/lib/novel/skill-library"
@@ -58,9 +63,6 @@ import { loadEffectiveDeAiSkillSafely, resolveAvailableDeAiSkills } from "@/lib/
 import { cleanGeneratedChapterContentWithTitle } from "@/lib/novel/chapter-content-cleanup"
 import { normalizePath } from "@/lib/path-utils"
 import { refreshProjectState } from "@/lib/project-refresh"
-import { getOutputLanguage, buildLanguageReminder } from "@/lib/output-language"
-import { isGreeting } from "@/lib/greeting-detector"
-import { computeContextBudget, computeNovelContextTokenBudget } from "@/lib/context-budget"
 import { getConversationTabTitle, sortConversationsByUpdatedAt } from "@/lib/workspace-layout"
 import { saveAiChatModel } from "@/lib/project-store"
 import {
@@ -183,6 +185,19 @@ function appendWebSearchTrace(trace: ContextTrace, event: AgentToolEvent): Conte
           status: "ok" as const, resultCount: 0, sources: [], searchedAt: event.timestamp },
       ],
     },
+  }
+}
+
+function buildChapterPlanSelfCheckContext(pack: ContextPack | null): ChapterPlanSelfCheckContext | undefined {
+  if (!pack) return undefined
+  return {
+    chapterGoal: pack.chapterGoal,
+    characterStates: pack.characterStates,
+    cognitionStates: pack.cognitionStates,
+    foreshadowingStates: pack.foreshadowingStates,
+    timeline: pack.timeline,
+    canonRules: pack.canonRules,
+    mustAvoid: pack.mustAvoid,
   }
 }
 
@@ -752,6 +767,10 @@ export function ChatPanel() {
       project?.name,
     ],
   )
+  // 存储用户最近确认的章节计划，供 run_chapter_workflow 兜底注入，不依赖模型是否自觉传参。
+  const confirmedBlueprintRef = useRef<string | null>(null)
+  const getConfirmedBlueprint = useCallback(() => confirmedBlueprintRef.current ?? undefined, [])
+  const chapterPlanContextRef = useRef<ContextPack | null>(null)
   const {
     config: agentConfig,
     registry: agentRegistry,
@@ -760,7 +779,28 @@ export function ChatPanel() {
     skillConfig: agentSkillConfig,
     writingSkills: agentUserWritingSkills,
     mcpCapabilities: agentMcpCapabilities,
-  } = useAgentConfig(agentSystemPrompt)
+  } = useAgentConfig(agentSystemPrompt, getConfirmedBlueprint)
+  const runChapterPlanSelfCheck = useCallback(async (planContent: string) => {
+    const trimmedPlan = planContent.trim()
+    if (!trimmedPlan) {
+      throw new Error("没有可自检的章节计划")
+    }
+    if (!agentConfig?.llmConfig) {
+      throw new Error("AI 会话模型尚未就绪，无法自检计划")
+    }
+
+    return runChapterPlanSelfCheckModel(
+      agentConfig.llmConfig,
+      trimmedPlan,
+      buildChapterPlanSelfCheckContext(chapterPlanContextRef.current),
+    )
+  }, [agentConfig?.llmConfig])
+  const runChapterPlanRevision = useCallback(async (planContent: string, selfCheckResult: string) => {
+    if (!agentConfig?.llmConfig) {
+      throw new Error("AI 会话模型尚未就绪，无法修订计划")
+    }
+    return runChapterPlanRevisionModel(agentConfig.llmConfig, planContent, selfCheckResult)
+  }, [agentConfig?.llmConfig])
   const agentDeAiSkills = useMemo(
     () => agentSkillConfig
       ? resolveAvailableDeAiSkills(agentSkillConfig).map(deAiSkillToUserSkill)
@@ -1431,6 +1471,7 @@ export function ChatPanel() {
           const fullContent = lastAssistant?.content || record.finalText || ""
           const extracted = extractChapterPlan(fullContent)
           if (extracted) {
+            chapterPlanContextRef.current = contextPack
             const action = await requestChapterPlanConfirm(
               extracted.plan,
               fullContent,
@@ -1439,14 +1480,24 @@ export function ChatPanel() {
             if (action !== "cancel") {
               let followupText: string
               if (action === "confirm") {
+                confirmedBlueprintRef.current = extracted.plan
                 followupText = buildPlanConfirmMessage(extracted.plan)
               } else if (action === "skip") {
                 followupText = buildPlanSkipMessage()
               } else {
+                confirmedBlueprintRef.current = action.modify
                 followupText = buildPlanConfirmMessage(action.modify)
               }
               setActiveConversation(capturedConvId)
-              await handleSendRef.current(followupText, [], "执行已确认计划")
+              try {
+                await handleSendRef.current(followupText, [], "执行已确认计划")
+              } finally {
+                // followup 成功、失败或被中断都清理，避免后续无关调用误注入旧计划。
+                confirmedBlueprintRef.current = null
+                chapterPlanContextRef.current = null
+              }
+            } else {
+              chapterPlanContextRef.current = null
             }
           }
         }
@@ -2039,6 +2090,8 @@ export function ChatPanel() {
             onConfirm={() => closeChapterPlanDialog("confirm")}
             onSkip={() => closeChapterPlanDialog("skip")}
             onModify={(modified) => closeChapterPlanDialog({ modify: modified })}
+            onSelfCheck={runChapterPlanSelfCheck}
+            onRevisePlan={runChapterPlanRevision}
             onCancel={() => closeChapterPlanDialog("cancel")}
           />
         )}

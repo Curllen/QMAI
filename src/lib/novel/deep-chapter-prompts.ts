@@ -67,23 +67,50 @@ export function buildDeepChapterBriefPrompt(
   chapterNumber?: number,
   goldenThreeChapter?: GoldenThreeChapterRequest,
   lengthSpec: ChapterLengthSpec = DEFAULT_CHAPTER_LENGTH_SPEC,
+  planBlueprint?: string,
 ): string {
+  const blueprintSection = planBlueprint && planBlueprint.trim()
+    ? [
+        "",
+        "## 用户已确认的章节计划执行摘要",
+        "以下计划摘要来自用户确认的完整章节计划，是本阶段写作任务书的权威依据。",
+        "严格遵循计划中的场景序列、信息流、伏笔动作、边界禁忌与结尾钩子；不得推翻或新增冲突情节，只补执行细节。",
+        "",
+        planBlueprint.trim(),
+      ].join("\n")
+    : ""
+
+  const planningDirectives = planBlueprint && planBlueprint.trim()
+    ? [
+        "硬性要求：",
+        "1. 只输出任务书，不要写故事片段。",
+        "2. 以用户确认的计划为骨架逐场景落地：必须完成、禁止违背、角色状态、伏笔推进、结尾钩子都与计划一致。",
+        "3. 若计划摘要含 S1/S2/S3，任务书必须逐条展开 S1/S2/S3，不得合并、跳过或调换顺序。",
+        "4. 不新增计划未涵盖的主线推进、伏笔动作或人物变化；计划有缺失时只给最小补全方向。",
+        `5. 后续正文必须按完整章节规划，${chapterLengthBoundary(lengthSpec)}`,
+        "6. 任务书必须覆盖场景推进、冲突升级、人物互动、细节描写、章节节奏曲线、爽点/期待点、对话目标和开头/结尾执行要求。",
+      ].join("\n")
+    : [
+        "硬性要求：",
+        "1. 只输出任务书，不要写故事片段。",
+        "2. 必须列出本章必须完成、禁止违背、角色状态、伏笔推进、结尾钩子。",
+        "3. 如果上下文不足，写明缺失项，并给出最小补全方向。",
+        `4. 后续正文必须按完整章节规划，${chapterLengthBoundary(lengthSpec)}`,
+        "5. 任务书必须覆盖场景推进、冲突升级、人物互动、细节描写、章节节奏曲线、爽点/期待点、主要对话目标、开头承接方式和结尾钩子执行方式。",
+      ].join("\n")
+
   return [
     buildStableContextPrefix(outline, contextPrompt),
     "",
     "你是小说写作任务规划助手。",
     "请基于上述上下文输出一份写作任务书，供后续创作使用。",
     "",
-    "硬性要求：",
-    "1. 只输出任务书，不要写故事片段。",
-    "2. 必须列出本章必须完成、禁止违背、角色状态、伏笔推进、结尾钩子。",
-    "3. 如果上下文不足，写明缺失项，并给出最小补全方向。",
-    `4. 后续正文必须按完整章节规划，${chapterLengthBoundary(lengthSpec)}`,
-    "5. 任务书必须规划足够的场景推进、冲突升级、人物互动、细节描写和结尾钩子，避免只写一个短场景。",
+    planningDirectives,
     "",
     chapterNumber ? `目标章节：第${chapterNumber}章` : "目标章节：用户请求中的章节",
     `用户请求：${userRequest}`,
     goldenThreeChapterSection(goldenThreeChapter),
+    blueprintSection,
   ].filter(Boolean).join("\n")
 }
 
@@ -109,8 +136,11 @@ export function buildDeepChapterDraftPrompt(
     "4. 严格承接上一章结尾，遵守大纲、记忆、人设、伏笔和时间线。",
     "5. 结尾必须留下适合下一章继续推进的钩子。",
     `6. 字数必须接近完整章节长度：${chapterLengthBoundary(lengthSpec)}阶段3正文草稿最多 ${lengthSpec.draftMaxChars} 字，写到完整结尾后立即停止；不能提前收尾，也不能为了补细节新增额外场景。`,
-    "7. 必须写成完整章节，不要只写一个片段；需要包含场景铺陈、行动推进、对话交锋、情绪变化、冲突升级和结尾钩子。",
+    "7. 必须写成完整章节，不要只写片段；包含场景铺陈、行动推进、对话交锋、情绪变化、冲突升级和结尾钩子。",
     "8. 禁止复读、循环输出、重复同一段落或用相同句式堆字数；写到完整结尾后立即停止。",
+    "9. 不要写成说明文：不解释设计、不替角色总结动机、不用旁白概括冲突；信息必须通过动作、对话、场景细节、人物反应呈现。",
+    "10. 开头承接上一章并立刻给当前问题；结尾完成阶段结果，并留下下一章必须解决的动作、信息或危险。",
+    "11. 对话必须有目标和攻防，通过试探、隐瞒、压迫、诱导或回避推动关系或信息状态变化，禁止无用闲聊。",
     "",
     chapterNumber ? `目标章节：第${chapterNumber}章` : "目标章节：用户请求中的章节",
     `用户请求：${userRequest}`,

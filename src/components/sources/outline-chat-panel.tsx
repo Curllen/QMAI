@@ -75,7 +75,6 @@ import {
   collectWebResearch,
   shouldUseWebResearch,
 } from "@/lib/web-research";
-import { parseAgentResponse } from "@/lib/novel/agent-parser";
 
 const OUTLINE_CHAT_DISABLED_TOOLS = ["write_chapter", "write_memory"];
 

@@ -26,7 +26,7 @@ export interface UseAgentConfigResult {
   mcpWarnings: string[]
 }
 
-export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
+export function useAgentConfig(systemPrompt: string, getPlanBlueprint?: () => string | undefined): UseAgentConfigResult {
   const aiChatModel = useWikiStore((s) => s.aiChatModel)
   const projectPath = useWikiStore((s) => s.project?.path)
   const dataVersion = useWikiStore((s) => s.dataVersion)
@@ -144,6 +144,7 @@ export function useAgentConfig(systemPrompt: string): UseAgentConfigResult {
       runDeepChapterGeneration,
       draftMode: novelMode,
       projectPath: normalizePath(projectPath),
+      getPlanBlueprint,
     })
 
     return {

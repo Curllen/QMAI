@@ -14,7 +14,6 @@ import {
   withReasoningDisabled,
 } from "@/lib/reasoning-retry";
 import { computeNovelContextTokenBudget } from "@/lib/context-budget";
-import { resolveNovelModel } from "./model-resolver";
 import {
   buildContextPack,
   contextPackToPrompt,
@@ -23,6 +22,14 @@ import {
 import { reviewChapter, type NovelReviewResult } from "./review-adapter";
 import type { TaskRouteResult } from "./task-router";
 import type { GoldenThreeChapterRequest } from "./golden-three-chapters";
+import {
+  type ParsedChapterPlanComplianceResult,
+  parseChapterPlanComplianceResult,
+  runChapterPlanComplianceCheck,
+  runChapterPlanDeviationRepair,
+  shouldRepairChapterPlanDeviation,
+} from "./chapter-plan-compliance";
+import { buildChapterPlanExecutionSummary } from "./chapter-plan-execution-summary";
 import {
   resolveChapterLengthSpec,
   type ChapterLengthSpec,
@@ -43,6 +50,8 @@ export interface DeepChapterGenerationInput {
   llmConfig: LlmConfig;
   aiWorkflowMode?: AiWorkflowMode;
   resumeCheckpoint?: DeepChapterGenerationResumeCheckpoint;
+  /** 用户在会话层确认的章节计划，作为写作任务书的权威依据注入 brief 阶段。 */
+  planBlueprint?: string;
 }
 
 export interface DeepChapterGenerationCallbacks {
@@ -59,6 +68,7 @@ export interface DeepChapterGenerationResult {
   draftContent: string;
   reviewResults: NovelReviewResult[];
   revised: boolean;
+  planCompliance?: string;
 }
 
 export type ChapterWorkflowEventType = "started" | "completed" | "error";
@@ -96,6 +106,8 @@ export interface DeepChapterGenerationDeps {
   buildContextPack: typeof buildContextPack;
   contextPackToPrompt: typeof contextPackToPrompt;
   reviewChapter: typeof reviewChapter;
+  runChapterPlanComplianceCheck?: typeof runChapterPlanComplianceCheck;
+  runChapterPlanDeviationRepair?: typeof runChapterPlanDeviationRepair;
   streamChat: (
     config: LlmConfig,
     messages: ChatMessage[],
@@ -411,12 +423,12 @@ export async function runDeepChapterGeneration(
   const workflowProfile = resolveChapterWorkflowProfile(input.aiWorkflowMode);
   const lengthSpec = resolveCurrentChapterLengthSpec();
   const novelConfig = useWikiStore.getState().novelConfig;
-  const deAiConfig = resolveNovelModel(input.llmConfig, novelConfig, "deAi");
   const { loadSmartDeAiSkill } = await import("./de-ai-adapter");
   const workflowBaseParams = {
     mode: workflowProfile.mode,
     chapterNumber: input.chapterNumber ?? null,
   };
+  const planExecutionSummary = buildChapterPlanExecutionSummary(input.planBlueprint ?? "");
   const contextWorkflowStep: ChapterWorkflowStepSpec = {
     name: "chapter_context",
     title: "读取上下文",
@@ -659,6 +671,7 @@ export async function runDeepChapterGeneration(
                 input.chapterNumber,
                 input.goldenThreeChapter,
                 lengthSpec,
+                planExecutionSummary,
               ),
             },
           ],
@@ -879,14 +892,14 @@ export async function runDeepChapterGeneration(
               input.projectPath,
               draftContent,
               input.chapterNumber,
-              { onThinking: callbacks.onThinking, contextPack },
+              { onThinking: callbacks.onThinking, contextPack, planBlueprint: planExecutionSummary },
               signal,
             )
           : await deps.reviewChapter(
               input.projectPath,
               draftContent,
               input.chapterNumber,
-              { onThinking: callbacks.onThinking, contextPack },
+              { onThinking: callbacks.onThinking, contextPack, planBlueprint: planExecutionSummary },
             );
       } catch (err) {
         console.error("[Deep Chapter] Review failed:", err);
@@ -1125,7 +1138,7 @@ export async function runDeepChapterGeneration(
     detail: "做最后一遍简单审查，减少复读、机械套话和 AI 味。",
     params: workflowBaseParams,
   };
-  const finalContent = workflowProfile.runFinalPolish
+  let finalContent = workflowProfile.runFinalPolish
     ? await runChapterWorkflowStep(
         callbacks,
         finalPolishWorkflowStep,
@@ -1174,6 +1187,108 @@ export async function runDeepChapterGeneration(
     title: "最终正文",
     content: `最终正文已生成，约 ${countChapterChars(finalContent)} 字。`,
   });
+  callbacks.onFinalContent?.(finalContent);
+  let planCompliance = "";
+  if (planExecutionSummary.trim()) {
+    let complianceCheckFailed = false;
+    const complianceStep = {
+      name: "chapter_plan_compliance",
+      title: "检查计划履约度",
+      detail: "对照用户确认的章节计划检查最终正文是否按计划执行。",
+      params: workflowBaseParams,
+    };
+    try {
+      const runCompliance = deps.runChapterPlanComplianceCheck || runChapterPlanComplianceCheck;
+      planCompliance = await runChapterWorkflowStep(
+        callbacks,
+        complianceStep,
+        () => runCompliance(writingConfig, planExecutionSummary, finalContent, signal),
+        (value) => value ? "计划履约度检查完成。" : "计划履约度检查完成，未返回具体结果。",
+        (value) => ({ hasComplianceResult: Boolean(value?.trim()) }),
+      );
+    } catch (error) {
+      complianceCheckFailed = true;
+      planCompliance = `计划履约度检查失败：${error instanceof Error ? error.message : String(error)}`;
+      completeChapterWorkflowStep(
+        callbacks,
+        complianceStep,
+        planCompliance,
+        { error: true },
+      );
+    }
+    if (planCompliance.trim() && !complianceCheckFailed) {
+      const parsedCompliance = parseChapterPlanComplianceResult(planCompliance);
+      const shouldRepairPlanDeviation = shouldRepairChapterPlanDeviation(parsedCompliance);
+      emitDeepChapterActivity(callbacks, {
+        id: `deep_chapter:plan_compliance:output:${Date.now()}`,
+        stageId: "plan_compliance",
+        kind: "stage_output",
+        title: "计划履约度",
+        content: formatPlanComplianceActivityContent(parsedCompliance, shouldRepairPlanDeviation),
+      });
+      if (shouldRepairPlanDeviation) {
+        const repairStep = {
+          name: "chapter_plan_deviation_repair",
+          title: "返修计划偏离点",
+          detail: "只修复计划履约检查发现的偏离点，不重写全章。",
+          params: workflowBaseParams,
+        };
+        const runRepair = deps.runChapterPlanDeviationRepair || runChapterPlanDeviationRepair;
+        try {
+          const repairedContent = await runChapterWorkflowStep(
+            callbacks,
+            repairStep,
+            () => runRepair(writingConfig, planExecutionSummary, finalContent, planCompliance, signal),
+            (value) => {
+              const validation = validateChapterPlanRepairResult(finalContent, value);
+              return validation.accepted
+                ? `计划偏离点返修完成，正文约 ${countChapterChars(value)} 字。`
+                : `计划偏离点返修结果异常，已保留原正文。原因：${validation.reason}。`;
+            },
+            (value) => ({
+              chars: countChapterChars(value),
+              changed: validateChapterPlanRepairResult(finalContent, value).accepted,
+            }),
+          );
+          const validation = validateChapterPlanRepairResult(finalContent, repairedContent);
+          const beforeChars = countChapterChars(finalContent);
+          if (validation.accepted) {
+            finalContent = repairedContent.trim();
+            revised = true;
+            const afterChars = countChapterChars(finalContent);
+            emitDeepChapterActivity(callbacks, {
+              id: `deep_chapter:plan_deviation_repair:output:${Date.now()}`,
+              stageId: "plan_deviation_repair",
+              kind: "stage_output",
+              title: "计划偏离点返修",
+              content: [
+                "正文已更新：已按计划履约偏离点完成轻量返修。",
+                `返修前：约 ${beforeChars} 字。`,
+                `返修后：约 ${afterChars} 字。`,
+                "处理范围：只修复履约偏离点，未重写全章。",
+              ].join("\n"),
+            });
+            callbacks.onFinalContent?.(finalContent);
+          } else {
+            emitDeepChapterActivity(callbacks, {
+              id: `deep_chapter:plan_deviation_repair:output:${Date.now()}`,
+              stageId: "plan_deviation_repair",
+              kind: "stage_output",
+              title: "计划偏离点返修",
+              content: [
+                "返修结果异常，已保留原正文。",
+                `原因：${validation.reason}。`,
+                `原正文：约 ${beforeChars} 字。`,
+                `返修结果：约 ${countChapterChars(repairedContent)} 字。`,
+              ].join("\n"),
+            });
+          }
+        } catch (error) {
+          console.error("[Deep Chapter] 计划偏离点返修失败:", error);
+        }
+      }
+    }
+  }
   completeChapterWorkflowStep(
     callbacks,
     {
@@ -1188,13 +1303,13 @@ export async function runDeepChapterGeneration(
       revised,
     },
   );
-  callbacks.onFinalContent?.(finalContent);
   return {
     finalContent,
     taskBrief,
     draftContent,
     reviewResults,
     revised,
+    planCompliance,
   };
 }
 
@@ -1385,6 +1500,92 @@ async function collectModelText(
 
 function countChapterChars(content: string): number {
   return content.replace(/\s+/g, "").length;
+}
+
+function formatPlanComplianceActivityContent(
+  result: ParsedChapterPlanComplianceResult,
+  willRepair: boolean,
+): string {
+  const decision = result.status === "unknown"
+    ? "未触发返修"
+    : willRepair
+      ? "触发轻量返修"
+      : "无需返修";
+  const lines = [
+    `履约状态：${chapterPlanComplianceStatusLabel(result.status)}`,
+    `偏离点数量：${result.deviations.length}`,
+    `处理决定：${decision}`,
+  ];
+  if (result.status === "unknown") {
+    lines.push("原因：模型未按结构返回，已避免误改正文");
+  }
+  if (result.summary.trim()) {
+    lines.push(`总评：${result.summary.trim()}`);
+  }
+  if (result.deviations.length > 0) {
+    lines.push("");
+    lines.push("偏离点：");
+    for (const [index, item] of result.deviations.slice(0, 5).entries()) {
+      lines.push(`${index + 1}. ${item.point || "未说明偏离点"}`);
+      if (item.evidence) lines.push(`   正文证据：${item.evidence}`);
+      if (item.suggestion) lines.push(`   建议修正：${item.suggestion}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function chapterPlanComplianceStatusLabel(
+  status: ParsedChapterPlanComplianceResult["status"],
+): string {
+  if (status === "compliant") return "符合";
+  if (status === "mostly_compliant") return "基本符合";
+  if (status === "partial_deviation") return "部分偏离";
+  if (status === "clear_deviation") return "明显偏离";
+  return "未知";
+}
+
+function validateChapterPlanRepairResult(
+  originalContent: string,
+  repairedContent: string,
+): { accepted: boolean; reason: string } {
+  const repaired = repairedContent.trim();
+  if (!repaired) {
+    return { accepted: false, reason: "返修未返回有效正文" };
+  }
+  const originalChars = countChapterChars(originalContent);
+  const repairedChars = countChapterChars(repaired);
+  if (originalChars >= 1000 && repairedChars < originalChars * 0.7) {
+    return { accepted: false, reason: "返修后正文明显变短" };
+  }
+  if (originalChars >= 1000 && repairedChars > originalChars * 1.5) {
+    return { accepted: false, reason: "返修后正文明显变长" };
+  }
+  if (originalChars >= 1000 && !hasEnoughOriginalContentAnchors(originalContent, repaired)) {
+    return { accepted: false, reason: "返修后未保留原正文主要内容" };
+  }
+  return { accepted: true, reason: "" };
+}
+
+function hasEnoughOriginalContentAnchors(originalContent: string, repairedContent: string): boolean {
+  const original = normalizeContentForAnchorCheck(originalContent);
+  const repaired = normalizeContentForAnchorCheck(repairedContent);
+  if (original.length < 240 || repaired.length < 240) return true;
+
+  const anchors: string[] = [];
+  const windowSize = 14;
+  const step = Math.max(80, Math.floor(original.length / 20));
+  for (let index = 0; index + windowSize <= original.length; index += step) {
+    anchors.push(original.slice(index, index + windowSize));
+    if (anchors.length >= 20) break;
+  }
+  if (anchors.length === 0) return true;
+
+  const preservedCount = anchors.filter((anchor) => repaired.includes(anchor)).length;
+  return preservedCount >= Math.max(2, Math.ceil(anchors.length * 0.15));
+}
+
+function normalizeContentForAnchorCheck(content: string): string {
+  return content.replace(/[\s\p{P}\p{S}]+/gu, "");
 }
 
 function assertNotAborted(signal?: AbortSignal): void {

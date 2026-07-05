@@ -33,6 +33,11 @@ export interface ReviewChapterOptions extends NovelReviewCallbacks {
    * 用于返修后复审，降低 token 消耗。默认 false 走全量审查。
    */
   characterOnly?: boolean
+  /**
+   * 用户在会话层确认的章节计划。提供时，审稿会额外检查正文是否偏离计划的
+   * 场景序列、信息流、伏笔动作和结尾钩子，偏离按 error 标记。
+   */
+  planBlueprint?: string
 }
 
 /** 角色一致性相关的审查维度，用于 characterOnly 轻量审查模式 */
@@ -65,6 +70,9 @@ const REVIEW_DIMENSIONS = [
   "是否缺少章节钩子",
 ]
 
+/** 当传入用户确认的章节计划时追加的审查维度 */
+const BLUEPRINT_DEVIATION_DIMENSION = "是否偏离用户已确认的章节计划（场景序列、信息流、伏笔动作、结尾钩子）"
+
 const REVIEW_STAGES = [
   "阶段1：审查任务识别",
   "阶段2：上下文检索",
@@ -95,12 +103,33 @@ function splitChapterForReview(content: string): string[] {
   return chunks
 }
 
-export function buildReviewPrompt(pack: ContextPack, chapterContent: string, characterOnly = false): string {
-  const dimensions = characterOnly ? CHARACTER_REVIEW_DIMENSIONS : REVIEW_DIMENSIONS
+export function buildReviewPrompt(
+  pack: ContextPack,
+  chapterContent: string,
+  characterOnly = false,
+  planBlueprint?: string,
+): string {
+  const baseDimensions = characterOnly ? CHARACTER_REVIEW_DIMENSIONS : REVIEW_DIMENSIONS
+  // 当传入用户确认的计划时，追加计划偏离维度（characterOnly 模式下不追加，保持轻量）
+  const dimensions = !characterOnly && planBlueprint && planBlueprint.trim()
+    ? [...baseDimensions, BLUEPRINT_DEVIATION_DIMENSION]
+    : baseDimensions
   const modeTitle = characterOnly ? "角色一致性专项审查" : "阶段式深度审查工作流"
   const modeStages = characterOnly
     ? ["阶段1：角色提取", "阶段2：记忆库对照", "阶段3：脱离判定", "阶段4：二次复核"]
     : REVIEW_STAGES
+  const blueprintSection = planBlueprint && planBlueprint.trim()
+    ? [
+        "",
+        "用户已确认的章节计划（偏离即 error）：",
+        "正文必须遵循以下计划中的场景序列、信息流设计、伏笔动作和结尾钩子。",
+        "若正文在计划覆盖的维度上出现偏离（场景被跳过/互换、信息泄露与计划信息差矛盾、",
+        "伏笔动作未执行或执行方向相反、结尾钩子与计划设计不一致），必须标为 error，",
+        "evidence 引用正文偏离片段，relatedMemory 引用计划原文。",
+        "",
+        planBlueprint.trim(),
+      ].join("\n")
+    : ""
   return `${contextPackToPrompt(pack)}
 
 ${modeTitle}：
@@ -135,6 +164,8 @@ ${characterOnly ? "" : `${i18n.t("novel.reviewPrompt.specialChecksTitle")}
 `}
 
 角色命中记忆库检查（必须执行）：
+${blueprintSection}
+
 1. 角色提取：先从本章正文中提取所有出现的角色名（含别名、昵称），列出角色清单。
 2. 记忆库对照：逐个角色对照上下文中的"角色光环/灵魂"、"人物状态"、"角色认知状态"字段：
    - 标注该角色是否命中记忆库（已注入光环 / 仅有状态 / 完全缺失）。
@@ -229,7 +260,7 @@ ${langReminder}`
       const chunkContent = chunks.length > 1
         ? `【第${i + 1}段/共${chunks.length}段】\n${chunk}`
         : chunk
-      const userPrompt = buildReviewPrompt(contextPack, chunkContent, options.characterOnly)
+      const userPrompt = buildReviewPrompt(contextPack, chunkContent, options.characterOnly, options.planBlueprint)
       const stageTitle = chunks.length > 1
         ? (options.characterOnly ? `角色一致性审查（第${i + 1}/${chunks.length}段）` : `深度审查（第${i + 1}/${chunks.length}段）`)
         : (options.characterOnly ? "角色一致性审查" : "深度审查")

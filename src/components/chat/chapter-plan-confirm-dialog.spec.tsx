@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   extractChapterPlan,
+  buildChapterPlanSelfCheckPrompt,
   buildPlanConfirmMessage,
   buildPlanSkipMessage,
   CHAPTER_PLAN_MARKER_START,
@@ -52,6 +53,8 @@ describe("chapter-plan-confirm-dialog 纯函数", () => {
       const msg = buildPlanConfirmMessage("我的计划")
       expect(msg).toContain("已确认")
       expect(msg).toContain("我的计划")
+      expect(msg).toContain("已确认的章节计划")
+      expect(msg).not.toContain("蓝图")
     })
 
     it("指示不要再次输出计划", () => {
@@ -65,6 +68,18 @@ describe("chapter-plan-confirm-dialog 纯函数", () => {
       const msg = buildPlanSkipMessage()
       expect(msg).toContain("直接写正文")
       expect(msg).toContain("不要输出计划")
+    })
+  })
+
+  describe("buildChapterPlanSelfCheckPrompt", () => {
+    it("要求检查计划完整性并包含计划原文", () => {
+      const prompt = buildChapterPlanSelfCheckPrompt("维度四·场景序列编排：旧屋揭示")
+
+      expect(prompt).toContain("计划自检")
+      expect(prompt).not.toContain("蓝图")
+      expect(prompt).toContain("七个维度")
+      expect(prompt).toContain("维度四·场景序列编排：旧屋揭示")
+      expect(prompt).toContain("只输出一个 JSON 对象")
     })
   })
 })
@@ -179,6 +194,82 @@ describe("ChapterPlanConfirmDialog 组件", () => {
       root.render(<ChapterPlanConfirmDialog {...baseProps} />)
     })
     expect(queryByText("修改计划")).toBeNull()
+  })
+
+  it("提供 onSelfCheck 时显示自检按钮", async () => {
+    await act(async () => {
+      root.render(<ChapterPlanConfirmDialog {...baseProps} onSelfCheck={async () => "自检通过"} />)
+    })
+    expect(queryByText("自检计划")).not.toBeNull()
+  })
+
+  it("点击自检按钮后显示自检结果", async () => {
+    const onSelfCheck = vi.fn(async () => "自检结果：场景序列完整，但缺少字数预算。")
+    await act(async () => {
+      root.render(<ChapterPlanConfirmDialog {...baseProps} onSelfCheck={onSelfCheck} />)
+    })
+    const btn = queryByText("自检计划") as HTMLButtonElement
+    await act(async () => {
+      btn.click()
+    })
+
+    expect(onSelfCheck).toHaveBeenCalledOnce()
+    expect(host.textContent).toContain("自检结果：场景序列完整，但缺少字数预算。")
+  })
+
+  it("自检后可按建议修正计划并进入编辑状态", async () => {
+    const onSelfCheck = vi.fn(async () => "状态：warning\n建议：补充篇幅分配")
+    const onRevisePlan = vi.fn(async () => "修订后计划：已补充篇幅分配")
+    await act(async () => {
+      root.render(
+        <ChapterPlanConfirmDialog
+          {...baseProps}
+          onSelfCheck={onSelfCheck}
+          onRevisePlan={onRevisePlan}
+        />,
+      )
+    })
+    const selfCheckBtn = queryByText("自检计划") as HTMLButtonElement
+    await act(async () => {
+      selfCheckBtn.click()
+    })
+    const reviseBtn = queryByText("按自检建议修正") as HTMLButtonElement
+    await act(async () => {
+      reviseBtn.click()
+    })
+
+    expect(onRevisePlan).toHaveBeenCalledWith(
+      baseProps.planContent,
+      "状态：warning\n建议：补充篇幅分配",
+    )
+    const textarea = host.querySelector("textarea") as HTMLTextAreaElement
+    expect(textarea).not.toBeNull()
+    expect(textarea.value).toBe("修订后计划：已补充篇幅分配")
+  })
+
+  it("自检期间关闭弹窗后不会把旧结果带到下次打开", async () => {
+    let resolveSelfCheck!: (value: string) => void
+    const onSelfCheck = vi.fn(() => new Promise<string>((resolve) => {
+      resolveSelfCheck = resolve
+    }))
+    await act(async () => {
+      root.render(<ChapterPlanConfirmDialog {...baseProps} onSelfCheck={onSelfCheck} />)
+    })
+    const btn = queryByText("自检计划") as HTMLButtonElement
+    await act(async () => {
+      btn.click()
+    })
+    await act(async () => {
+      root.render(<ChapterPlanConfirmDialog {...baseProps} open={false} onSelfCheck={onSelfCheck} />)
+    })
+    await act(async () => {
+      resolveSelfCheck("旧的自检结果")
+    })
+    await act(async () => {
+      root.render(<ChapterPlanConfirmDialog {...baseProps} open={true} onSelfCheck={onSelfCheck} />)
+    })
+
+    expect(host.textContent).not.toContain("旧的自检结果")
   })
 
   it("严格模式显示严格模式标识", async () => {

@@ -56,6 +56,7 @@ export interface ToolFactoryOptions {
   aiWorkflowMode?: AiWorkflowMode
   runDeepChapterGeneration?: RunDeepChapterGeneration
   onToolEvent?: (event: AgentToolEvent) => void
+  getPlanBlueprint?: () => string | undefined
 }
 
 export function registerAllBuiltInTools(registry: ToolRegistry, options: ToolFactoryOptions): void {
@@ -106,6 +107,7 @@ export function registerAllBuiltInTools(registry: ToolRegistry, options: ToolFac
       aiWorkflowMode: options.aiWorkflowMode,
       runDeepChapterGeneration: options.runDeepChapterGeneration,
       onToolEvent: options.onToolEvent,
+      getPlanBlueprint: options.getPlanBlueprint,
     }))
   }
   for (const tool of options.mcpTools ?? []) {

@@ -23,6 +23,11 @@ export interface RunChapterWorkflowToolOptions {
   runDeepChapterGeneration: RunDeepChapterGeneration
   onToolEvent?: (event: AgentToolEvent) => void
   onActivityEvent?: (event: AgentActivityEvent) => void
+  /**
+   * 当 AI 未在工具调用参数中携带 planBlueprint 时，从这里兜底取已确认的章节计划。
+   * 保证用户确认的计划为强制约束，不依赖模型是否遵守自然语言提示。
+   */
+  getPlanBlueprint?: () => string | undefined
 }
 
 interface RunChapterWorkflowParams {
@@ -30,6 +35,7 @@ interface RunChapterWorkflowParams {
   userRequest?: string
   chapterNumber?: number
   workflowMode?: AiWorkflowMode
+  planBlueprint?: string
 }
 
 function toNumber(value: unknown): number | undefined {
@@ -50,6 +56,7 @@ function normalizeParams(params: Record<string, unknown>): RunChapterWorkflowPar
       params.workflowMode === "fast" || params.workflowMode === "standard" || params.workflowMode === "strict"
         ? params.workflowMode
         : undefined,
+    planBlueprint: typeof params.planBlueprint === "string" ? params.planBlueprint : undefined,
   }
 }
 
@@ -100,6 +107,11 @@ export function createRunChapterWorkflowTool(options: RunChapterWorkflowToolOpti
         description: "执行强度：fast、standard 或 strict。省略时使用当前 AI 会话模式。",
         enum: ["fast", "standard", "strict"],
       },
+      planBlueprint: {
+        type: "string",
+        description:
+          "用户在会话层已确认的章节计划原文。若存在，必须完整透传，作为写作任务书的权威依据；不得改写或省略。",
+      },
     },
     async execute(rawParams, signal, context?: ToolExecutionContext) {
       const params = normalizeParams(rawParams)
@@ -108,9 +120,12 @@ export function createRunChapterWorkflowTool(options: RunChapterWorkflowToolOpti
         return "错误：缺少 userRequest，无法运行章节工作流。"
       }
 
-      const parentCallId = context?.callId ?? `run_chapter_workflow:${Date.now()}`
-      const emitToolEvent = context?.onToolEvent ?? options.onToolEvent
-      const emitActivityEvent = context?.onActivityEvent ?? options.onActivityEvent
+     const parentCallId = context?.callId ?? `run_chapter_workflow:${Date.now()}`
+     const emitToolEvent = context?.onToolEvent ?? options.onToolEvent
+     const emitActivityEvent = context?.onActivityEvent ?? options.onActivityEvent
+      // 兜底：AI 未在工具调用参数中携带 planBlueprint 时，从外部 getter 补上，
+      // 保证用户确认的计划一定进入章节生成链路，不依赖模型是否遵守自然语言提示。
+      const planBlueprint = params.planBlueprint?.trim() || options.getPlanBlueprint?.()?.trim() || undefined
       const result = await options.runDeepChapterGeneration(
         {
           projectPath: options.projectPath,
@@ -118,6 +133,7 @@ export function createRunChapterWorkflowTool(options: RunChapterWorkflowToolOpti
           chapterNumber: params.chapterNumber,
           llmConfig: options.llmConfig,
           aiWorkflowMode: params.workflowMode ?? options.aiWorkflowMode,
+          planBlueprint,
         },
         {
           onWorkflowEvent: (event) => {
@@ -138,10 +154,11 @@ export function createRunChapterWorkflowTool(options: RunChapterWorkflowToolOpti
         "章节工作流完成。",
         `是否返修：${result.revised ? "是" : "否"}`,
         `任务书：${result.taskBrief}`,
+        result.planCompliance ? `计划履约度：\n${result.planCompliance}` : "",
         "",
         "最终正文：",
         result.finalContent,
-      ].join("\n")
+      ].filter((line) => line !== "").join("\n")
     },
   }
 }

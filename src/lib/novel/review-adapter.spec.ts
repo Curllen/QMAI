@@ -107,6 +107,24 @@ describe("review-adapter staged review", () => {
     expect(prompt).toContain("当前伏笔状态：旧钥匙、族谱缺页、门缝冷光都未回收。")
   })
 
+  it("injects the confirmed plan blueprint as a deviation-check constraint", () => {
+    const blueprint = "维度四·场景序列编排：1. 旧屋揭示 2. 脚步声悬念收束"
+    const prompt = buildReviewPrompt(contextPack, "主角直接说出族谱被换。", false, blueprint)
+
+    expect(prompt).toContain("用户已确认的章节计划")
+    expect(prompt).toContain(blueprint)
+    expect(prompt).toContain("偏离即 error")
+    expect(prompt).toContain("是否偏离用户已确认的章节计划")
+    expect(prompt).not.toContain("章节蓝图")
+  })
+
+  it("does not inject blueprint deviation dimension when no blueprint is provided", () => {
+    const prompt = buildReviewPrompt(contextPack, "主角直接说出族谱被换。")
+
+    expect(prompt).not.toContain("用户已确认的章节计划")
+    expect(prompt).not.toContain("是否偏离用户已确认的章节计划")
+  })
+
   it("runs a single merged deep review with high reasoning and publishes thinking", async () => {
     llmConfig.reasoning = { mode: "off" }
     streamChatMock.mockImplementation(async (
