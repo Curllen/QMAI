@@ -1,12 +1,15 @@
 import type { AiWorkflowMode } from "./workflow-mode"
+import type { NovelTaskIntent } from "@/lib/novel/task-router"
 
-const WRITING_INTENTS = new Set([
+const WRITING_INTENT_LIST: readonly NovelTaskIntent[] = [
   "write_chapter",
   "continue_chapter",
   "rewrite_chapter",
   "polish_chapter",
   "generate_outline",
-])
+]
+
+export const WRITING_INTENTS = new Set<NovelTaskIntent>(WRITING_INTENT_LIST)
 
 export function shouldRequirePlan(
   planExecuteEnabled: boolean,

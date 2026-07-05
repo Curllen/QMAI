@@ -49,7 +49,7 @@ import { applyAgentActivityEvent, settleRunningAgentStages } from "@/lib/agent/a
 import { useAgentConfig } from "@/hooks/use-agent-config"
 import { resolveChapterLengthSpec } from "@/lib/novel/deep-chapter-prompts"
 import { executeIngestWrites } from "@/lib/ingest"
-import { routeTask, buildTaskDirective } from "@/lib/novel/task-router"
+import { routeTask, buildTaskDirective, type TaskRouteResult } from "@/lib/novel/task-router"
 import { writeFile, createDirectory, deleteFile } from "@/commands/fs"
 import {
   detectLastGeneratedChapterNumber,
@@ -88,7 +88,7 @@ import { loadFrameworks } from "@/lib/novel/story-simulation/framework-store"
 import type { FrameworkBinding, StoryFramework } from "@/lib/novel/story-simulation/types"
 
 import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
-import { buildPlanExecutePolicyPrompt } from "@/lib/agent/plan-execute-policy"
+import { buildPlanExecutePolicyPrompt, WRITING_INTENTS } from "@/lib/agent/plan-execute-policy"
 import { createContextTrace, finishTrace, setContextInfo, type ContextTrace } from "@/lib/agent/context-trace"
 import { settleRunningAgentToolCalls } from "@/lib/agent/tool-events"
 import { appendMcpCallTrace } from "@/lib/agent/mcp-trace"
@@ -280,6 +280,12 @@ function buildAgentUserContent(text: string, tokens: ReferenceToken[]): string {
     ...tokens.map(describeReferenceForAgent),
   ].join("\n")
 }
+
+const SIMULATION_INTENTS = new Set([
+  "story_framework_generate",
+  "multi_agent_simulate",
+  "character_interview",
+])
 
 function appendAgentChatMessages(conversationId: string, content: string, tokens: ReferenceToken[]) {
   const now = Date.now()
@@ -860,6 +866,7 @@ export function ChatPanel() {
   }>({ open: false, planContent: "", fullContent: "", conversationId: "" })
   const chapterPlanResolverRef = useRef<((action: "confirm" | "skip" | "cancel" | { modify: string }) => void) | null>(null)
   const handleSendRef = useRef<(text: string, tokens?: ReferenceToken[], displayText?: string) => Promise<void>>(() => Promise.resolve())
+  const lastWritingTaskRouteRef = useRef<Record<string, TaskRouteResult>>({})
 
   const closeChapterPlanDialog = useCallback(
     (action: "confirm" | "skip" | "cancel" | { modify: string }) => {
@@ -1077,13 +1084,16 @@ export function ChatPanel() {
         ))
         .slice(-maxHistoryMessages)
       const pp = normalizePath(project.path)
-      const taskRoute = novelMode ? routeTask(plainText) : null
+      let taskRoute = novelMode ? routeTask(plainText) : null
 
-      const SIMULATION_INTENTS = new Set([
-        "story_framework_generate",
-        "multi_agent_simulate",
-        "character_interview",
-      ])
+      if (planExecutionFollowup && novelMode) {
+        const savedRoute = lastWritingTaskRouteRef.current[capturedConvId]
+        if (savedRoute && WRITING_INTENTS.has(savedRoute.intent)) {
+          taskRoute = savedRoute
+        }
+      } else if (taskRoute && WRITING_INTENTS.has(taskRoute.intent)) {
+        lastWritingTaskRouteRef.current[capturedConvId] = taskRoute
+      }
 
       if (taskRoute && SIMULATION_INTENTS.has(taskRoute.intent)) {
         const { assistantMessage } = appendAgentChatMessages(capturedConvId, userVisibleText || plainText, tokens)
