@@ -579,7 +579,12 @@
       "filesWritten": "{{count}} files written",
       "filesWrittenWithReview": "{{fileCount}} files written, {{reviewCount}} review item(s)",
       "noFilesGenerated": "No files generated",
-      "analysisNotAvailable": "(Analysis not available)"
+      "analysisNotAvailable": "(Analysis not available)",
+      "consolidatingLongSource": "Step 1/2: Consolidating long-source analysis...",
+      "resumingLongSourceChunk": "Resuming long source analysis from chunk {{current}}/{{total}}...",
+      "analyzingLongSourceChunk": "Analyzing long source chunk {{current}}/{{total}}...",
+      "chunkAnalysisFailed": "Chunk analysis failed: {{message}}",
+      "cancelled": "Ingest cancelled"
     }
   },
   "fileTree": {
