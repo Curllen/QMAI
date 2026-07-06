@@ -4,7 +4,7 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { isTauri, pickDirectory } from "@/lib/platform"
 import { useChatStore } from "@/stores/chat-store"
-import { openProject, fileExists } from "@/commands/fs"
+import { openProject, fileExists, listDirectory, readFile } from "@/commands/fs"
 import { getLastProject, saveLastProject, loadLlmConfig, loadAiChatModel, loadDefaultLlmModel, loadLanguage, loadEmbeddingConfig, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadNovelMode, loadNovelConfig, loadRevisionFeedbackWindowConfig, loadTheme, loadMaxHistoryMessages, loadUiFontFamily, loadVisualStyle, saveLlmConfig, loadLastReadChapter, loadMcpConfig } from "@/lib/project-store"
 import { loadReviewItems, loadChatHistory, saveChatHistory, saveReviewItems } from "@/lib/persist"
 import { setupAutoSave, teardownAutoSave } from "@/lib/auto-save"
@@ -23,6 +23,8 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme-utils"
 import { applyUiFontFamily } from "@/lib/font-settings"
 import { applyVisualStyle } from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
+import { countChapterBodyWords } from "@/lib/chapter-word-count"
+import { flattenMdFiles } from "@/lib/novel/chapter-utils"
 
 function App() {
   const project = useWikiStore((s) => s.project)
@@ -35,8 +37,10 @@ function App() {
   const visualStyle = useWikiStore((s) => s.visualStyle)
   const communitySummaryError = useWikiStore((s) => s.communitySummaryError)
   const setCommunitySummaryError = useWikiStore((s) => s.setCommunitySummaryError)
+  const dataVersion = useWikiStore((s) => s.dataVersion)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [appTitleTotalWordCount, setAppTitleTotalWordCount] = useState<number | null>(null)
 
   function isCurrentProject(proj: WikiProject): boolean {
     const current = useWikiStore.getState().project
@@ -329,14 +333,46 @@ function App() {
   }, [theme])
 
   useEffect(() => {
-    const title = formatAppTitle(project?.name)
+    if (!project?.path) {
+      setAppTitleTotalWordCount(null)
+      return
+    }
+
+    let cancelled = false
+
+    const loadAppTitleTotalWordCount = async () => {
+      try {
+        const chapterNodes = await listDirectory(`${normalizePath(project.path)}/wiki/chapters`)
+        const files = flattenMdFiles(chapterNodes)
+        const contents = await Promise.all(
+          files.map((file) => readFile(file.path).catch(() => "")),
+        )
+        const total = contents.reduce(
+          (sum, markdown) => sum + countChapterBodyWords(markdown),
+          0,
+        )
+        if (!cancelled) setAppTitleTotalWordCount(total)
+      } catch {
+        if (!cancelled) setAppTitleTotalWordCount(null)
+      }
+    }
+
+    void loadAppTitleTotalWordCount()
+
+    return () => {
+      cancelled = true
+    }
+  }, [dataVersion, project?.path])
+
+  useEffect(() => {
+    const title = formatAppTitle(project?.name, appTitleTotalWordCount)
     document.title = title
     if (isTauri()) {
       import("@tauri-apps/api/window")
         .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
         .catch(() => {})
     }
-  }, [project?.name])
+  }, [appTitleTotalWordCount, project?.name])
 
   async function handleProjectOpened(proj: WikiProject) {
     await resetProjectState()

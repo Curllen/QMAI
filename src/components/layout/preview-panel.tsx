@@ -651,7 +651,7 @@ export function PreviewPanel() {
     </div>
   ) : null
   const chapterDeAiSkillName = chapterHeader ? chapterDeAiOptions.effectiveName : "未启用"
-  const chapterDeAiButtonLabel = deAiProcessing ? "处理中" : (chapterDeAiSkillName === "未启用" ? "去AI味" : `去AI味：${chapterDeAiSkillName}`)
+  const chapterDeAiButtonLabel = deAiProcessing ? "处理中" : "去AI味"
   const chapterDeAiButtonTitle = `当前去AI味 Skill：${chapterDeAiSkillName}`
 
   useEffect(() => {
@@ -1237,8 +1237,7 @@ export function PreviewPanel() {
     canIngestOutline ||
     canSaveAsFinal ||
     canFormatWriting ||
-    canViewSnapshot ||
-    (novelMode && project)
+    canViewSnapshot
   )
 
   if (loadedFilePath !== selectedFile) {
@@ -1252,7 +1251,7 @@ export function PreviewPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center border-b px-3">
-        <div ref={chapterToolbarRef} className="flex min-w-0 items-center gap-2">
+        <div ref={chapterToolbarRef} className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative flex min-w-0 min-h-0 flex-1 items-center gap-1 overflow-hidden">
             {chapterHeader ? (
               <>
@@ -1418,18 +1417,6 @@ export function PreviewPanel() {
                       {t("novel.snapshot.viewButton")}
                     </button>
                   ) : null}
-                  {novelMode && project ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setChapterToolbarMoreOpen(false)
-                        setShowCognition(true)
-                      }}
-                      className="block w-full rounded px-2 py-1.5 text-left hover:bg-accent"
-                    >
-                      {t("novel.cognition.title")}
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1524,16 +1511,6 @@ export function PreviewPanel() {
               title={t("preview.snapshotTitle")}
             >
               {t("novel.snapshot.viewButton")}
-            </button>
-          ) : null}
-          {!chapterToolbarCompact && novelMode && project ? (
-            <button
-              type="button"
-              onClick={() => setShowCognition(true)}
-              className="shrink-0 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-              title={t("preview.cognitionTitle")}
-            >
-              {t("novel.cognition.title")}
             </button>
           ) : null}
           <button

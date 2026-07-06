@@ -1175,8 +1175,8 @@
     "soul": {
       "projectSoul": "项目灵魂",
       "characterSoul": "角色灵魂",
-      "projectSoulDesc": "定义整个写作 AI 的气质、叙事节奏和语言风格",
-      "projectSoulPlaceholder": "在此编写项目级的写作灵魂描述...\n\n例如：\n- 叙事节奏：快节奏，每章 3-5 个场景切换\n- 语言风格：简洁克制，避免华丽修辞\n- 叙述气质：冷静、客观、少用感叹号\n- 密度控制：每 500 字至少包含一个新信息点",
+      "projectSoulDesc": "定义本项目的核心气质、创作边界、叙事原则和长期写作总则",
+      "projectSoulPlaceholder": "在此编写项目级写作总则...\n\n例如：\n- 核心气质：克制、冷静、现实压力强\n- 叙事原则：每个场景必须推动目标或制造代价\n- 语言边界：避免华丽堆砌，少用感叹和空泛比喻\n- 节奏控制：每 500 字至少出现一个新信息点",
       "saveProjectSoul": "保存项目灵魂",
       "saveProjectSoulSuccess": "项目灵魂已保存",
       "saveProjectSoulFailed": "项目灵魂保存失败，请检查项目文件权限后重试",

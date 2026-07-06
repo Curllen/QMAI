@@ -15,9 +15,8 @@ describe("workspace top bars", () => {
     expect(outlineChatSource).toContain('className="flex h-12 shrink-0 items-center gap-2 border-b bg-muted/20 px-2"')
   })
 
-  it("keeps the total word count inline after the book title instead of as a second header line", () => {
-    expect(sidebarSource).toContain("buildChapterTotalWordCountLabel(sidebarTotalWordCount)")
+  it("does not keep the total word count in the chapter sidebar header", () => {
+    expect(sidebarSource).not.toContain("buildChapterTotalWordCountLabel(sidebarTotalWordCount)")
     expect(sidebarSource).toContain('className="flex min-w-0 items-center gap-1.5 text-sm font-semibold"')
-    expect(sidebarSource).toContain('className="shrink-0 text-xs font-normal text-muted-foreground"')
   })
 })

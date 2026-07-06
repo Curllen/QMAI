@@ -50,8 +50,6 @@ import {
   readFile,
   writeFile,
 } from "@/commands/fs";
-import { countChapterBodyWords } from "@/lib/chapter-word-count";
-import { buildChapterTotalWordCountLabel } from "@/lib/chapter-display";
 import { getFileName, getFileStem, normalizePath } from "@/lib/path-utils";
 import {
   loadDismantlingLibrary,
@@ -877,7 +875,6 @@ export function SidebarPanel() {
   const setFileTree = useWikiStore((s) => s.setFileTree);
   const setChatExpanded = useWikiStore((s) => s.setChatExpanded);
   const enqueueReferenceTokens = useChatStore((s) => s.enqueueReferenceTokens);
-  const dataVersion = useWikiStore((s) => s.dataVersion);
   const [mode, setMode] = useState<"knowledge" | "files">("knowledge");
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingCreate, setPendingCreate] =
@@ -888,9 +885,6 @@ export function SidebarPanel() {
   const [memoryData, setMemoryData] = useState<MemoryCenterData | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
-  const [sidebarTotalWordCount, setSidebarTotalWordCount] = useState<
-    number | null
-  >(null);
   const [outlineImporting, setOutlineImporting] = useState(false);
   const [outlineImportMenuOpen, setOutlineImportMenuOpen] = useState(false);
   const outlineImportMenuRef = useRef<HTMLDivElement | null>(null);
@@ -930,44 +924,6 @@ export function SidebarPanel() {
   }, [activeView, selectedFile]);
 
   const isChapter = mode === "knowledge";
-
-  useEffect(() => {
-    if (!project || !isChapter) {
-      setSidebarTotalWordCount(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSidebarTotalWordCount = async () => {
-      try {
-        const chapterNodes = await listDirectory(
-          `${normalizePath(project.path)}/wiki/chapters`,
-        );
-        const files = flattenMdFiles(chapterNodes);
-        const contents = await Promise.all(
-          files.map((file) => readFile(file.path).catch(() => "")),
-        );
-        const total = contents.reduce(
-          (sum, markdown) => sum + countChapterBodyWords(markdown),
-          0,
-        );
-        if (!cancelled) {
-          setSidebarTotalWordCount(total);
-        }
-      } catch {
-        if (!cancelled) {
-          setSidebarTotalWordCount(null);
-        }
-      }
-    };
-
-    void loadSidebarTotalWordCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dataVersion, isChapter, project]);
 
   useEffect(() => {
     if (!pendingCreate?.kind) return;
@@ -1718,11 +1674,6 @@ export function SidebarPanel() {
               helpKey={isChapter ? "chapter" : "outline"}
               helpTitle={isChapter ? "章节功能使用说明" : "大纲功能使用说明"}
             />
-            {isChapter && sidebarTotalWordCount !== null ? (
-              <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                {buildChapterTotalWordCountLabel(sidebarTotalWordCount)}
-              </span>
-            ) : null}
           </div>
         </div>
         <div className="flex items-center gap-1">
