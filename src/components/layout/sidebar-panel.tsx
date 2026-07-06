@@ -1590,10 +1590,6 @@ export function SidebarPanel() {
 
   if (activeView === "bookAnalysis") {
     return <BookAnalysisSidebarPanel />;
-
-  if (activeView === "dismantling") {
-    return <DismantlingSidebarPanel />;
-  }
   }
 
   if (activeView === "search") {
