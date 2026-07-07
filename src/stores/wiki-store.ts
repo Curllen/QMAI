@@ -23,7 +23,10 @@ import {
 import {
   DEFAULT_VISUAL_STYLE,
   VISUAL_STYLE_STORAGE_KEY,
+  VISUAL_STYLE_STORAGE_VERSION,
+  VISUAL_STYLE_STORAGE_VERSION_KEY,
   normalizeVisualStyle,
+  resolveStoredVisualStyle,
   type VisualStyle,
 } from "@/lib/visual-style-settings"
 import type { AiWorkflowMode } from "@/lib/agent/workflow-mode"
@@ -73,7 +76,14 @@ const readStoredUiFontFamily = (): UiFontFamily => {
 
 const readStoredVisualStyle = (): VisualStyle => {
   if (typeof localStorage === "undefined") return DEFAULT_VISUAL_STYLE
-  return normalizeVisualStyle(localStorage.getItem(VISUAL_STYLE_STORAGE_KEY))
+  const saved = localStorage.getItem(VISUAL_STYLE_STORAGE_KEY)
+  const version = localStorage.getItem(VISUAL_STYLE_STORAGE_VERSION_KEY)
+  const resolved = resolveStoredVisualStyle(saved, version)
+  if (saved !== resolved || version !== VISUAL_STYLE_STORAGE_VERSION) {
+    localStorage.setItem(VISUAL_STYLE_STORAGE_KEY, resolved)
+    localStorage.setItem(VISUAL_STYLE_STORAGE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
+  }
+  return resolved
 }
 
 const readStoredSidebarNavConfig = (): SidebarNavConfig => {
@@ -972,6 +982,7 @@ export const useWikiStore = create<WikiState>((set) => ({
     const normalized = normalizeVisualStyle(visualStyle)
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(VISUAL_STYLE_STORAGE_KEY, normalized)
+      localStorage.setItem(VISUAL_STYLE_STORAGE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
     }
     set({ visualStyle: normalized })
   },

@@ -32,6 +32,12 @@ const VISUAL_STYLE_OPTIONS = [
     colors: ["#ffffff", "#171717", "#e5e5e5"],
   },
   {
+    value: "fangzheng",
+    label: "直角工具型",
+    description: "冷灰背景、清晰按钮与选中态、无圆角、紧凑设置密度。",
+    colors: ["#F0F4F7", "#007A68", "#C8EFE6"],
+  },
+  {
     value: "tianqing",
     label: "天青釉色",
     description: "天青主题色、冰裂浅底、鎏金点缀。",
@@ -112,7 +118,7 @@ export function InterfaceSection({ draft, setDraft }: Props) {
         <div>
           <Label>视觉风格</Label>
           <p className="mt-1 text-xs text-muted-foreground">
-            东方美学方案不会覆盖原设计，可随时切回经典原版。
+            选择软件界面的整体视觉方案；直角工具型会同时调整浅色、深色、按钮和选中状态。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

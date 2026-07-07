@@ -554,12 +554,12 @@ export function SettingsView() {
     <div className="flex h-full overflow-hidden">
       {/* Sidebar — category nav. Matches the IconSidebar's pill-on-accent
           pattern so the two navigational surfaces feel like one app. */}
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-brand-50/60">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="flex items-center gap-1.5 px-4 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-wider">
           <PanelHeaderWithHelp
             title={t("settings.title")}
             helpKey="settings"
-            className="cursor-pointer text-muted-foreground transition-colors hover:text-primary"
+            className="cursor-pointer text-sidebar-foreground/65 transition-colors hover:text-sidebar-foreground"
           />
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
@@ -575,19 +575,21 @@ export function SettingsView() {
                 aria-current={isActive ? "page" : undefined}
                 className={`group mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                   isActive
-                    ? "bg-foreground/[0.08] font-medium text-foreground ring-1 ring-border/70"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 transition-colors ${
-                    isActive ? "text-primary" : "text-muted-foreground/80 group-hover:text-accent-foreground"
+                    isActive ? "text-sidebar-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-accent-foreground"
                   }`}
                 />
                 <span className="flex min-w-0 flex-1 flex-col items-start">
                   <span className="truncate">{t(c.labelKey)}</span>
                   {c.hintKey ? (
-                    <span className="truncate text-[10px] leading-tight text-muted-foreground/80">
+                    <span className={`truncate text-[10px] leading-tight ${
+                      isActive ? "text-sidebar-accent-foreground/70" : "text-sidebar-foreground/55"
+                    }`}>
                       {t(c.hintKey)}
                     </span>
                   ) : null}

@@ -94,6 +94,50 @@
     --chart-5: oklch(0.269 0 0);
 }
 
+:root.visual-fangzheng {
+    --radius: 0px;
+    --background: oklch(0.975 0.006 245);
+    --foreground: oklch(0.17 0.018 245);
+    --card: oklch(0.995 0.002 245);
+    --card-foreground: oklch(0.18 0.018 245);
+    --popover: oklch(0.992 0.004 245);
+    --popover-foreground: oklch(0.18 0.018 245);
+    --primary: oklch(0.46 0.1 178);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.94 0.008 245);
+    --secondary-foreground: oklch(0.22 0.018 245);
+    --muted: oklch(0.935 0.008 245);
+    --muted-foreground: oklch(0.46 0.02 245);
+    --accent: oklch(0.905 0.04 178);
+    --accent-foreground: oklch(0.22 0.052 178);
+    --destructive: oklch(0.55 0.18 28);
+    --border: oklch(0.84 0.014 245);
+    --input: oklch(0.84 0.014 245);
+    --ring: oklch(0.65 0.11 178);
+    --chart-1: oklch(0.48 0.11 178);
+    --chart-2: oklch(0.58 0.08 210);
+    --chart-3: oklch(0.64 0.12 78);
+    --chart-4: oklch(0.55 0.18 28);
+    --chart-5: oklch(0.36 0.03 245);
+    --sidebar: oklch(0.94 0.008 245);
+    --sidebar-foreground: oklch(0.2 0.018 245);
+    --sidebar-primary: oklch(0.48 0.11 178);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.89 0.04 178);
+    --sidebar-accent-foreground: oklch(0.2 0.052 178);
+    --sidebar-border: oklch(0.8 0.014 245);
+    --sidebar-ring: oklch(0.65 0.11 178);
+    --brand-50: oklch(0.95 0.008 245);
+    --brand-100: oklch(0.91 0.044 178);
+    --brand-200: oklch(0.82 0.07 178);
+    --brand-300: oklch(0.7 0.09 178);
+    --brand-400: oklch(0.58 0.1 178);
+    --brand-500: oklch(0.48 0.11 178);
+    --brand-600: oklch(0.38 0.11 178);
+    --brand-700: oklch(0.3 0.08 178);
+    --brand-800: oklch(0.22 0.052 178);
+}
+
 :root.visual-cangzhu {
     --background: oklch(0.95 0.021 91);
     --foreground: oklch(0.25 0.035 160);
@@ -353,6 +397,50 @@
     --brand-800: #f0f8f3;
 }
 
+.visual-fangzheng.dark {
+    --radius: 0px;
+    --background: oklch(0.18 0.02 245);
+    --foreground: oklch(0.91 0.012 245);
+    --card: oklch(0.225 0.022 245);
+    --card-foreground: oklch(0.91 0.012 245);
+    --popover: oklch(0.235 0.024 245);
+    --popover-foreground: oklch(0.91 0.012 245);
+    --primary: oklch(0.72 0.088 170);
+    --primary-foreground: oklch(0.15 0.024 245);
+    --secondary: oklch(0.265 0.024 245);
+    --secondary-foreground: oklch(0.88 0.012 245);
+    --muted: oklch(0.285 0.024 245);
+    --muted-foreground: oklch(0.72 0.02 245);
+    --accent: oklch(0.31 0.048 178);
+    --accent-foreground: oklch(0.91 0.035 170);
+    --destructive: oklch(0.7 0.16 28);
+    --border: oklch(0.36 0.028 245);
+    --input: oklch(0.36 0.028 245);
+    --ring: oklch(0.76 0.1 170);
+    --chart-1: oklch(0.74 0.09 170);
+    --chart-2: oklch(0.68 0.08 210);
+    --chart-3: oklch(0.78 0.12 82);
+    --chart-4: oklch(0.7 0.16 28);
+    --chart-5: oklch(0.5 0.034 245);
+    --sidebar: oklch(0.155 0.018 245);
+    --sidebar-foreground: oklch(0.9 0.012 245);
+    --sidebar-primary: oklch(0.74 0.09 170);
+    --sidebar-primary-foreground: oklch(0.15 0.024 245);
+    --sidebar-accent: oklch(0.27 0.048 178);
+    --sidebar-accent-foreground: oklch(0.91 0.035 170);
+    --sidebar-border: oklch(0.34 0.028 245);
+    --sidebar-ring: oklch(0.76 0.1 170);
+    --brand-50: oklch(0.24 0.027 245);
+    --brand-100: oklch(0.27 0.048 178);
+    --brand-200: oklch(0.32 0.052 178);
+    --brand-300: oklch(0.45 0.075 174);
+    --brand-400: oklch(0.6 0.085 170);
+    --brand-500: oklch(0.74 0.09 170);
+    --brand-600: oklch(0.82 0.072 170);
+    --brand-700: oklch(0.9 0.035 170);
+    --brand-800: oklch(0.96 0.018 170);
+}
+
 .visual-cangzhu.dark {
     --background: oklch(0.23 0.043 160);
     --foreground: oklch(0.91 0.035 145);
@@ -576,49 +664,108 @@
 }
 
 @layer components {
-    /* 选中项：竹青底 + 竹墨字 + 左边金竹线 */
+    .visual-fangzheng * {
+        border-radius: 0 !important;
+    }
+
+    .visual-fangzheng .qm-selected {
+        background: color-mix(in oklch, var(--sidebar-accent) 68%, var(--background));
+        color: var(--sidebar-accent-foreground);
+        border-left: 0;
+    }
+
+    .visual-fangzheng .qm-selected:hover {
+        background: color-mix(in oklch, var(--sidebar-accent) 78%, var(--background));
+    }
+
+    .visual-fangzheng .qm-selected-muted {
+        color: color-mix(in oklch, var(--sidebar-accent-foreground) 68%, var(--muted-foreground));
+    }
+
+    .visual-fangzheng .qm-hover:hover {
+        background: color-mix(in oklch, var(--sidebar-accent) 62%, transparent);
+        color: var(--sidebar-accent-foreground);
+    }
+
+    .visual-fangzheng [role="listbox"] {
+        background: var(--popover);
+        color: var(--popover-foreground);
+        border-color: var(--border);
+    }
+
+    .visual-fangzheng [role="option"][aria-selected="true"] {
+        background: color-mix(in oklch, var(--accent) 72%, var(--popover));
+        color: var(--accent-foreground);
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 75%, var(--border));
+    }
+
+    .visual-fangzheng [role="option"][aria-selected="true"]:hover {
+        background: color-mix(in oklch, var(--accent) 86%, var(--popover));
+    }
+
+    /* 选中态跟随当前视觉风格的侧栏令牌，避免固定色和强线框。 */
     .qm-selected {
-        background: rgba(62, 107, 88, 0.14);
-        color: #1c3328;
-        border-left: 2px solid #c8a96e;
+        background: color-mix(in oklch, var(--sidebar-accent) 64%, var(--background));
+        color: var(--sidebar-accent-foreground);
+        border-left: 0;
     }
 
     .qm-selected:hover {
-        background: rgba(62, 107, 88, 0.2);
+        background: color-mix(in oklch, var(--sidebar-accent) 76%, var(--background));
     }
 
     .qm-selected-muted {
-        color: #2d5040;
+        color: color-mix(in oklch, var(--sidebar-accent-foreground) 68%, var(--muted-foreground));
     }
 
-    /* 悬停项：竹青淡底 */
+    /* 悬停态同样使用视觉风格令牌。 */
     .qm-hover:hover {
-        background: rgba(62, 107, 88, 0.08);
-        color: #1c3328;
+        background: color-mix(in oklch, var(--sidebar-accent) 52%, transparent);
+        color: var(--sidebar-accent-foreground);
     }
 
-    /* 深色主题下的选中/悬停 */
+    /* 深色模式只调整混合比例，不再切回固定品牌色。 */
     .dark .qm-selected,
     .deep-blue .qm-selected {
-        background: rgba(143, 192, 165, 0.18);
-        color: #daf0e2;
-        border-left: 2px solid #d9c69a;
+        background: color-mix(in oklch, var(--sidebar-accent) 72%, var(--background));
+        color: var(--sidebar-accent-foreground);
+        border-left: 0;
     }
 
     .dark .qm-selected:hover,
     .deep-blue .qm-selected:hover {
-        background: rgba(143, 192, 165, 0.26);
+        background: color-mix(in oklch, var(--sidebar-accent) 84%, var(--background));
     }
 
     .dark .qm-selected-muted,
     .deep-blue .qm-selected-muted {
-        color: #b5d9c3;
+        color: color-mix(in oklch, var(--sidebar-accent-foreground) 72%, var(--muted-foreground));
     }
 
     .dark .qm-hover:hover,
     .deep-blue .qm-hover:hover {
-        background: rgba(143, 192, 165, 0.1);
-        color: #daf0e2;
+        background: color-mix(in oklch, var(--sidebar-accent) 58%, transparent);
+        color: var(--sidebar-accent-foreground);
+    }
+
+    .visual-fangzheng.dark .qm-selected {
+        background: color-mix(in oklch, var(--sidebar-accent) 76%, var(--background));
+        color: var(--sidebar-accent-foreground);
+        border-left: 0;
+    }
+
+    .visual-fangzheng.dark .qm-selected:hover {
+        background: color-mix(in oklch, var(--sidebar-accent) 86%, var(--background));
+    }
+
+    .visual-fangzheng.dark .qm-hover:hover {
+        background: color-mix(in oklch, var(--sidebar-accent) 64%, transparent);
+        color: var(--sidebar-accent-foreground);
+    }
+
+    .visual-fangzheng.dark [role="option"][aria-selected="true"] {
+        background: color-mix(in oklch, var(--accent) 76%, var(--popover));
+        color: var(--accent-foreground);
     }
 }
 

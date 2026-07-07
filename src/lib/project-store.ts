@@ -6,7 +6,12 @@ import type { McpConfig } from "@/lib/mcp/config"
 import { normalizeMcpConfig } from "@/lib/mcp/config"
 import { normalizeSourceWatchConfig } from "@/lib/source-watch-config"
 import { normalizeUiFontFamily, type UiFontFamily } from "@/lib/font-settings"
-import { normalizeVisualStyle, type VisualStyle } from "@/lib/visual-style-settings"
+import {
+  VISUAL_STYLE_STORAGE_VERSION,
+  normalizeVisualStyle,
+  resolveStoredVisualStyle,
+  type VisualStyle,
+} from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 
@@ -610,6 +615,7 @@ export async function loadRerankConfig(projectId?: string, projectPath?: string)
 
 const THEME_KEY = "theme"
 const VISUAL_STYLE_KEY = "visualStyle"
+const VISUAL_STYLE_VERSION_KEY = "visualStyleVersion"
 
 export async function saveTheme(theme: "light" | "dark" | "system"): Promise<void> {
   const store = await getStore()
@@ -625,13 +631,23 @@ export async function loadTheme(): Promise<"light" | "dark" | "system" | null> {
 export async function saveVisualStyle(style: VisualStyle): Promise<void> {
   const store = await getStore()
   await store.set(VISUAL_STYLE_KEY, normalizeVisualStyle(style))
+  await store.set(VISUAL_STYLE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
   await store.save()
 }
 
 export async function loadVisualStyle(): Promise<VisualStyle | null> {
   const store = await getStore()
   const saved = await store.get<string>(VISUAL_STYLE_KEY)
-  return saved ? normalizeVisualStyle(saved) : null
+  if (!saved) return null
+  const savedVersion = await store.get<string>(VISUAL_STYLE_VERSION_KEY)
+  const normalized = normalizeVisualStyle(saved)
+  const resolved = resolveStoredVisualStyle(saved, savedVersion)
+  if (saved !== resolved || resolved !== normalized || savedVersion !== VISUAL_STYLE_STORAGE_VERSION) {
+    await store.set(VISUAL_STYLE_KEY, resolved)
+    await store.set(VISUAL_STYLE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
+    await store.save()
+  }
+  return resolved
 }
 
 const UI_FONT_SIZE_SCALE_KEY = "uiFontSizeScale"

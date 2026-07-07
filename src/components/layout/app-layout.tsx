@@ -337,7 +337,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
               <ActivityPanel />
             </div>
             <div
-              className="w-2 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/40 active:bg-primary/50"
+              className="w-1 shrink-0 cursor-col-resize bg-border/20 transition-colors hover:bg-primary/25 active:bg-primary/30"
               onMouseDown={startDrag("left")}
             />
           </>
