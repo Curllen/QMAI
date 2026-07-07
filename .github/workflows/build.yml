@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-release:
     name: Build ${{ matrix.display_label }}
-    if: github.event_name == 'push'
+    if: github.event_name != 'push'
     runs-on: ${{ matrix.runner }}
     env:
       CARGO_PROFILE_RELEASE_LTO: "false"
