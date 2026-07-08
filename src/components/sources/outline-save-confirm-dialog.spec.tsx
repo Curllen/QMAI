@@ -129,4 +129,45 @@ describe("OutlineSaveConfirmDialog", () => {
     expect(document.body.textContent).toContain("章纲-第001章.md")
     expect(document.body.textContent).toContain("章纲")
   })
+
+  it("非人物保存时允许用户选择目标文件夹并提交选择结果", async () => {
+    const onConfirm = vi.fn()
+    await act(async () => {
+      root.render(
+        <OutlineSaveConfirmDialog
+          open
+          title="保存大纲"
+          mode="normal"
+          characterDrafts={[]}
+          requests={[{
+            targetFolder: "卷纲",
+            fileName: "大纲剧情骨架.md",
+            fileType: "volume-outline",
+            writeMode: "create",
+            referencedSkills: [],
+            sourceIntent: "保存大纲",
+            content: "正文",
+          }]}
+          onClose={() => {}}
+          onConfirm={onConfirm}
+        />,
+      )
+    })
+
+    const select = document.body.querySelector(
+      'select[aria-label="选择 大纲剧情骨架.md 的保存文件夹"]',
+    ) as HTMLSelectElement
+    expect(select).not.toBeNull()
+
+    await act(async () => {
+      select.value = "大纲"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await act(async () => {
+      findButton(document.body, "确认保存").click()
+    })
+
+    expect(onConfirm).toHaveBeenCalledOnce()
+    expect(onConfirm.mock.calls[0][0].requests[0].targetFolder).toBe("大纲")
+  })
 })

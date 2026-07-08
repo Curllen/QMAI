@@ -22,6 +22,7 @@ import {
 import { useWikiStore } from "@/stores/wiki-store";
 import {
   useOutlineChatStore,
+  type OutlineMultiAgentRunState,
   type OutlineChatMessage,
 } from "@/stores/outline-chat-store";
 import { normalizePath } from "@/lib/path-utils";
@@ -45,6 +46,7 @@ import {
   type OutlineSaveConfirmPayload,
 } from "@/components/sources/outline-save-confirm-dialog";
 import { OutlineWizardDialog } from "@/components/sources/outline-wizard-dialog";
+import { OutlineMultiAgentPanel } from "@/components/sources/outline-multi-agent-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { OUTLINE_SECTION_GENERATION_CONFIGS } from "@/lib/novel/outline-section-configs";
 import {
@@ -53,6 +55,7 @@ import {
   type OutlineWizardRequest,
 } from "@/lib/novel/outline-wizard";
 import {
+  type OutlineSubAgentPlan,
   planOutlineSubAgents,
   runOutlineMultiAgentWorkflow,
 } from "@/lib/novel/outline-multi-agent-orchestrator";
@@ -73,6 +76,7 @@ import {
   saveOutlineSaveRequests,
   splitConfirmRequiredSaveRequests,
 } from "@/lib/novel/outline-save-request";
+import { parseOutlineSubAgentResult } from "@/lib/novel/outline-result-protocol";
 import {
   resolveModelConfig,
   resolveNovelModel,
@@ -393,6 +397,72 @@ function updateOutlineAssistantMessage(
   }));
 }
 
+function describeOutlineSubAgentTask(agent: OutlineSubAgentPlan): string {
+  switch (agent.kind) {
+    case "outline":
+      return "负责总纲、主线结构、卷纲和章纲骨架。";
+    case "topic":
+      return "负责题材卖点、爽点节奏、频道期待和类型套路。";
+    case "character":
+      return "负责主要角色、配角、反派、人物关系和成长线。";
+    case "setting":
+      return "负责世界观、势力、地图、规则体系和关键设定。";
+    case "foreshadowing":
+      return "负责悬念、伏笔、误导信息和回收链路。";
+    default:
+      return agent.taskPrompt;
+  }
+}
+
+function createOutlineMultiAgentRunState(
+  plan: OutlineSubAgentPlan[],
+  maxConcurrency: number,
+): OutlineMultiAgentRunState {
+  return {
+    mode: "multi-agent",
+    status: plan.length > 0 ? "running" : "fallback",
+    maxConcurrency,
+    agents: plan.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      kind: agent.kind,
+      skillNames: agent.skillNames,
+      taskPrompt: describeOutlineSubAgentTask(agent),
+      status: "pending",
+    })),
+    merge: {
+      status: "pending",
+      summary: "等待子 Agent 完成后合并。",
+    },
+  };
+}
+
+function updateOutlineMultiAgentRun(
+  conversationId: string,
+  messageId: string,
+  updater: (run: OutlineMultiAgentRunState | undefined) => OutlineMultiAgentRunState | undefined,
+): void {
+  updateOutlineAssistantMessage(conversationId, messageId, (message) => ({
+    ...message,
+    multiAgentRun: updater(message.multiAgentRun),
+  }));
+}
+
+function updateOutlineMultiAgentItem(
+  conversationId: string,
+  messageId: string,
+  agentId: string,
+  updater: (agent: OutlineMultiAgentRunState["agents"][number]) => OutlineMultiAgentRunState["agents"][number],
+): void {
+  updateOutlineMultiAgentRun(conversationId, messageId, (run) => {
+    if (!run) return run;
+    return {
+      ...run,
+      agents: run.agents.map((agent) => agent.id === agentId ? updater(agent) : agent),
+    };
+  });
+}
+
 function updateOutlineToolCall(
   callId: string,
   updater: (call: ToolCallRecord) => ToolCallRecord,
@@ -587,6 +657,7 @@ function OutlineAssistantMessage({
       {thinking ? (
         <OutlineThinkingBlock content={thinking} open={isStreaming} />
       ) : null}
+      <OutlineMultiAgentPanel run={msg.multiAgentRun} />
       <AgentToolCallMessage
         toolCalls={msg.agentToolCalls}
         onConfirmSave={onConfirmToolSave}
@@ -1372,16 +1443,27 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
 
         let finalText = "";
         if (options.enableMultiAgent) {
+          const maxConcurrency = 3;
           const subAgentPlan = planOutlineSubAgents({
             preferredSkillNames: options.preferredSkillNames ?? [],
             taskPrompt: prompt,
-            maxConcurrency: 3,
+            maxConcurrency,
           });
+          updateOutlineAssistantMessage(convId, assistantId, (message) => ({
+            ...message,
+            multiAgentRun: createOutlineMultiAgentRunState(subAgentPlan, maxConcurrency),
+          }));
           const multiAgentResult = await runOutlineMultiAgentWorkflow({
             plan: subAgentPlan,
-            maxConcurrency: 3,
+            maxConcurrency,
             failureFallbackThreshold: 0.5,
             runSubAgent: async (subAgentPlan) => {
+              updateOutlineMultiAgentItem(convId, assistantId, subAgentPlan.id, (agent) => ({
+                ...agent,
+                status: "running",
+                startedAt: Date.now(),
+                error: undefined,
+              }));
               const subAgentMessages: AgentMessage[] = [
                 {
                   role: "system",
@@ -1408,9 +1490,35 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                 disableWriteTools: true,
                 statusText: `多 Agent 并行生成中...\n正在运行：${subAgentPlan.name}`,
               });
+              const parsed = parseOutlineSubAgentResult(subRun.text);
+              if (!parsed.ok) {
+                updateOutlineMultiAgentItem(convId, assistantId, subAgentPlan.id, (agent) => ({
+                  ...agent,
+                  status: "error",
+                  error: parsed.error,
+                  finishedAt: Date.now(),
+                }));
+                throw new Error(parsed.error);
+              }
+              updateOutlineMultiAgentItem(convId, assistantId, subAgentPlan.id, (agent) => ({
+                ...agent,
+                status: "done",
+                summary: parsed.value.summary || "已完成本 Agent 负责内容。",
+                finishedAt: Date.now(),
+              }));
               return subRun.text;
             },
             runSingleAgentFallback: async () => {
+              updateOutlineMultiAgentRun(convId, assistantId, (run) => run ? ({
+                ...run,
+                mode: "single-agent-fallback",
+                status: "fallback",
+                merge: {
+                  status: "skipped",
+                  summary: "已回退为单 Agent 生成。",
+                },
+                fallbackReason: run.fallbackReason ?? "多 Agent 不可用或部分子 Agent 失败，已自动回退。",
+              }) : run);
               setStreamingContent(
                 "当前环境不支持多 Agent 并行生成，已自动回退为单 Agent 大纲生成。",
               );
@@ -1418,6 +1526,15 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             },
             mergeResults: async (subAgentResults) => {
               result = "";
+              updateOutlineMultiAgentRun(convId, assistantId, (run) => run ? ({
+                ...run,
+                status: "merging",
+                merge: {
+                  status: "running",
+                  startedAt: Date.now(),
+                  summary: `正在合并 ${subAgentResults.length} 个子 Agent 结果。`,
+                },
+              }) : run);
               const mergeMessages: AgentMessage[] = [
                 {
                   role: "system",
@@ -1449,8 +1566,43 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                 streamToUser: true,
                 statusText: "多 Agent 已完成，正在合并大纲结果...",
               });
+              updateOutlineMultiAgentRun(convId, assistantId, (run) => run ? ({
+                ...run,
+                status: "done",
+                merge: {
+                  status: "done",
+                  finishedAt: Date.now(),
+                  summary: "合并完成，已输出最终大纲草稿。",
+                },
+              }) : run);
               return mergeRun.text || "AI大纲未返回内容。";
             },
+          });
+          updateOutlineMultiAgentRun(convId, assistantId, (run) => {
+            if (!run) return run;
+            const successful = new Set(multiAgentResult.successfulAgents);
+            const failed = new Set(multiAgentResult.failedAgents);
+            return {
+              ...run,
+              mode: multiAgentResult.mode,
+              status: multiAgentResult.mode === "multi-agent" ? "done" : "fallback",
+              fallbackReason: multiAgentResult.fallbackReason ?? run.fallbackReason,
+              agents: run.agents.map((agent) => {
+                if (successful.has(agent.id) && agent.status !== "done") {
+                  return { ...agent, status: "done", summary: agent.summary ?? "已完成。", finishedAt: Date.now() };
+                }
+                if (failed.has(agent.id) && agent.status !== "error") {
+                  return { ...agent, status: "error", error: agent.error ?? "子 Agent 执行失败。", finishedAt: Date.now() };
+                }
+                return agent;
+              }),
+              merge: multiAgentResult.mode === "multi-agent"
+                ? run.merge
+                : {
+                    status: "skipped",
+                    summary: "已回退为单 Agent 生成。",
+                  },
+            };
           });
           finalText = multiAgentResult.finalText;
         } else {

@@ -11,6 +11,17 @@ import {
 import type { CharacterSaveDraft } from "@/lib/novel/character-save-extractor"
 import type { OutlineSaveRequest } from "@/lib/novel/outline-save-request"
 
+const OUTLINE_SAVE_FOLDER_OPTIONS = [
+  "大纲",
+  "卷纲",
+  "章纲",
+  "人物小传",
+  "设定",
+  "伏笔",
+  "组织",
+  "质量检查",
+]
+
 export interface OutlineSaveConfirmPayload {
   requests: OutlineSaveRequest[]
   characterDrafts: CharacterSaveDraft[]
@@ -36,15 +47,21 @@ export function OutlineSaveConfirmDialog({
   onConfirm,
 }: OutlineSaveConfirmDialogProps) {
   const [drafts, setDrafts] = useState<CharacterSaveDraft[]>(characterDrafts)
+  const [normalRequests, setNormalRequests] = useState<OutlineSaveRequest[]>(requests)
   const selectedDrafts = useMemo(
     () => drafts.filter((draft) => draft.selected),
     [drafts],
+  )
+  const folderOptions = useMemo(
+    () => Array.from(new Set([...OUTLINE_SAVE_FOLDER_OPTIONS, ...normalRequests.map((request) => request.targetFolder)])),
+    [normalRequests],
   )
 
   useEffect(() => {
     if (!open) return
     setDrafts(characterDrafts)
-  }, [characterDrafts, open])
+    setNormalRequests(requests)
+  }, [characterDrafts, open, requests])
 
   if (!open) return null
 
@@ -116,14 +133,36 @@ export function OutlineSaveConfirmDialog({
             </div>
           ) : (
             <div className="space-y-2 text-sm">
-              {requests.map((request) => (
+              {normalRequests.map((request, index) => (
                 <div
-                  key={`${request.targetFolder}/${request.fileName}`}
+                  key={`${index}-${request.fileName}`}
                   className="rounded-md border px-3 py-2"
                 >
                   <div className="font-medium">{request.fileName}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {request.targetFolder}
+                  <div className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
+                    <label htmlFor={`outline-save-folder-${index}`}>
+                      保存文件夹
+                    </label>
+                    <select
+                      id={`outline-save-folder-${index}`}
+                      aria-label={`选择 ${request.fileName} 的保存文件夹`}
+                      value={request.targetFolder}
+                      onChange={(event) => {
+                        const targetFolder = event.target.value
+                        setNormalRequests((items) =>
+                          items.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, targetFolder } : item,
+                          ),
+                        )
+                      }}
+                      className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+                    >
+                      {folderOptions.map((folder) => (
+                        <option key={folder} value={folder}>
+                          {folder}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               ))}
@@ -140,7 +179,7 @@ export function OutlineSaveConfirmDialog({
             disabled={mode === "character" && selectedDrafts.length === 0}
             onClick={() =>
               onConfirm({
-                requests,
+                requests: mode === "character" ? requests : normalRequests,
                 characterDrafts: selectedDrafts,
               })
             }

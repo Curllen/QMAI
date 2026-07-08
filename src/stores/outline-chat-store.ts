@@ -5,12 +5,56 @@ import type { AgentRunRecord } from "@/lib/agent/types"
 import type { ReferenceToken } from "@/lib/reference/types"
 import { useWikiStore } from "@/stores/wiki-store"
 
+export type OutlineMultiAgentStatus =
+  | "planning"
+  | "running"
+  | "merging"
+  | "fallback"
+  | "done"
+  | "error"
+
+export type OutlineMultiAgentStepStatus =
+  | "pending"
+  | "running"
+  | "done"
+  | "error"
+  | "skipped"
+
+export interface OutlineMultiAgentItemState {
+  id: string
+  name: string
+  kind: string
+  skillNames: string[]
+  taskPrompt: string
+  status: OutlineMultiAgentStepStatus
+  summary?: string
+  error?: string
+  startedAt?: number
+  finishedAt?: number
+}
+
+export interface OutlineMultiAgentRunState {
+  mode: "multi-agent" | "single-agent-fallback"
+  status: OutlineMultiAgentStatus
+  maxConcurrency: number
+  agents: OutlineMultiAgentItemState[]
+  merge?: {
+    status: OutlineMultiAgentStepStatus
+    summary?: string
+    error?: string
+    startedAt?: number
+    finishedAt?: number
+  }
+  fallbackReason?: string
+}
+
 export interface OutlineChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
   sources?: string[]
   agentToolCalls?: AgentRunRecord["toolCalls"]
+  multiAgentRun?: OutlineMultiAgentRunState
   isAgentRunning?: boolean
   attachedReferences?: ReferenceToken[]
 }

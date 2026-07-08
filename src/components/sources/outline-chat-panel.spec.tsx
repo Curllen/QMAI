@@ -187,6 +187,17 @@ describe("OutlineChatPanel controls", () => {
     expect(source).toContain("自动回退为单 Agent")
   })
 
+  it("AI 大纲多 Agent 过程写入消息状态并渲染结构化面板", () => {
+    expect(source).toContain('import { OutlineMultiAgentPanel } from "@/components/sources/outline-multi-agent-panel"')
+    expect(source).toContain("multiAgentRun")
+    expect(source).toContain("updateOutlineMultiAgentRun")
+    expect(source).toContain("<OutlineMultiAgentPanel run={msg.multiAgentRun} />")
+    expect(source).toContain("status: \"pending\"")
+    expect(source).toContain("status: \"running\"")
+    expect(source).toContain("status: \"merging\"")
+    expect(source).toContain("fallbackReason")
+  })
+
   it("keeps wizard prompt bubbles readable and stops streaming in the original conversation", () => {
     expect(source).toContain("streamingConversationIdRef")
     expect(source).toContain("streamingConversationIdRef.current = convId")

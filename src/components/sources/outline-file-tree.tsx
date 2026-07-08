@@ -80,6 +80,7 @@ function OutlineContextMenu({
     <div
       className="fixed z-50 w-44 rounded-md border bg-popover p-1 text-xs text-popover-foreground shadow-md"
       data-testid="outline-file-context-menu"
+      data-outline-context-menu="true"
       style={{ left: menu.x, top: menu.y }}
     >
       {menu.isDir ? (
@@ -440,6 +441,22 @@ export function OutlineFileTree({
       return next
     })
   }, [nodes])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function handleDocumentMouseDown(event: MouseEvent) {
+      const target = event.target
+      if (target instanceof Element && target.closest("[data-outline-context-menu='true']")) {
+        return
+      }
+      setContextMenu(null)
+      setMoveSubmenuPath(null)
+    }
+    document.addEventListener("mousedown", handleDocumentMouseDown)
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown)
+    }
+  }, [contextMenu])
 
   function toggle(path: string) {
     setExpandedPaths((current) => {

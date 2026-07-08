@@ -138,6 +138,35 @@ describe("OutlineFileTree", () => {
     )
   })
 
+  it("右键菜单打开后点击其他区域会自动关闭", async () => {
+    await act(async () => {
+      root.render(
+        <OutlineFileTree
+          nodes={tree}
+          selectedPath={null}
+          onSelectFile={() => {}}
+          onMoveFile={async () => {}}
+        />,
+      )
+    })
+
+    const fileButton = Array.from(host.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("章纲-第001章.md"),
+    ) as HTMLButtonElement
+
+    await act(async () => {
+      fileButton.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }))
+    })
+
+    expect(document.body.querySelector("[data-testid='outline-file-context-menu']")).not.toBeNull()
+
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
+    })
+
+    expect(document.body.querySelector("[data-testid='outline-file-context-menu']")).toBeNull()
+  })
+
   it("右键重命名后在文件行内编辑文件名并用回车提交", async () => {
     const onRenameFile = vi.fn(async () => {})
 
