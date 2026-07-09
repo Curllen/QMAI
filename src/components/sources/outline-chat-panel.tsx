@@ -920,6 +920,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyRef = useRef<HTMLDivElement | null>(null);
   const historyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [historyDropdownStyle, setHistoryDropdownStyle] = useState<CSSProperties | null>(null);
   const [deAiSkillConfig, setDeAiSkillConfig] = useState<DeAiSkillConfig | null>(null);
   const [writingSkills, setWritingSkills] = useState<UserSkill[]>([]);
@@ -1011,7 +1012,11 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!historyOpen) return;
     function handleClick(event: MouseEvent) {
-      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        historyRef.current && !historyRef.current.contains(target) &&
+        historyDropdownRef.current && !historyDropdownRef.current.contains(target)
+      ) {
         setHistoryOpen(false);
       }
     }
@@ -2389,6 +2394,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
           {historyOpen && historyDropdownStyle
             ? createPortal(
                 <div
+                  ref={historyDropdownRef}
                   className="fixed z-50 max-h-[60vh] w-72 overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg"
                   style={historyDropdownStyle}
                 >
