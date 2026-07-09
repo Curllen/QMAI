@@ -5,12 +5,58 @@ import type { AgentRunRecord } from "@/lib/agent/types"
 import type { ReferenceToken } from "@/lib/reference/types"
 import { useWikiStore } from "@/stores/wiki-store"
 
+export type OutlineMultiAgentStatus =
+  | "planning"
+  | "running"
+  | "merging"
+  | "fallback"
+  | "done"
+  | "error"
+
+export type OutlineMultiAgentStepStatus =
+  | "pending"
+  | "running"
+  | "done"
+  | "error"
+  | "skipped"
+
+export interface OutlineMultiAgentItemState {
+  id: string
+  name: string
+  kind: string
+  skillNames: string[]
+  taskPrompt: string
+  status: OutlineMultiAgentStepStatus
+  summary?: string
+  error?: string
+  startedAt?: number
+  finishedAt?: number
+}
+
+export interface OutlineMultiAgentRunState {
+  mode: "multi-agent" | "single-agent-fallback"
+  status: OutlineMultiAgentStatus
+  maxConcurrency: number
+  agents: OutlineMultiAgentItemState[]
+  merge?: {
+    status: OutlineMultiAgentStepStatus
+    summary?: string
+    error?: string
+    startedAt?: number
+    finishedAt?: number
+  }
+  fallbackReason?: string
+  failureDetails?: string[]
+}
+
 export interface OutlineChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
   sources?: string[]
   agentToolCalls?: AgentRunRecord["toolCalls"]
+  multiAgentRun?: OutlineMultiAgentRunState
+  showThinkingProcess?: boolean
   isAgentRunning?: boolean
   attachedReferences?: ReferenceToken[]
 }
@@ -22,6 +68,7 @@ export interface OutlineChatConversation {
   updatedAt: number
   messages: OutlineChatMessage[]
   modelId?: string
+  contextSummary?: string
 }
 
 interface OutlineChatState {
@@ -30,6 +77,7 @@ interface OutlineChatState {
   streamingContent: string
   isStreaming: boolean
   loaded: boolean
+  pendingReferenceTokens: ReferenceToken[]
 
   createConversation: () => string
   setActiveConversation: (id: string | null) => void
@@ -38,8 +86,11 @@ interface OutlineChatState {
   removeLastMessage: (convId: string) => void
   deleteConversation: (id: string) => void
   setConversationModel: (id: string, modelId: string) => void
+  setConversationContextSummary: (id: string, contextSummary: string) => void
   setStreamingContent: (content: string) => void
   setIsStreaming: (value: boolean) => void
+  enqueueReferenceTokens: (tokens: ReferenceToken[]) => void
+  consumePendingReferenceTokens: () => ReferenceToken[]
   loadFromDisk: () => Promise<void>
   saveToDisk: () => Promise<void>
 }
@@ -56,6 +107,7 @@ export const useOutlineChatStore = create<OutlineChatState>((set, get) => ({
   streamingContent: "",
   isStreaming: false,
   loaded: false,
+  pendingReferenceTokens: [],
 
   createConversation: () => {
     const id = crypto.randomUUID()
@@ -135,8 +187,29 @@ export const useOutlineChatStore = create<OutlineChatState>((set, get) => ({
     void get().saveToDisk()
   },
 
+  setConversationContextSummary: (id, contextSummary) => {
+    const now = Date.now()
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, contextSummary, updatedAt: now } : c
+      ),
+    }))
+    void get().saveToDisk()
+  },
+
   setStreamingContent: (content) => set({ streamingContent: content }),
   setIsStreaming: (value) => set({ isStreaming: value }),
+  enqueueReferenceTokens: (tokens) => {
+    if (tokens.length === 0) return
+    set((state) => ({
+      pendingReferenceTokens: [...state.pendingReferenceTokens, ...tokens],
+    }))
+  },
+  consumePendingReferenceTokens: () => {
+    const tokens = get().pendingReferenceTokens
+    set({ pendingReferenceTokens: [] })
+    return tokens
+  },
 
   loadFromDisk: async () => {
     const path = getStoragePath()

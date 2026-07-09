@@ -27,13 +27,15 @@ import { FrameworkList } from "@/components/novel/story-simulation/framework-lis
 import { SkillLibrarySidebarPanel } from "@/components/skill-library/skill-library-view"
 
 import { useWikiStore } from "@/stores/wiki-store"
+import { useChatStore } from "@/stores/chat-store"
+import { useOutlineChatStore } from "@/stores/outline-chat-store"
+import { useOutlineGenerationStore } from "@/stores/outline-generation-store"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
 import { loadFrameworks, loadSimulationResults, deleteSimulationResult } from "@/lib/novel/story-simulation/framework-store"
 import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import type { StoryFramework } from "@/lib/novel/story-simulation/types"
 import { createDirectory, fileExists, listDirectory, preprocessFile, readFile, writeFile } from "@/commands/fs"
 import { countChapterBodyWords } from "@/lib/chapter-word-count"
-import { buildChapterTotalWordCountLabel } from "@/lib/chapter-display"
 import { getFileName, getFileStem, normalizePath } from "@/lib/path-utils"
 import {
   loadDismantlingLibrary,
@@ -67,6 +69,7 @@ import {
 import { makeChapterFileName, makeDefaultChapterTitle, makeSafeFileSlug } from "@/lib/wiki-filename"
 import { useImportProgressStore } from "@/stores/import-progress-store"
 import { openExternalUrl } from "@/lib/open-external-url"
+import type { ReferenceToken } from "@/lib/reference/types"
 
 const USAGE_GUIDE_URL = "https://tcnk9ik08e1c.feishu.cn/wiki/FWiSwYQKoifpwBk6mSRcSlB8nrh?from=from_copylink"
 
@@ -673,6 +676,11 @@ export function SidebarPanel() {
   const setSelectedMemoryCenterEntry = useWikiStore((s) => s.setSelectedMemoryCenterEntry)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setFileTree = useWikiStore((s) => s.setFileTree)
+  const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
+  const enqueueChatReferenceTokens = useChatStore((s) => s.enqueueReferenceTokens)
+  const enqueueOutlineReferenceTokens = useOutlineChatStore((s) => s.enqueueReferenceTokens)
+  const setOutlineChatOpen = useOutlineGenerationStore((s) => s.setPanelOpen)
   const dataVersion = useWikiStore((s) => s.dataVersion)
   const [mode, setMode] = useState<"knowledge" | "files">("knowledge")
   const [refreshKey, setRefreshKey] = useState(0)
@@ -683,7 +691,6 @@ export function SidebarPanel() {
   const [memoryData, setMemoryData] = useState<MemoryCenterData | null>(null)
   const [memoryLoading, setMemoryLoading] = useState(false)
   const [memoryError, setMemoryError] = useState<string | null>(null)
-  const [sidebarTotalWordCount, setSidebarTotalWordCount] = useState<number | null>(null)
   const [outlineImporting, setOutlineImporting] = useState(false)
   const [outlineImportMenuOpen, setOutlineImportMenuOpen] = useState(false)
   const outlineImportMenuRef = useRef<HTMLDivElement | null>(null)
@@ -720,37 +727,6 @@ export function SidebarPanel() {
   }, [activeView, selectedFile])
 
   const isChapter = mode === "knowledge"
-
-  useEffect(() => {
-    if (!project || !isChapter) {
-      setSidebarTotalWordCount(null)
-      return
-    }
-
-    let cancelled = false
-
-    const loadSidebarTotalWordCount = async () => {
-      try {
-        const chapterNodes = await listDirectory(`${normalizePath(project.path)}/wiki/chapters`)
-        const files = flattenMdFiles(chapterNodes)
-        const contents = await Promise.all(files.map((file) => readFile(file.path).catch(() => "")))
-        const total = contents.reduce((sum, markdown) => sum + countChapterBodyWords(markdown), 0)
-        if (!cancelled) {
-          setSidebarTotalWordCount(total)
-        }
-      } catch {
-        if (!cancelled) {
-          setSidebarTotalWordCount(null)
-        }
-      }
-    }
-
-    void loadSidebarTotalWordCount()
-
-    return () => {
-      cancelled = true
-    }
-  }, [dataVersion, isChapter, project])
 
   useEffect(() => {
     if (!pendingCreate?.kind) return
@@ -1177,6 +1153,17 @@ export function SidebarPanel() {
     setInputTitle("")
   }
 
+  const handleSendChapterToChat = useCallback((token: ReferenceToken) => {
+    enqueueChatReferenceTokens([token])
+    setChatExpanded(true)
+  }, [enqueueChatReferenceTokens, setChatExpanded])
+
+  const handleSendOutlineToOutlineChat = useCallback((token: ReferenceToken) => {
+    enqueueOutlineReferenceTokens([token])
+    setOutlineChatOpen(true)
+    setActiveView("sources")
+  }, [enqueueOutlineReferenceTokens, setActiveView, setOutlineChatOpen])
+
   const inputPlaceholder = pendingCreate?.kind === "outline"
     ? t("sidebar.newOutlinePrompt")
     : pendingCreate?.kind === "volume"
@@ -1356,11 +1343,6 @@ export function SidebarPanel() {
               helpTitle={isChapter ? "章节功能使用说明" : "大纲功能使用说明"}
             />
           </div>
-          {isChapter && sidebarTotalWordCount !== null ? (
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {buildChapterTotalWordCountLabel(sidebarTotalWordCount)}
-            </div>
-          ) : null}
         </div>
         <div className="flex items-center gap-1">
           {isChapter ? (
@@ -1494,6 +1476,8 @@ export function SidebarPanel() {
           pendingPages={pendingPages.filter((page) => page.type === (isChapter ? "chapter" : "outline"))}
           onRemovePendingPage={handleRemovePendingPage}
           onRequestCreate={beginCreate}
+          onSendToChat={isChapter ? handleSendChapterToChat : undefined}
+          onSendToOutline={!isChapter ? handleSendOutlineToOutlineChat : undefined}
         />
       </div>
       <div className="border-t px-3 py-2">

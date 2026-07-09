@@ -338,6 +338,11 @@ describe("chat-panel agent reference integration", () => {
     expect(source).toContain("topConversations.map((conv) => renderConversationChip(conv))")
     expect(source).not.toContain("historyConversations = sorted.filter((conv) => conv.id !== activeConversationId)")
   })
+
+  it("pins the conversation history control to the far right of the AI chat toolbar", () => {
+    expect(source).toContain('className="relative ml-auto shrink-0"')
+    expect(source).toContain("qmai-history-button")
+  })
 })
 
 describe("chat-panel chapter plan confirm integration (Stage C)", () => {

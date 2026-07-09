@@ -135,6 +135,28 @@ describe("ReferenceInput", () => {
     expect(footer?.querySelector("[aria-label='发送消息']")).toBeTruthy()
   })
 
+  it("places left footer controls before the reference trigger", async () => {
+    await act(async () => {
+      root.render(
+        <ReferenceInput
+          tokens={[]}
+          onSubmit={vi.fn()}
+          leftFooterControls={<button type="button">生成大纲</button>}
+          rightControls={<button type="button">模型选择</button>}
+        />,
+      )
+    })
+
+    const footer = host.querySelector("[data-reference-input-footer]")
+    const text = footer?.textContent ?? ""
+    expect(text.indexOf("生成大纲")).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf("模型选择")).toBeGreaterThan(text.indexOf("生成大纲"))
+    const leftControl = Array.from(footer?.querySelectorAll("button") ?? [])
+      .find((button) => button.textContent === "生成大纲")
+    const referenceButton = footer?.querySelector("[aria-label='引用内容']")
+    expect(Boolean(leftControl?.compareDocumentPosition(referenceButton!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
   it("shows a stop action in the footer while streaming", async () => {
     const onStop = vi.fn()
 

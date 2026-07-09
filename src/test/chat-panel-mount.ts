@@ -26,7 +26,6 @@ const wikiState = {
   aiWorkflowMode: "standard",
   planExecuteEnabled: false,
   deepChapterEnabled: false,
-  chatDockPosition: "right",
   novelConfig: { contextTokenBudget: 0 },
   setActiveView: vi.fn(),
   setAiChatModel: vi.fn(),
@@ -34,7 +33,6 @@ const wikiState = {
   setPlanExecuteEnabled: vi.fn(),
   setChatEditModeEnabled: vi.fn(),
   setDeepChapterEnabled: vi.fn(),
-  setChatDockPosition: vi.fn(),
   setSelectedFile: vi.fn(),
 }
 

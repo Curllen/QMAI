@@ -5,9 +5,8 @@ import { BookOpen, Plus, Trash2, MessageSquare, FileEdit, Drama, ListChecks, Che
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ChatMessage, StreamingMessage } from "./chat-message"
-import { ChatDockControls } from "./chat-dock-controls"
-import { useSourceFiles } from "./chat-shared"
 import { ChatModelSelector } from "./chat-model-selector"
+import { useSourceFiles } from "./chat-shared"
 import {
   ChapterPlanConfirmDialog,
   extractChapterPlan,
@@ -432,6 +431,7 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
   const [historyOpen, setHistoryOpen] = useState(false)
   const historyRef = useRef<HTMLDivElement | null>(null)
   const historyButtonRef = useRef<HTMLButtonElement | null>(null)
+  const historyDropdownRef = useRef<HTMLDivElement | null>(null)
   const [historyDropdownStyle, setHistoryDropdownStyle] = useState<CSSProperties | null>(null)
 
   const isStreamingConversation = (convId: string) => convId in streamingContents
@@ -446,7 +446,11 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
   useEffect(() => {
     if (!historyOpen) return
     function handleClick(event: MouseEvent) {
-      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        historyRef.current && !historyRef.current.contains(target) &&
+        historyDropdownRef.current && !historyDropdownRef.current.contains(target)
+      ) {
         setHistoryOpen(false)
       }
     }
@@ -571,8 +575,7 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
 
   // 顶部统一为三段式：新建写作绘画 / 正在工作的绘画 / 绘画历史记录
   return (
-    <div className="flex h-12 shrink-0 items-center border-b bg-muted/20 px-2">
-      <div className="flex items-center gap-2">
+    <div className="flex h-12 shrink-0 items-center gap-2 border-b bg-muted/20 px-2">
         {/* 1. 新建写作绘画 */}
         <Button
           variant="ghost"
@@ -599,7 +602,7 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
         </div>
 
         {/* 3. 绘画历史记录（点击展开下拉面板，显示全部历史会话） */}
-        <div className="relative shrink-0" ref={historyRef}>
+        <div className="relative ml-auto shrink-0" ref={historyRef}>
           <Button
             ref={historyButtonRef}
             variant="ghost"
@@ -623,6 +626,7 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
           {historyOpen && historyDropdownStyle &&
             createPortal(
               <div
+                ref={historyDropdownRef}
                 className="fixed z-50 max-h-[60vh] w-72 overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg"
                 style={historyDropdownStyle}
               >
@@ -637,7 +641,6 @@ function ConversationTabs({ onAbortStream }: { onAbortStream: (convId: string) =
               document.body,
             )}
         </div>
-      </div>
     </div>
   )
 }
@@ -887,7 +890,7 @@ export function ChatPanel() {
           id: skill.id,
           name: skill.name,
           subtype: "writing" as const,
-          kind: skill.kinds,
+          kind: skill.kind,
           stages: skill.stages,
           modes: skill.modes,
         }))
@@ -1360,6 +1363,7 @@ export function ChatPanel() {
             characterAuras: "",
             cognitionStates: "",
             foreshadowingStates: "",
+            sectionBriefing: "",
             timeline: "",
             relatedSettings: "",
             canonRules: "",
@@ -1795,7 +1799,6 @@ export function ChatPanel() {
             <div className="mb-2 flex items-center justify-between gap-2">
               <TooltipProvider delay={200}>
                 <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
-                  <ChatDockControls />
                   <DeAiSkillPicker
                     value={activeConversation?.selectedDeAiSkillId}
                     buttonLabel="技能库"
