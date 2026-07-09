@@ -1136,11 +1136,14 @@ export function ChatPanel() {
     const currentStreamingContent = useChatStore.getState().getStreamingContent(convId)
     abortControllersRef.current[convId]?.abort()
     delete abortControllersRef.current[convId]
+    const finalizeStopped = () => {
+      finalizeStream(`${currentStreamingContent ? `${currentStreamingContent}\n\n` : ""}已停止生成。`, [], convId)
+      delete activeStreamSessionsRef.current[convId]
+    }
     if (sessionId !== undefined) {
-      streamSessionGuardRef.current.stop(convId, sessionId, () => {
-        finalizeStream(`${currentStreamingContent ? `${currentStreamingContent}\n\n` : ""}已停止生成。`, [], convId)
-        delete activeStreamSessionsRef.current[convId]
-      })
+      streamSessionGuardRef.current.stop(convId, sessionId, finalizeStopped)
+    } else if (currentStreamingContent !== undefined) {
+      finalizeStopped()
     }
   }, [finalizeStream])
 

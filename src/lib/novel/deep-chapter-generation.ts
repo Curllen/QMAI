@@ -17,6 +17,7 @@ import {
   buildDeepChapterRevisionPrompt,
   buildStableContextPrefix,
 } from "./deep-chapter-prompts"
+import { USER_ABORT_MESSAGE, rethrowIfUserAbort, throwIfAborted } from "@/lib/user-abort"
 
 export interface DeepChapterGenerationInput {
   projectPath: string
@@ -83,7 +84,6 @@ const defaultDeps: DeepChapterGenerationDeps = {
 const REPEAT_CHECK_MIN_CHARS = 600
 const REPEAT_WINDOW_CHARS = 120
 const REPEAT_HIT_LIMIT = 3
-const USER_ABORT_MESSAGE = "已停止生成"
 /** Legacy deep-chapter context budget (tokens). Kept as the upper bound;
  *  computeNovelContextTokenBudget clamps it down for small context windows. */
 const DEEP_CHAPTER_CONTEXT_TOKEN_BUDGET = 32000
@@ -180,7 +180,7 @@ export async function runDeepChapterGeneration(
   deps: DeepChapterGenerationDeps = defaultDeps,
   signal?: AbortSignal,
 ): Promise<DeepChapterGenerationResult> {
-  assertNotAborted(signal)
+  throwIfAborted(signal)
   const resumeCheckpoint = input.resumeCheckpoint
   const novelConfig = useWikiStore.getState().novelConfig
   const writingConfig = resolveWritingConfig(input.llmConfig)
@@ -202,6 +202,7 @@ export async function runDeepChapterGeneration(
         input.chapterNumber,
         writingConfig,
         3,
+        signal,
       )
       if (previousChaptersAnalysis) {
         callbacks.onThinking?.(formatStageThinking(
@@ -210,10 +211,11 @@ export async function runDeepChapterGeneration(
         ))
       }
     } catch (error) {
+      rethrowIfUserAbort(error, signal)
       console.error("[deep-chapter-generation] 前情分析失败:", error)
     }
   }
-  assertNotAborted(signal)
+  throwIfAborted(signal)
 
   const contextPack = await safeBuildChapterContextPack(
     deps,
@@ -225,6 +227,7 @@ export async function runDeepChapterGeneration(
 
   // 阶段1后：加载智能skill（传递contextPack用于场景检测）
   customDeAiSkill = await loadSmartDeAiSkill(input.projectPath, input.userRequest, contextPack)
+  throwIfAborted(signal)
 
   // 大纲与其余上下文共用同一窗口预算（派生自 maxContextSize）。大纲优先，
   // 但设有上限占比，避免其独占整个窗口；剩余额度再分给记忆/设定/检索上下文。
@@ -381,6 +384,7 @@ export async function runDeepChapterGeneration(
           ? await deps.reviewChapter(input.projectPath, draftContent, input.chapterNumber, { onThinking: callbacks.onThinking, contextPack }, signal)
           : await deps.reviewChapter(input.projectPath, draftContent, input.chapterNumber, { onThinking: callbacks.onThinking, contextPack })
       } catch (err) {
+        rethrowIfUserAbort(err, signal)
         console.error("[Deep Chapter] Review failed:", err)
         reviewResults = []
       }
@@ -478,6 +482,7 @@ export async function runDeepChapterGeneration(
         ))
       }
     } catch (err) {
+      rethrowIfUserAbort(err, signal)
       console.error("[Deep Chapter] 返修后复审失败:", err)
     }
   }
@@ -615,7 +620,7 @@ async function collectModelText(
     streamController.abort()
   }
 
-  assertNotAborted(signal)
+  throwIfAborted(signal)
 
   await deps.streamChat(
     config,
@@ -672,7 +677,7 @@ function countChapterChars(content: string): number {
 }
 
 function assertNotAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new Error(USER_ABORT_MESSAGE)
+  throwIfAborted(signal)
 }
 
 function isRequestCancelledError(error: Error): boolean {
