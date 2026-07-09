@@ -116,7 +116,6 @@ function normalizeRequest(raw: unknown, index: number): {
     fileName,
     fileType,
     writeMode,
-    content,
   })) {
     if (!value) errors.push(`第 ${index + 1} 个保存请求缺少 ${field}。`)
   }
@@ -159,6 +158,47 @@ function collectRawRequests(payload: Record<string, unknown>): unknown[] {
   return []
 }
 
+export function extractBodyContent(text: string): string {
+  return text
+    .replace(/```(?:json)?\s*[\s\S]*?```/gi, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .trim()
+}
+
+function splitBodyByH1(body: string): string[] {
+  const lines = body.split(/\r?\n/)
+  const sections: string[] = []
+  let current: string[] = []
+
+  for (const line of lines) {
+    if (/^#\s+/.test(line.trim()) && current.length > 0) {
+      sections.push(current.join("\n").trim())
+      current = []
+    }
+    current.push(line)
+  }
+  if (current.length > 0) {
+    sections.push(current.join("\n").trim())
+  }
+  return sections.filter(Boolean)
+}
+
+function fillContentFromText(requests: OutlineSaveRequest[], text: string): OutlineSaveRequest[] {
+  const body = extractBodyContent(text)
+  if (!body) return requests
+
+  if (requests.length === 1) {
+    return requests.map((r) => ({ ...r, content: body }))
+  }
+
+  const sections = splitBodyByH1(body)
+  if (sections.length >= requests.length) {
+    return requests.map((r, i) => ({ ...r, content: sections[i] || body }))
+  }
+
+  return requests.map((r) => ({ ...r, content: body }))
+}
+
 export function parseOutlineSaveRequests(text: string): OutlineSaveRequestParseResult {
   const requests: OutlineSaveRequest[] = []
   const errors: string[] = []
@@ -179,7 +219,15 @@ export function parseOutlineSaveRequests(text: string): OutlineSaveRequestParseR
     })
   }
 
-  return { requests, errors }
+  const filled = fillContentFromText(requests, text)
+  const stillEmpty = filled.filter((r) => !r.content)
+  if (stillEmpty.length > 0) {
+    stillEmpty.forEach((_, i) => {
+      errors.push(`第 ${i + 1} 个保存请求缺少 content，且无法从正文中提取。`)
+    })
+  }
+
+  return { requests: filled, errors }
 }
 
 export function formatOutlineSaveParseFeedback(errors: string[]): string {
@@ -189,7 +237,7 @@ export function formatOutlineSaveParseFeedback(errors: string[]): string {
   const remaining = uniqueErrors.length > 4 ? `；另有 ${uniqueErrors.length - 4} 项未列出` : ""
   return [
     `自动保存失败：${preview}${remaining}。`,
-    "请让 AI 重新输出 outlineSaveRequest，必须包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent、content。",
+    "请让 AI 重新输出 outlineSaveRequest，必须包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent。",
     "当前内容不会写入文件。",
   ].join("")
 }

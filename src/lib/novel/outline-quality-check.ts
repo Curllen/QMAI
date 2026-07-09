@@ -173,7 +173,11 @@ export function buildOutlineGenerationQualityFeedback(input: {
       "必须补齐以下可修复项，不要改变已确认的剧情方向：",
       ...issues.slice(0, 12).map((issue, index) => `${index + 1}. ${issue}`),
       "",
-      "请输出修订后的完整章纲，并在末尾附加可保存的 outlineSaveRequest JSON。",
+      "重要要求：",
+      "1. 必须输出修订后的完整章纲正文（使用标准 Markdown 格式），不能只输出修改摘要或说明。",
+      "2. 系统会自动从你的回复正文中提取完整内容并保存，你不需要在 JSON 中重复输出 content。",
+      "3. 在回复末尾附加 outlineSaveRequest JSON，只需包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent 等元数据。",
+      "4. 正文中必须包含完整的章纲所有必填章节，不能省略未修改的部分。",
     ].join("\n"),
   };
 }

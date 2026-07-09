@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BookOpen, ChevronDown, ChevronRight, FileText, Folder, FolderInput, FolderOpen, Globe, Loader2, MessageCircle, Pencil, Plus, Sparkles, Trash2, Check, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { useWikiStore } from "@/stores/wiki-store"
-import { deleteFile, fileExists, listDirectory, readFile, writeFile, openFileLocation, copyFile } from "@/commands/fs"
+import { createDirectory, deleteFile, fileExists, listDirectory, readFile, writeFile, openFileLocation, copyFile } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { buildChapterWordCountLabel, getChapterStatusLabel } from "@/lib/chapter-display"
 import { normalizePath } from "@/lib/path-utils"
@@ -78,6 +78,8 @@ interface CreateMenuState {
   targetFolderPath?: string
 }
 
+const EMPTY_PENDING_PAGES: WikiPageInfo[] = []
+
 function parseChineseNumber(input: string): number | null {
   const digitMap: Record<string, number> = {
     零: 0,
@@ -143,10 +145,10 @@ function truncateReferenceTitle(title: string, maxLen = 20): string {
   return title.length > maxLen ? `${title.slice(0, maxLen)}...` : title
 }
 
-function createChapterReferenceToken(page: WikiPageInfo): ReferenceToken {
+function createPageReferenceToken(page: WikiPageInfo): ReferenceToken {
   return {
     id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
-    category: "chapter",
+    category: page.type,
     title: page.title,
     path: page.path,
     displayTitle: truncateReferenceTitle(page.title),
@@ -192,6 +194,24 @@ function flattenAllFiles(nodes: FileNode[]): FileNode[] {
     if (!node.is_dir) files.push(node)
   }
   return files
+}
+
+function flattenFolders(nodes: FileNode[]): FileNode[] {
+  const folders: FileNode[] = []
+  for (const node of nodes) {
+    if (!node.is_dir) continue
+    folders.push(node)
+    if (node.children) folders.push(...flattenFolders(node.children))
+  }
+  return folders
+}
+
+function getRelativePath(path: string, rootPath: string): string {
+  const normalizedPath = normalizePath(path)
+  const normalizedRoot = normalizePath(rootPath)
+  return normalizedPath.startsWith(`${normalizedRoot}/`)
+    ? normalizedPath.slice(normalizedRoot.length + 1)
+    : normalizedPath.split("/").pop() ?? ""
 }
 
 async function cleanupDeletedSourceMemory(
@@ -301,7 +321,7 @@ function countMarkdownDescendants(node: FileNode): number {
 export function KnowledgeTree({
   filterType,
   refreshKey,
-  pendingPages = [],
+  pendingPages = EMPTY_PENDING_PAGES,
   onRemovePendingPage,
   onRequestCreate,
   onSendToChat,
@@ -328,7 +348,11 @@ export function KnowledgeTree({
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [renamingBusy, setRenamingBusy] = useState(false)
+  const [renamingFolderPath, setRenamingFolderPath] = useState<string | null>(null)
+  const [renameFolderValue, setRenameFolderValue] = useState("")
+  const [renamingFolderBusy, setRenamingFolderBusy] = useState(false)
   const [moveMenuTarget, setMoveMenuTarget] = useState<string | null>(null)
+  const [outlineDropFolderPath, setOutlineDropFolderPath] = useState<string | null>(null)
   const [chapterBatchMode, setChapterBatchMode] = useState(false)
   const [selectedChapterPaths, setSelectedChapterPaths] = useState<Set<string>>(() => new Set())
   const [dragSource, setDragSource] = useState<string | null>(null)
@@ -336,6 +360,8 @@ export function KnowledgeTree({
   const [isDragging, setIsDragging] = useState(false)
   const dragSourceRef = useRef<string | null>(null)
   const dragInsertIndexRef = useRef<number | null>(null)
+  const outlineDropFolderPathRef = useRef<string | null>(null)
+  const renameFolderValueRef = useRef("")
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activePointerIdRef = useRef<number | null>(null)
   const pendingPointerPositionRef = useRef<{ x: number; y: number } | null>(null)
@@ -345,7 +371,8 @@ export function KnowledgeTree({
 
   useEffect(() => { dragSourceRef.current = dragSource }, [dragSource])
   useEffect(() => { dragInsertIndexRef.current = dragInsertIndex }, [dragInsertIndex])
-
+  useEffect(() => { outlineDropFolderPathRef.current = outlineDropFolderPath }, [outlineDropFolderPath])
+  useEffect(() => { renameFolderValueRef.current = renameFolderValue }, [renameFolderValue])
   const loadPages = useCallback(async () => {
     if (!project) return
     const projectPath = normalizePath(project.path)
@@ -527,6 +554,73 @@ export function KnowledgeTree({
     }))
   }, [sectionNodes])
 
+  const outlineFolders = useMemo(() => {
+    return flattenFolders(sectionNodes).map((node) => ({
+      name: node.name,
+      path: normalizePath(node.path),
+    }))
+  }, [sectionNodes])
+
+  const refreshCurrentTree = useCallback(async () => {
+    if (!project) return
+    await loadPages()
+    const tree = await listDirectory(normalizePath(project.path))
+    setFileTree(tree)
+    bumpDataVersion()
+  }, [bumpDataVersion, loadPages, project, setFileTree])
+
+  const handleMovePagesToFolder = useCallback(async (sourcePaths: string[], targetFolderPath: string) => {
+    if (!project) return
+    const normalizedTargetFolderPath = normalizePath(targetFolderPath)
+    const normalizedSources = Array.from(new Set(sourcePaths.map((sourcePath) => normalizePath(sourcePath))))
+    const plans: Array<{ source: string; dest: string }> = []
+    const plannedDestinations = new Set<string>()
+
+    for (const normalizedSource of normalizedSources) {
+      if (getDirName(normalizedSource) === normalizedTargetFolderPath) continue
+      const fileName = normalizedSource.split("/").pop()
+      if (!fileName) continue
+      const destPath = `${normalizedTargetFolderPath}/${fileName}`
+      if (normalizedSource === destPath) continue
+
+      if (plannedDestinations.has(destPath) || await fileExists(destPath)) {
+        window.alert(t("knowledgeTree.moveTargetExists", { defaultValue: "目标文件已存在，请先改名或选择其他文件夹。" }))
+        return
+      }
+
+      plannedDestinations.add(destPath)
+      plans.push({ source: normalizedSource, dest: destPath })
+    }
+
+    if (plans.length === 0) {
+      setMoveMenuTarget(null)
+      setPageMenu(null)
+      return
+    }
+
+    try {
+      await createDirectory(normalizedTargetFolderPath).catch(() => {})
+      for (const plan of plans) {
+        await copyFile(plan.source, plan.dest)
+        await deleteFile(plan.source)
+        onRemovePendingPage?.(plan.source)
+      }
+
+      await refreshCurrentTree()
+      const selectedMove = selectedFile ? plans.find((plan) => plan.source === normalizePath(selectedFile)) : undefined
+      if (selectedMove) {
+        setSelectedFile(selectedMove.dest)
+      }
+    } catch (error) {
+      console.error("[KnowledgeTree] move to folder failed:", error)
+      window.alert("移动失败，请稍后重试。")
+    } finally {
+      setMoveMenuTarget(null)
+      setPageMenu(null)
+      setOutlineDropFolderPath(null)
+    }
+  }, [project, onRemovePendingPage, refreshCurrentTree, selectedFile, setSelectedFile, t])
+
   const handleMoveChaptersToVolume = useCallback(async (sourcePaths: string[], targetVolumePath: string) => {
     if (!project) return
     const normalizedTargetVolumePath = normalizePath(targetVolumePath)
@@ -563,10 +657,7 @@ export function KnowledgeTree({
         await deleteFile(plan.source)
       }
 
-      await loadPages()
-      const tree = await listDirectory(normalizePath(project.path))
-      setFileTree(tree)
-      bumpDataVersion()
+      await refreshCurrentTree()
       setSelectedChapterPaths(new Set())
       setChapterBatchMode(false)
       const selectedMove = selectedFile ? plans.find((plan) => plan.source === normalizePath(selectedFile)) : undefined
@@ -579,7 +670,7 @@ export function KnowledgeTree({
       setMoveMenuTarget(null)
       setPageMenu(null)
     }
-  }, [project, t, loadPages, setFileTree, bumpDataVersion, selectedFile, setSelectedFile])
+  }, [project, t, refreshCurrentTree, selectedFile, setSelectedFile])
 
   const handleExtractAllChapterMemories = useCallback(async () => {
     if (!project || filterType !== "chapter") return
@@ -800,6 +891,91 @@ export function KnowledgeTree({
     }
   }, [project, filterType, sectionNodes, t, loadPages, setFileTree, bumpDataVersion, selectedFile, setSelectedFile, onRemovePendingPage])
 
+  const startRenameFolder = useCallback((folderPath: string, folderName: string) => {
+    setCreateMenu(null)
+    setPageMenu(null)
+    setIsDragging(false)
+    setDragSource(null)
+    setDragInsertIndex(null)
+    setOutlineDropFolderPath(null)
+    dragSourceRef.current = null
+    dragInsertIndexRef.current = null
+    if (dragTimerRef.current) {
+      clearTimeout(dragTimerRef.current)
+      dragTimerRef.current = null
+    }
+    removeGlobalPointerListenersRef.current?.()
+    removeGlobalPointerListenersRef.current = null
+    activePointerIdRef.current = null
+    pendingPointerPositionRef.current = null
+    setRenamingFolderPath(normalizePath(folderPath))
+    setRenameFolderValue(folderName)
+  }, [])
+
+  const submitRenameFolder = useCallback(async () => {
+    if (!project || !renamingFolderPath || renamingFolderBusy) return
+    const newName = renameFolderValueRef.current.trim()
+    if (!newName) {
+      setRenamingFolderPath(null)
+      setRenameFolderValue("")
+      return
+    }
+
+    const folderNode = findNodeByPath(sectionNodes, renamingFolderPath)
+    if (!folderNode?.is_dir || folderNode.name === newName) {
+      setRenamingFolderPath(null)
+      setRenameFolderValue("")
+      return
+    }
+
+    const targetFolderPath = `${getDirName(renamingFolderPath)}/${makeSafeFileSlug(newName, "folder")}`
+    if (targetFolderPath !== renamingFolderPath && await fileExists(targetFolderPath)) {
+      window.alert("目标文件夹已存在，请换一个名称。")
+      return
+    }
+
+    setRenamingFolderBusy(true)
+    try {
+      await createDirectory(targetFolderPath)
+      const mdFiles = flattenMdFiles([folderNode])
+      for (const file of mdFiles) {
+        const sourcePath = normalizePath(file.path)
+        const relativePath = getRelativePath(sourcePath, renamingFolderPath)
+        const destPath = `${targetFolderPath}/${relativePath}`
+        await createDirectory(getDirName(destPath)).catch(() => {})
+        if (await fileExists(destPath)) {
+          window.alert("目标文件已存在，请先改名或选择其他文件夹。")
+          return
+        }
+        await copyFile(sourcePath, destPath)
+      }
+
+      for (const file of mdFiles) {
+        await deleteFile(normalizePath(file.path))
+        onRemovePendingPage?.(normalizePath(file.path))
+      }
+      await deleteFile(renamingFolderPath)
+
+      await refreshCurrentTree()
+      if (selectedFile?.startsWith(`${renamingFolderPath}/`)) {
+        setSelectedFile(`${targetFolderPath}/${getRelativePath(selectedFile, renamingFolderPath)}`)
+      }
+    } catch (error) {
+      console.error("[KnowledgeTree] folder rename failed:", error)
+      window.alert("重命名文件夹失败，请稍后重试。")
+    } finally {
+      setRenamingFolderBusy(false)
+      setRenamingFolderPath(null)
+      setRenameFolderValue("")
+    }
+  }, [project, renamingFolderPath, renamingFolderBusy, renameFolderValue, sectionNodes, refreshCurrentTree, selectedFile, setSelectedFile, onRemovePendingPage])
+
+  const cancelRenameFolder = useCallback(() => {
+    if (renamingFolderBusy) return
+    setRenamingFolderPath(null)
+    setRenameFolderValue("")
+  }, [renamingFolderBusy])
+
   const updatePageTitleContent = useCallback((content: string, newTitle: string, newChapterNumber?: number | null) => {
     const escapedTitle = newTitle.replace(/"/g, '\\"')
     let next = content
@@ -994,6 +1170,7 @@ export function KnowledgeTree({
 
     const sourcePath = dragSourceRef.current
     const targetIndex = dragInsertIndexRef.current
+    const targetFolderPath = outlineDropFolderPathRef.current
 
     removeGlobalPointerListenersRef.current?.()
     removeGlobalPointerListenersRef.current = null
@@ -1001,17 +1178,36 @@ export function KnowledgeTree({
     pendingPointerPositionRef.current = null
     dragSourceRef.current = null
     dragInsertIndexRef.current = null
+    outlineDropFolderPathRef.current = null
     setIsDragging(false)
     setDragSource(null)
     setDragInsertIndex(null)
+    setOutlineDropFolderPath(null)
 
-    if (sourcePath && targetIndex !== null) {
+    if (filterType === "outline" && sourcePath && targetFolderPath) {
+      void handleMovePagesToFolder([sourcePath], targetFolderPath)
+      return
+    }
+
+    if (filterType === "chapter" && sourcePath && targetIndex !== null) {
       void executeChapterReorder(sourcePath, targetIndex)
     }
-  }, [executeChapterReorder])
+  }, [executeChapterReorder, filterType, handleMovePagesToFolder])
 
-  const updateDragInsertFromPoint = useCallback((clientX: number, clientY: number) => {
+  const updateDragTargetFromPoint = useCallback((clientX: number, clientY: number) => {
     const target = document.elementFromPoint(clientX, clientY)
+    if (filterType === "outline") {
+      const folderRow = target instanceof HTMLElement ? target.closest<HTMLElement>("[data-folder-path]") : null
+      const folderPath = folderRow?.dataset.folderPath
+      const sourcePath = dragSourceRef.current
+      const nextFolderPath = folderPath && sourcePath && getDirName(sourcePath) !== folderPath
+        ? folderPath
+        : null
+      outlineDropFolderPathRef.current = nextFolderPath
+      setOutlineDropFolderPath(nextFolderPath)
+      return
+    }
+
     const row = target instanceof HTMLElement ? target.closest<HTMLElement>("[data-page-path]") : null
     if (!row) return
 
@@ -1027,7 +1223,7 @@ export function KnowledgeTree({
 
     dragInsertIndexRef.current = insertIndex
     setDragInsertIndex(insertIndex)
-  }, [sortedChapterPages])
+  }, [filterType, sortedChapterPages])
 
   const handleContainerPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (activePointerIdRef.current !== event.pointerId) return
@@ -1035,11 +1231,11 @@ export function KnowledgeTree({
     pendingPointerPositionRef.current = { x: event.clientX, y: event.clientY }
     if (!dragSourceRef.current) return
 
-    updateDragInsertFromPoint(event.clientX, event.clientY)
-  }, [updateDragInsertFromPoint])
+    updateDragTargetFromPoint(event.clientX, event.clientY)
+  }, [updateDragTargetFromPoint])
 
   const handleItemPointerDown = useCallback((event: React.PointerEvent, pagePath: string) => {
-    if (filterType !== "chapter" || renamingPath) return
+    if ((filterType !== "chapter" && filterType !== "outline") || renamingPath || renamingFolderPath) return
 
     lastPointerTypeRef.current = event.pointerType || "mouse"
     if (event.pointerType !== "mouse") {
@@ -1064,7 +1260,7 @@ export function KnowledgeTree({
       if (activePointerIdRef.current !== pointerEvent.pointerId) return
       pendingPointerPositionRef.current = { x: pointerEvent.clientX, y: pointerEvent.clientY }
       if (!dragSourceRef.current) return
-      updateDragInsertFromPoint(pointerEvent.clientX, pointerEvent.clientY)
+      updateDragTargetFromPoint(pointerEvent.clientX, pointerEvent.clientY)
       pointerEvent.preventDefault()
     }
     window.addEventListener("pointerup", handlePointerFinish)
@@ -1084,10 +1280,10 @@ export function KnowledgeTree({
 
       const pointerPosition = pendingPointerPositionRef.current
       if (pointerPosition) {
-        updateDragInsertFromPoint(pointerPosition.x, pointerPosition.y)
+        updateDragTargetFromPoint(pointerPosition.x, pointerPosition.y)
       }
     }, 300)
-  }, [filterType, renamingPath, selectedFile, isDragging, finishDragInteraction, updateDragInsertFromPoint])
+  }, [filterType, renamingPath, renamingFolderPath, selectedFile, isDragging, finishDragInteraction, updateDragTargetFromPoint])
 
   const handlePageClick = useCallback((pagePath: string) => {
     setArmedPath(null)
@@ -1194,17 +1390,23 @@ export function KnowledgeTree({
       const normalizedPath = normalizePath(node.path)
       if (node.is_dir) {
         const isCollapsed = collapsedFolders[normalizedPath] ?? false
+        const isRenamingFolder = renamingFolderPath === normalizedPath
+        const isOutlineDropTarget = outlineDropFolderPath === normalizedPath
         const folderRow = (
           <div key={normalizedPath}>
             <div
               data-knowledge-interactive="true"
-              className="group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground qm-hover"
+              data-folder-path={normalizedPath}
+              className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground qm-hover ${isOutlineDropTarget ? "ring-2 ring-primary/50" : ""}`}
               style={{ paddingLeft: `${depth * 16 + 8}px` }}
               onContextMenu={(event) => openCreateMenu(event, normalizedPath, node.name)}
             >
               <button
                 type="button"
-                onClick={() => toggleFolder(normalizedPath)}
+                onClick={() => {
+                  if (!isRenamingFolder) toggleFolder(normalizedPath)
+                }}
+                disabled={isRenamingFolder}
                 className="flex flex-1 items-center gap-1.5 text-left"
               >
                 {isCollapsed ? (
@@ -1213,7 +1415,35 @@ export function KnowledgeTree({
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                 )}
                 <Folder className="h-4 w-4 shrink-0 text-amber-500" />
-                <span className="truncate font-medium">{node.name}</span>
+                {isRenamingFolder ? (
+                  <input
+                    type="text"
+                    value={renameFolderValue}
+              onChange={(event) => {
+                setRenameFolderValue(event.target.value)
+                renameFolderValueRef.current = event.target.value
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    onFocus={(event) => event.stopPropagation()}
+                    onBlur={() => void submitRenameFolder()}
+                    onKeyDown={(event) => {
+                      event.stopPropagation()
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        void submitRenameFolder()
+                      } else if (event.key === "Escape") {
+                        event.preventDefault()
+                        cancelRenameFolder()
+                      }
+                    }}
+                    className="min-w-0 flex-1 rounded border bg-background px-1.5 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+                    autoFocus
+                    disabled={renamingFolderBusy}
+                  />
+                ) : (
+                  <span className="truncate font-medium">{node.name}</span>
+                )}
                 <span className="ml-auto text-[10px] text-muted-foreground/60">{countMarkdownDescendants(node)}</span>
               </button>
             </div>
@@ -1353,10 +1583,16 @@ export function KnowledgeTree({
     renamingPath,
     renameValue,
     renamingBusy,
+    renamingFolderPath,
+    renameFolderValue,
+    renamingFolderBusy,
+    outlineDropFolderPath,
     openCreateMenu,
     toggleFolder,
     submitRenamePage,
     cancelRenamePage,
+    submitRenameFolder,
+    cancelRenameFolder,
     handleDeleteClick,
     handleItemPointerDown,
     handlePageContextMenu,
@@ -1487,20 +1723,37 @@ export function KnowledgeTree({
               {filterType === "chapter" ? t("sidebar.newVolume") : t("sidebar.newFolder")}
             </button>
             {createMenu.targetFolderPath ? (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-destructive hover:bg-accent"
-                onClick={() => {
-                  const targetFolderPath = createMenu.targetFolderPath
-                  setCreateMenu(null)
-                  if (targetFolderPath) {
-                    void handleDeleteFolder(targetFolderPath)
-                  }
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                {filterType === "chapter" ? t("knowledgeTree.deleteVolume") : t("knowledgeTree.deleteFolder")}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                  onClick={() => {
+                    const targetFolderPath = createMenu.targetFolderPath
+                    const targetFolderName = createMenu.targetFolderName
+                    setCreateMenu(null)
+                    if (targetFolderPath && targetFolderName) {
+                      startRenameFolder(targetFolderPath, targetFolderName)
+                    }
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  {t("knowledgeTree.rename")}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-destructive hover:bg-accent"
+                  onClick={() => {
+                    const targetFolderPath = createMenu.targetFolderPath
+                    setCreateMenu(null)
+                    if (targetFolderPath) {
+                      void handleDeleteFolder(targetFolderPath)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {filterType === "chapter" ? t("knowledgeTree.deleteVolume") : t("knowledgeTree.deleteFolder")}
+                </button>
+              </>
             ) : null}
           </div>
         )}
@@ -1603,6 +1856,43 @@ export function KnowledgeTree({
                 )}
               </div>
             )}
+            {filterType === "outline" && outlineFolders.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                  onClick={() => setMoveMenuTarget(moveMenuTarget === pageMenu.path ? null : pageMenu.path)}
+                >
+                  <FolderInput className="h-3.5 w-3.5" />
+                  移动
+                  <ChevronRight className="ml-auto h-3 w-3" />
+                </button>
+                {moveMenuTarget === pageMenu.path && (
+                  <div className="max-h-48 overflow-y-auto border-t bg-background py-1 text-xs">
+                    {outlineFolders.map((folder) => {
+                      const isCurrentFolder = getDirName(pageMenu.path) === folder.path
+                      return (
+                        <button
+                          key={folder.path}
+                          type="button"
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent ${isCurrentFolder ? "opacity-50 cursor-not-allowed" : ""}`}
+                          disabled={isCurrentFolder}
+                          onClick={() => {
+                            if (!isCurrentFolder) {
+                              void handleMovePagesToFolder([pageMenu.path], folder.path)
+                            }
+                          }}
+                        >
+                          <Folder className="h-3 w-3 shrink-0 text-amber-500" />
+                          <span className="truncate">{folder.name}</span>
+                          {isCurrentFolder && <span className="ml-auto text-[10px] text-muted-foreground">当前</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             {filterType === "chapter" && pageMenu && (
               <button
                 type="button"
@@ -1623,15 +1913,15 @@ export function KnowledgeTree({
               <FolderOpen className="h-4 w-4" />
               打开文件所在位置
             </button>
-            {filterType === "chapter" && (onSendToChat || onSendToOutline) && (
+            {((filterType === "chapter" && (onSendToChat || onSendToOutline)) || (filterType === "outline" && onSendToOutline)) && (
               <div className="mt-1 border-t pt-1">
-                {onSendToChat && (
+                {filterType === "chapter" && onSendToChat && (
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
                     onClick={() => {
                       const target = pageInfoByPath.get(pageMenu.path)
-                      if (target) onSendToChat(createChapterReferenceToken(target))
+                      if (target) onSendToChat(createPageReferenceToken(target))
                       setPageMenu(null)
                     }}
                   >
@@ -1639,18 +1929,32 @@ export function KnowledgeTree({
                     发送到AI会话
                   </button>
                 )}
-                {onSendToOutline && (
+                {filterType === "chapter" && onSendToOutline && (
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
                     onClick={() => {
                       const target = pageInfoByPath.get(pageMenu.path)
-                      if (target) onSendToOutline(createChapterReferenceToken(target))
+                      if (target) onSendToOutline(createPageReferenceToken(target))
                       setPageMenu(null)
                     }}
                   >
                     <FileText className="h-3.5 w-3.5" />
                     发送到AI大纲
+                  </button>
+                )}
+                {filterType === "outline" && onSendToOutline && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                    onClick={() => {
+                      const target = pageInfoByPath.get(pageMenu.path)
+                      if (target) onSendToOutline(createPageReferenceToken(target))
+                      setPageMenu(null)
+                    }}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    发送到对话
                   </button>
                 )}
               </div>

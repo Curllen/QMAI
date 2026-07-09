@@ -66,7 +66,7 @@ let counter = 0
 
 export const useOutlineGenerationStore = create<OutlineGenerationState>((set) => ({
   tasks: [],
-  panelOpen: false,
+  panelOpen: true,
   setPanelOpen: (open) => set({ panelOpen: open }),
   createTask: (input) => {
     const id = `outline-task-${++counter}`

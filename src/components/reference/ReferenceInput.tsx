@@ -25,6 +25,7 @@ interface ReferenceInputProps {
   placeholder?: string
   disabled?: boolean
   isStreaming?: boolean
+  leftFooterControls?: ReactNode
   rightControls?: ReactNode
   onChange?: (plainText: string, tokens: ReferenceToken[]) => void
   onTokensChange?: (tokens: ReferenceToken[]) => void
@@ -57,6 +58,7 @@ export function ReferenceInput({
   placeholder = "输入提示词，或 @ 引用内容...",
   disabled = false,
   isStreaming = false,
+  leftFooterControls,
   rightControls,
   onChange,
   onTokensChange,
@@ -234,6 +236,11 @@ export function ReferenceInput({
         data-reference-input-footer
         className="flex items-center justify-between gap-2 border-t px-2 py-1.5"
       >
+        {leftFooterControls ? (
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            {leftFooterControls}
+          </div>
+        ) : null}
         <button
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"

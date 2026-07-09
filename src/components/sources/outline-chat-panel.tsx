@@ -35,12 +35,17 @@ import {
 } from "@/commands/fs";
 import { hasUsableLlm } from "@/lib/has-usable-llm";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { FileEditPreview } from "@/components/chat/file-edit-preview";
+import { resolveMarkdownImageSrc } from "@/lib/markdown-image-resolver";
+import { MermaidDiagram, unwrapMermaidPre } from "@/components/mermaid-diagram";
 import {
   AgentToolCallMessage,
   type ToolCallRecord,
 } from "@/components/chat/agent-tool-call-message";
-import { ChatDockControls } from "@/components/chat/chat-dock-controls";
 import {
   OutlineSaveConfirmDialog,
   type OutlineSaveConfirmPayload,
@@ -48,6 +53,15 @@ import {
 import { OutlineWizardDialog } from "@/components/sources/outline-wizard-dialog";
 import { OutlineMultiAgentPanel } from "@/components/sources/outline-multi-agent-panel";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { OUTLINE_SECTION_GENERATION_CONFIGS } from "@/lib/novel/outline-section-configs";
 import {
   buildOutlineWizardPrompt,
@@ -68,11 +82,13 @@ import { classifyOutlineSaveTarget } from "@/lib/novel/outline-save-classifier";
 import {
   buildOutlineGenerationQualityFeedback,
   formatChapterOutlineQualityReport,
+  isLikelyChapterOutline,
   type OutlineGenerationQualityFeedback,
   summarizeChapterOutlineQuality,
 } from "@/lib/novel/outline-quality-check";
 import {
   characterDraftsToSaveRequests,
+  extractBodyContent,
   formatOutlineSaveParseFeedback,
   type OutlineSaveRequest,
   parseOutlineSaveRequests,
@@ -262,8 +278,26 @@ function buildOutlineAgentSystemPrompt(options: {
     "结构节点必须包含 CBN、CPNs、CEN；CEN 必须能承接下一章 CBN。执行约束必须包含必须覆盖节点和本章禁区。基础信息必须包含时间锚点、章内时间跨度和与上章时间差。",
     "## AI 大纲输出协议",
     "当本轮生成了可保存的大纲、卷纲、章纲、人物、设定、伏笔、组织或质量检查内容时，最终回复末尾必须附加一个 json 代码块，顶层字段为 outlineSaveRequest 或 outlineSaveRequests。",
-    "保存请求必须包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent、content。fileName 必须是 .md 文件，targetFolder 必须位于大纲文件树文件夹内。",
+    "保存请求必须包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent。fileName 必须是 .md 文件，targetFolder 必须位于大纲文件树文件夹内。",
+    "content 字段说明：content 字段已废弃，不要在 JSON 中填写 content。系统会自动从你的回复正文中提取大纲内容作为保存内容，正文格式就是最终保存的文件格式。",
     "文件名规范：不同类型内容必须使用不同文件名，禁止多项内容写入同一文件。不同角色必须每人一个独立文件（如 角色-主角林风.md、角色-反官方傲.md），严禁将所有角色塞入「角色卡.md」或同一文件。不同势力、不同伏笔、不同卷纲、不同章纲也必须各自独立文件。",
+    "内容完整性强制要求：所有在对话正文中展示给用户的大纲内容，系统会自动提取并保存。你必须为每个生成的大纲模块都创建对应的保存请求（outlineSaveRequest），不能遗漏。如果生成了多个模块，使用 outlineSaveRequests 数组，每个模块一个请求对象。",
+    "## Markdown 格式强制要求",
+    "所有大纲正文必须使用标准 Markdown 格式输出，严格遵循以下标题层级规范：",
+    "- 一级大标题（如全书核心设定、主要人物设定、分卷大纲等）使用 # 标记，独占一行",
+    "- 二级分类标题（如核心主角、核心配角、第一卷、第二卷等）使用 ## 标记，独占一行",
+    "- 三级子标题（如具体人物名、具体章节名等）使用 ### 标记，独占一行",
+    "- 列表项使用 - 或 * 开头",
+    "- 重要属性使用 **粗体** 标注（如 **年龄：**、**身份：**、**核心技能：**）",
+    "- 禁止使用中文编号（如一、二、三、（一）（二）（三）、1. 2. 3.）作为标题格式，必须用 #、##、### 标记标题层级",
+    "示例：",
+    "# 五、主要人物设定",
+    "## 核心主角",
+    "### 林风（字子墨）",
+    "- **年龄：** 17岁（穿越前为21世纪普通大学生）",
+    "- **身份：** 穿越者→清水村村民→清水社首领→异姓王→隐士",
+    "- **核心技能：** 高中/大学化学知识（有机/无机化学基础）、物理常识、急救知识",
+    "- **性格：** 表面冷漠实则心软，前期被动应对，中后期主动布局",
     "最终回复只输出大纲标题和大纲正文；如果内容需要自动保存，末尾附加 AI 大纲输出协议 JSON 保存块。禁止输出工具调用报告、分析过程、完成报告、下一步行动、无法直接保存的大段说明。",
     "工具调用过程只应展示在工具调用 UI 中，不要混入最终正文。资料不足以生成完整正文时，先提出最少必要澄清问题，不要用流程说明冒充生成结果。",
     "所有面向用户的回复必须使用中文。",
@@ -645,10 +679,11 @@ function OutlineAssistantMessage({
     edits: import("@/lib/novel/agent-parser").FileEditAction[];
     hasEdits: boolean;
   }>({ textContent: "", edits: [], hasEdits: false });
-  const renderedMarkdownContent = useMemo(
-    () => normalizeOutlineMarkdown(parsed.textContent || answer),
-    [answer, parsed.textContent],
-  );
+  const renderedMarkdownContent = useMemo(() => {
+    const rawContent = parsed.textContent || answer;
+    const bodyContent = extractBodyContent(rawContent);
+    return normalizeOutlineMarkdown(bodyContent || rawContent);
+  }, [answer, parsed.textContent]);
   useEffect(() => {
     if (!answer) {
       setParsed({ textContent: "", edits: [], hasEdits: false });
@@ -684,10 +719,93 @@ function OutlineAssistantMessage({
         onReject={onRejectTool}
       />
       <div
-        className="prose prose-sm dark:prose-invert max-w-none break-words"
+        className="chat-markdown prose prose-sm max-w-none dark:prose-invert 
+          prose-p:my-1.5 prose-p:leading-relaxed
+          prose-h1:text-xl prose-h1:font-bold prose-h1:mt-5 prose-h1:mb-3 prose-h1:pb-2 prose-h1:border-b prose-h1:border-border
+          prose-h2:text-lg prose-h2:font-semibold prose-h2:mt-4 prose-h2:mb-2
+          prose-h3:text-base prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1.5
+          prose-h4:text-sm prose-h4:font-semibold prose-h4:mt-2 prose-h4:mb-1
+          prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-li:leading-relaxed
+          prose-strong:font-semibold prose-strong:text-foreground
+          prose-pre:my-2 prose-pre:p-3 prose-pre:rounded-md
+          prose-code:text-xs prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
+          prose-table:text-xs prose-th:font-semibold
+          prose-blockquote:border-l-4 prose-blockquote:border-primary/50 prose-blockquote:pl-3 prose-blockquote:italic prose-blockquote:text-muted-foreground
+          break-words"
         style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
       >
-        <ReactMarkdown>{renderedMarkdownContent}</ReactMarkdown>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+          components={{
+            img: ({ src, alt, ...props }) => (
+              <img
+                src={
+                  typeof src === "string"
+                    ? resolveMarkdownImageSrc(src, projectPath)
+                    : undefined
+                }
+                alt={alt ?? ""}
+                className="my-2 max-w-full rounded border border-border/40"
+                loading="lazy"
+                {...props}
+              />
+            ),
+            table: ({ children, ...props }) => (
+              <div className="my-2 overflow-x-auto rounded border border-border">
+                <table className="w-full border-collapse text-xs" {...props}>
+                  {children}
+                </table>
+              </div>
+            ),
+            thead: ({ children, ...props }) => (
+              <thead className="bg-muted" {...props}>
+                {children}
+              </thead>
+            ),
+            th: ({ children, ...props }) => (
+              <th
+                className="border border-border/80 px-3 py-1.5 text-start font-semibold bg-muted"
+                {...props}
+              >
+                {children}
+              </th>
+            ),
+            td: ({ children, ...props }) => (
+              <td className="border border-border/60 px-3 py-1.5" {...props}>
+                {children}
+              </td>
+            ),
+            pre: ({ children, ...props }) => {
+              const mermaid = unwrapMermaidPre(children);
+              if (mermaid) return <>{mermaid}</>;
+              return (
+                <pre
+                  dir="ltr"
+                  className="rounded bg-background/50 p-2 text-xs overflow-x-auto"
+                  style={{ textAlign: "left" }}
+                  {...props}
+                >
+                  {children}
+                </pre>
+              );
+            },
+            code: ({ className, children, ...props }) => {
+              const lang = className?.replace("language-", "");
+              const codeText = String(children).replace(/\n$/, "");
+              if (lang === "mermaid") {
+                return <MermaidDiagram code={codeText} />;
+              }
+              return (
+                <code dir="ltr" className={className} {...props}>
+                  {children}
+                </code>
+              );
+            },
+          }}
+        >
+          {renderedMarkdownContent}
+        </ReactMarkdown>
       </div>
       {/* File edit preview */}
       {parsed.hasEdits && !editDismissed && projectPath && !isStreaming ? (
@@ -1070,6 +1188,10 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const [saveStatus, setSaveStatus] = useState("");
   const [qualityFeedbackState, setQualityFeedbackState] =
     useState<OutlineGenerationQualityFeedback | null>(null);
+  const [qualityConfirmState, setQualityConfirmState] = useState<{
+    feedback: OutlineGenerationQualityFeedback;
+    requests: OutlineSaveRequest[];
+  } | null>(null);
   const [saveConfirmState, setSaveConfirmState] = useState<{
     title: string;
     mode: "normal" | "character";
@@ -1082,6 +1204,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const lastScrollTopRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
+  const pendingRepairMetaRef = useRef<OutlineSaveRequest[] | null>(null);
 
   // Auto-scroll
   useEffect(() => {
@@ -1158,11 +1281,48 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       if (!project) return;
       const parsed = parseOutlineSaveRequests(assistantContent);
       if (parsed.requests.length === 0) {
+        const repairMeta = pendingRepairMetaRef.current;
+        if (repairMeta && repairMeta.length > 0) {
+          const body = assistantContent
+            .replace(/```(?:json)?\s*[\s\S]*?```/gi, "")
+            .replace(/```[\s\S]*?```/g, "")
+            .trim();
+          if (body && isLikelyChapterOutline(body, repairMeta[0].fileName)) {
+            const fallbackRequests: OutlineSaveRequest[] = repairMeta.map((meta) => ({
+              ...meta,
+              content: body,
+            }));
+            pendingRepairMetaRef.current = null;
+            setSaveStatus("正在自动保存修订后的大纲...");
+            try {
+              const projectPath = normalizePath(project.path);
+              const saveResult = await saveOutlineSaveRequests({
+                outlineRoot: `${projectPath}/wiki/outlines`,
+                requests: fallbackRequests,
+                createDirectory,
+                fileExists,
+                readFile,
+                writeFile,
+              });
+              if (saveResult.saved.length > 0) {
+                await refreshProjectState(projectPath);
+                const names = saveResult.saved.map((item) => item.fileName).join("、");
+                setSaveStatus(`已保存修订后的大纲文件：${names}`);
+              } else if (saveResult.errors.length > 0) {
+                setSaveStatus(`保存失败：${saveResult.errors.slice(0, 2).join("；")}`);
+              }
+            } catch (error) {
+              setSaveStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+            }
+            return;
+          }
+        }
         if (parsed.errors.length > 0) {
           setSaveStatus(formatOutlineSaveParseFeedback(parsed.errors));
         }
         return;
       }
+      pendingRepairMetaRef.current = null;
 
       const qualityFeedback = parsed.requests
         .map((request) =>
@@ -1175,15 +1335,19 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         .find((feedback): feedback is OutlineGenerationQualityFeedback =>
           Boolean(feedback && feedback.status !== "pass"),
         );
+
       if (qualityFeedback) {
         setQualityFeedbackState(qualityFeedback);
+        const split = splitConfirmRequiredSaveRequests(parsed.requests);
+        setQualityConfirmState({
+          feedback: qualityFeedback,
+          requests: split.autoSaveable,
+        });
+        setSaveStatus("");
+        return;
       }
 
-      setSaveStatus(
-        qualityFeedback
-          ? `${qualityFeedback.title}：${qualityFeedback.summary}`
-          : "正在自动保存大纲...",
-      );
+      setSaveStatus("正在自动保存大纲...");
       try {
         const projectPath = normalizePath(project.path);
         const split = splitConfirmRequiredSaveRequests(parsed.requests);
@@ -2214,6 +2378,18 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             });
             if (qualityFeedback) {
               setQualityFeedbackState(qualityFeedback);
+              setQualityConfirmState({
+                feedback: qualityFeedback,
+                requests: [{
+                  targetFolder: classification.targetFolder,
+                  fileName: classification.fileName,
+                  fileType: classification.fileType,
+                  writeMode: "create",
+                  referencedSkills: [],
+                  sourceIntent: "手动保存 AI 大纲结果",
+                  content: mdContent,
+                }],
+              });
             }
             setSaveStatus(formatChapterOutlineQualityReport(quality, {
               maxIssues: 4,
@@ -2307,6 +2483,44 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
     setQualityFeedbackState(null);
     void handleSend(repairPrompt, [], { forceRefresh: true });
   }, [handleSend, qualityFeedbackState]);
+
+  const handleSaveAsIs = useCallback(async () => {
+    if (!project || !qualityConfirmState) return;
+    const { requests } = qualityConfirmState;
+    setQualityConfirmState(null);
+    setQualityFeedbackState(null);
+    if (requests.length === 0) return;
+    setSaveStatus("正在保存大纲...");
+    try {
+      const projectPath = normalizePath(project.path);
+      const saveResult = await saveOutlineSaveRequests({
+        outlineRoot: `${projectPath}/wiki/outlines`,
+        requests,
+        createDirectory,
+        fileExists,
+        readFile,
+        writeFile,
+      });
+      if (saveResult.saved.length > 0) {
+        await refreshProjectState(projectPath);
+        const names = saveResult.saved.map((item) => item.fileName).join("、");
+        setSaveStatus(`已保存 ${saveResult.saved.length} 个大纲文件：${names}`);
+      } else if (saveResult.errors.length > 0) {
+        setSaveStatus(`保存失败：${saveResult.errors.slice(0, 2).join("；")}`);
+      }
+    } catch (error) {
+      setSaveStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [project, qualityConfirmState, createDirectory, fileExists, readFile, writeFile]);
+
+  const handleAutoFixFromModal = useCallback(() => {
+    const repairPrompt = qualityConfirmState?.feedback.repairPrompt;
+    if (!repairPrompt) return;
+    pendingRepairMetaRef.current = qualityConfirmState.requests;
+    setQualityConfirmState(null);
+    setQualityFeedbackState(null);
+    void handleSend(repairPrompt, [], { forceRefresh: true });
+  }, [handleSend, qualityConfirmState]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden border-border bg-background">
@@ -2432,21 +2646,6 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             : null}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {qualityFeedbackState && qualityFeedbackState.status !== "pass" ? (
-            <button
-              type="button"
-              disabled={isStreaming}
-              onClick={handleRepairQualityFeedback}
-              aria-label="修订生成后质量检查发现的问题"
-              className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title={qualityFeedbackState.summary}
-            >
-              修订质量问题
-            </button>
-          ) : null}
-          {saveStatus && (
-            <span className="text-xs text-muted-foreground">{saveStatus}</span>
-          )}
           <button
             onClick={onClose}
             className="rounded p-1 text-muted-foreground hover:bg-accent"
@@ -2516,31 +2715,20 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
 
       {/* Input */}
       <div className="shrink-0 border-t px-3 py-2">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <TooltipProvider delay={200}>
-            <div className="qmai-outline-bottom-left-controls flex min-w-0 items-center gap-2">
-              <ChatDockControls />
-              <OutlineGenerationMenu
-                disabled={isStreaming}
-                onGenerate={handleGenerateSection}
-              />
-            </div>
-          </TooltipProvider>
-        </div>
         {isStreaming && (
           <div className="mb-2 animate-pulse rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <span className="font-medium">正在生成...</span>
           </div>
         )}
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-2 py-1.5">
-          <div className="min-w-0 text-xs text-muted-foreground">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
             通过固定选项生成大纲需求，再交给 AI 分析和追问
-          </div>
+          </p>
           <button
             type="button"
-            className="shrink-0 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isStreaming}
             onClick={() => setOutlineWizardOpen(true)}
+            disabled={isStreaming}
+            className="shrink-0 rounded-md border border-border bg-background px-3 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             选择生成你想要的小说
           </button>
@@ -2559,6 +2747,14 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
           onSubmit={handleSend}
           onAtTrigger={() => setReferencePickerOpen(true)}
           insertTokensRef={insertReferenceTokensRef}
+          leftFooterControls={
+            <TooltipProvider delay={200}>
+              <OutlineGenerationMenu
+                disabled={isStreaming}
+                onGenerate={handleGenerateSection}
+              />
+            </TooltipProvider>
+          }
           rightControls={
             hasAvailableModels ? (
               <ChatModelSelector
@@ -2606,6 +2802,45 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             onClose={() => setSaveConfirmState(null)}
             onConfirm={executeConfirmedOutlineSave}
           />
+        ) : null}
+        {qualityConfirmState ? (
+          <Dialog open onOpenChange={(open) => { if (!open) setQualityConfirmState(null); }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>大纲质量检查发现可修复项</DialogTitle>
+                <DialogDescription className="text-left">
+                  {qualityConfirmState.feedback.summary}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-48 overflow-y-auto space-y-1 py-2">
+                {qualityConfirmState.feedback.issues.slice(0, 10).map((issue, index) => (
+                  <div key={index} className="flex items-start gap-2 text-sm">
+                    <span className="mt-0.5 shrink-0 text-amber-600">·</span>
+                    <span className="text-muted-foreground">{issue}</span>
+                  </div>
+                ))}
+                {qualityConfirmState.feedback.issues.length > 10 ? (
+                  <div className="text-xs text-muted-foreground">
+                    另有 {qualityConfirmState.feedback.issues.length - 10} 项未列出
+                  </div>
+                ) : null}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleSaveAsIs}
+                >
+                  按当前内容保存
+                </Button>
+                <Button
+                  onClick={handleAutoFixFromModal}
+                  disabled={isStreaming}
+                >
+                  自动修复
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         ) : null}
       </div>
     </div>

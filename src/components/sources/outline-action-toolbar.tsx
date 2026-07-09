@@ -23,6 +23,7 @@ export function OutlineActionToolbar({
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setActiveView = useWikiStore((s) => s.setActiveView)
+  const outlineChatOpen = useOutlineGenerationStore((s) => s.panelOpen)
   const setOutlineChatOpen = useOutlineGenerationStore((s) => s.setPanelOpen)
   const [bulkIngestRunning, setBulkIngestRunning] = useState(false)
 
@@ -41,9 +42,9 @@ export function OutlineActionToolbar({
       onToggleOutlineChat()
       return
     }
-    setOutlineChatOpen(true)
+    setOutlineChatOpen(!outlineChatOpen)
     setActiveView("sources")
-  }, [onToggleOutlineChat, setActiveView, setOutlineChatOpen])
+  }, [onToggleOutlineChat, outlineChatOpen, setActiveView, setOutlineChatOpen])
 
   const handleBulkIngest = useCallback(async () => {
     if (!project || bulkIngestActive) return
@@ -67,7 +68,7 @@ export function OutlineActionToolbar({
 
   return (
     <div className={cn("flex flex-wrap gap-1", className)}>
-      <Button size="sm" variant="outline" onClick={handleOpenOutlineChat}>
+      <Button size="sm" variant="outline" onClick={handleOpenOutlineChat} aria-pressed={outlineChatOpen}>
         <MessageSquare className="mr-1 h-4 w-4" />
         AI大纲
       </Button>

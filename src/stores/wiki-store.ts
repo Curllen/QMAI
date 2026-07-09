@@ -37,12 +37,10 @@ const GRAPH_EDGE_COLOR_KEY = "lk-graph-edge-color"
 const GRAPH_EDGE_STRENGTH_KEY = "lk-graph-edge-strength"
 const GRAPH_EDGE_STYLE_KEY = "lk-graph-edge-style"
 const GRAPH_EDGE_LABELS_ALWAYS_KEY = "lk-graph-edge-labels-always"
-const CHAT_DOCK_POSITION_KEY = "qmai-chat-dock-position"
 const UI_FONT_SIZE_SCALE_KEY = "qmai-ui-font-size-scale"
 const UI_FONT_FAMILY_KEY = "qmai-ui-font-family"
 const SIDEBAR_NAV_CONFIG_KEY = "qmai-sidebar-nav-config"
 
-export type ChatDockPosition = "bottom" | "right"
 export type SettingsCategoryId =
   | "llm"
   | "rerank"
@@ -56,12 +54,6 @@ export type SettingsCategoryId =
   | "feedback"
   | "contact-support"
   | "changelog"
-
-const readStoredChatDockPosition = (): ChatDockPosition => {
-  if (typeof localStorage === "undefined") return "bottom"
-  const saved = localStorage.getItem(CHAT_DOCK_POSITION_KEY)
-  return saved === "right" || saved === "bottom" ? saved : "bottom"
-}
 
 const readStoredUiFontSizeScale = (): number => {
   if (typeof localStorage === "undefined") return 1
@@ -553,7 +545,6 @@ interface WikiState {
   pendingScrollImageSrc: string | null
   selectedMemoryCenterEntry: string | null
   chatExpanded: boolean
-  chatDockPosition: ChatDockPosition
   searchPanelOpen: boolean
   activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "soul" | "skillLibrary" | "writingSkillLibrary" | "bookAnalysis" | "settings" | "trash" | "reviewCenter" | "storySimulation"
   activeSettingsCategory: SettingsCategoryId | null
@@ -629,7 +620,6 @@ interface WikiState {
   setPendingScrollImageSrc: (src: string | null) => void
   setSelectedMemoryCenterEntry: (entry: string | null) => void
   setChatExpanded: (expanded: boolean) => void
-  setChatDockPosition: (position: ChatDockPosition) => void
   setSearchPanelOpen: (open: boolean) => void
   setActiveView: (view: WikiState["activeView"]) => void
   setActiveSettingsCategory: (category: SettingsCategoryId | null) => void
@@ -705,7 +695,6 @@ export const useWikiStore = create<WikiState>((set) => ({
   pendingScrollImageSrc: null,
   selectedMemoryCenterEntry: null,
   chatExpanded: false,
-  chatDockPosition: readStoredChatDockPosition(),
   searchPanelOpen: false,
   activeView: "wiki",
   activeSettingsCategory: null,
@@ -768,12 +757,6 @@ export const useWikiStore = create<WikiState>((set) => ({
   setPendingScrollImageSrc: (pendingScrollImageSrc) => set({ pendingScrollImageSrc }),
   setSelectedMemoryCenterEntry: (selectedMemoryCenterEntry) => set({ selectedMemoryCenterEntry }),
   setChatExpanded: (chatExpanded) => set({ chatExpanded }),
-  setChatDockPosition: (chatDockPosition) => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(CHAT_DOCK_POSITION_KEY, chatDockPosition)
-    }
-    set({ chatDockPosition })
-  },
   setSearchPanelOpen: (searchPanelOpen) => set({ searchPanelOpen }),
   setActiveView: (activeView) => set((state) => {
     if (

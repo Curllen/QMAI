@@ -44,19 +44,22 @@ describe("OutlineChatPanel controls", () => {
     expect(source).not.toContain('from "@/components/chat/chat-input"')
   })
 
-  it("keeps dock controls before outline generation and model selection around the reference input", () => {
-    expect(source).toContain("qmai-outline-bottom-left-controls")
-    expect(source).toContain("<ChatDockControls />")
+  it("keeps outline generation menu in the reference input footer before model selection", () => {
+    expect(source).toContain("leftFooterControls={")
+    expect(source).not.toContain("qmai-outline-bottom-left-controls")
     expect(source).toContain("<OutlineGenerationMenu")
     expect(source).toContain("<ChatModelSelector")
 
-    const dockIndex = source.indexOf("<ChatDockControls />")
+    const footerIndex = source.indexOf("leftFooterControls={")
     const outlineIndex = source.indexOf("<OutlineGenerationMenu")
+    const rightControlsIndex = source.indexOf("rightControls={")
     const modelIndex = source.indexOf("<ChatModelSelector")
 
-    expect(dockIndex).toBeGreaterThan(-1)
-    expect(outlineIndex).toBeGreaterThan(dockIndex)
-    expect(modelIndex).toBeGreaterThan(outlineIndex)
+    expect(footerIndex).toBeGreaterThan(-1)
+    expect(outlineIndex).toBeGreaterThan(-1)
+    expect(outlineIndex).toBeGreaterThan(footerIndex)
+    expect(rightControlsIndex).toBeGreaterThan(outlineIndex)
+    expect(modelIndex).toBeGreaterThan(rightControlsIndex)
   })
 
   it("renders outline generation from an icon button and keeps the menu backed by existing configs", () => {
@@ -196,11 +199,11 @@ describe("OutlineChatPanel controls", () => {
     expect(source).not.toContain("max-w-[85%]")
   })
 
-  it("在 AI 大纲输入框上方接入固定生成向导并发送结构化 Prompt", () => {
+  it("在 AI 大纲输入区接入固定生成向导并发送结构化 Prompt", () => {
     expect(source).toContain('import { OutlineWizardDialog } from "@/components/sources/outline-wizard-dialog"')
     expect(source).toContain("import {")
     expect(source).toContain("buildOutlineWizardPrompt")
-    expect(source).toContain("选择生成你想要的小说")
+    expect(source).toContain('aria-label="生成大纲模块"')
     expect(source).toContain("handleSubmitOutlineWizard")
     expect(source).toContain("buildOutlineWizardPrompt(request)")
     expect(source).toContain("disableWriteTools: true")
