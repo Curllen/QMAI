@@ -130,6 +130,36 @@ describe("OutlineSaveConfirmDialog", () => {
     expect(document.body.textContent).toContain("章纲")
   })
 
+  it("非人物保存预览展示类型、写入方式、来源和引用 skill", async () => {
+    await act(async () => {
+      root.render(
+        <OutlineSaveConfirmDialog
+          open
+          title="保存章纲"
+          mode="normal"
+          characterDrafts={[]}
+          requests={[{
+            targetFolder: "章纲",
+            fileName: "章纲-第001章.md",
+            fileType: "chapter-outline",
+            writeMode: "create",
+            referencedSkills: ["ZhanggangSkill/chapter-outline-builder"],
+            sourceIntent: "生成第001章章纲",
+            content: "正文",
+          }]}
+          onClose={() => {}}
+          onConfirm={() => {}}
+        />,
+      )
+    })
+
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("类型：chapter-outline")
+    expect(text).toContain("写入方式：create")
+    expect(text).toContain("来源：生成第001章章纲")
+    expect(text).toContain("引用 skill：ZhanggangSkill/chapter-outline-builder")
+  })
+
   it("非人物保存时允许用户选择目标文件夹并提交选择结果", async () => {
     const onConfirm = vi.fn()
     await act(async () => {

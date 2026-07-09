@@ -189,6 +189,28 @@ export function AgentWorkflowPanel({
   const safeToolCalls = toolCalls ?? []
   const pendingApprovalCalls = safeToolCalls.filter((call) => call.status === "approval_required")
 
+  // 检测同批写入调用中是否有重复的大纲文件名
+  const duplicateOutlineCalls = (() => {
+    if (pendingApprovalCalls.length < 2) return []
+    const groupedByFile = new Map<string, typeof pendingApprovalCalls>()
+    for (const call of pendingApprovalCalls) {
+      if (call.name !== "write_outline_node") continue
+      const outlineName = (call.params as Record<string, unknown>)?.outlineName as string | undefined
+      if (!outlineName) continue
+      const existing = groupedByFile.get(outlineName) ?? []
+      existing.push(call)
+      groupedByFile.set(outlineName, existing)
+    }
+    const duplicates: Array<{ outlineName: string; callCount: number }> = []
+    for (const [outlineName, calls] of groupedByFile) {
+      if (calls.length > 1) {
+        duplicates.push({ outlineName, callCount: calls.length })
+      }
+    }
+    return duplicates
+  })()
+
+
   const isStepOpen = (step: AgentWorkflowStep) => {
     if (allOpen) return true
     if (step.id in openMap) return openMap[step.id]
@@ -254,6 +276,18 @@ export function AgentWorkflowPanel({
 
       {pendingApprovalCalls.length > 0 && onConfirmSave && onReject ? (
         <div className="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+          {duplicateOutlineCalls.length > 0 ? (
+            <div className="mb-2 rounded-md border border-red-200 bg-red-50/70 p-2 text-xs text-red-800 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+              <span className="font-semibold">⚠ 警告：以下文件有多个写入项指向同一文件名：</span>
+              <ul className="mt-1 list-inside list-disc space-y-0.5">
+                {duplicateOutlineCalls.map(({ outlineName, callCount }) => (
+                  <li key={outlineName}>
+                    共 {callCount} 项写入「{outlineName}」，确认前建议先在中部编辑区合并内容
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {pendingApprovalCalls.map((call) => (
             <div key={call.id} className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <span className="min-w-0 flex-1 truncate">

@@ -143,6 +143,13 @@ export function coerceOutlineSubAgentResult(
   text: string,
   context: OutlineSubAgentFallbackContext,
 ): OutlineProtocolParseResult<OutlineSubAgentResult> {
+  if (!text.trim()) {
+    return {
+      ok: false,
+      error: `子 Agent 未返回内容：${context.agentName}。请重试结构化输出。`,
+    }
+  }
+
   const parsed = parseOutlineSubAgentResult(text)
   if (parsed.ok) return parsed
 

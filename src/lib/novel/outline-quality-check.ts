@@ -27,6 +27,14 @@ export interface ChapterOutlineQualitySummary {
   items: QualityCheckItem[];
 }
 
+export interface OutlineGenerationQualityFeedback {
+  status: "pass" | "warn" | "error";
+  title: string;
+  summary: string;
+  issues: string[];
+  repairPrompt: string;
+}
+
 /**
  * 对卷纲 Markdown 内容执行全部质量检查。
  *
@@ -129,6 +137,45 @@ export function formatChapterOutlineQualityReport(
     `主要缺失：${issuePreview}${remainingIssues > 0 ? `；另有 ${remainingIssues} 项未列出` : ""}。`,
     "请让 AI 按章纲标准补齐后重新输出完整章纲，再保存。",
   ].join("");
+}
+
+export function buildOutlineGenerationQualityFeedback(input: {
+  fileType: string;
+  fileName: string;
+  content: string;
+}): OutlineGenerationQualityFeedback | null {
+  if (input.fileType !== "chapter-outline" && !isLikelyChapterOutline(input.content, input.fileName)) {
+    return null;
+  }
+
+  const summary = summarizeChapterOutlineQuality(input.content);
+  const issues = Array.from(new Set([...summary.errors, ...summary.warnings]));
+  if (issues.length === 0) {
+    return {
+      status: "pass",
+      title: "生成后质量检查",
+      summary: `${input.fileName} 章纲质量检查通过。`,
+      issues: [],
+      repairPrompt: "",
+    };
+  }
+
+  const status: "warn" | "error" = summary.valid ? "warn" : "error";
+  const preview = issues.slice(0, 5).join("；");
+  const remaining = issues.length > 5 ? `；另有 ${issues.length - 5} 项未列出` : "";
+  return {
+    status,
+    title: "生成后质量检查",
+    summary: `${input.fileName} 存在 ${issues.length} 个可修复项：${preview}${remaining}。`,
+    issues,
+    repairPrompt: [
+      `请按章纲标准修订「${input.fileName}」。`,
+      "必须补齐以下可修复项，不要改变已确认的剧情方向：",
+      ...issues.slice(0, 12).map((issue, index) => `${index + 1}. ${issue}`),
+      "",
+      "请输出修订后的完整章纲，并在末尾附加可保存的 outlineSaveRequest JSON。",
+    ].join("\n"),
+  };
 }
 
 export function isLikelyChapterOutline(content: string, fileName = ""): boolean {

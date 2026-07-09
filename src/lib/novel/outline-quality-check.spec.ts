@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  buildOutlineGenerationQualityFeedback,
   extractChapterOutlineStatus,
   formatChapterOutlineQualityReport,
   isLikelyChapterOutline,
@@ -95,5 +96,20 @@ describe("章纲质量检查", () => {
     })
 
     expect(report).toBe("章纲质量检查通过，但有 1 项提醒。建议完善：人物状态缺少「关键配角状态」字段。")
+  })
+
+  it("生成后质量检查应给不完整章纲返回可修复项和修订提示", () => {
+    const feedback = buildOutlineGenerationQualityFeedback({
+      fileType: "chapter-outline",
+      fileName: "章纲-第001章.md",
+      content: "# 章纲-第001章\n\n## 核心事件\n\n- 事件1：只有一个事件",
+    })
+
+    expect(feedback).not.toBeNull()
+    expect(feedback?.status).toBe("error")
+    expect(feedback?.title).toBe("生成后质量检查")
+    expect(feedback?.summary).toContain("可修复项")
+    expect(feedback?.repairPrompt).toContain("请按章纲标准修订")
+    expect(feedback?.repairPrompt).toContain("章纲-第001章.md")
   })
 })

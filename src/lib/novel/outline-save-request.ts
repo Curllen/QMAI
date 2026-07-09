@@ -182,6 +182,18 @@ export function parseOutlineSaveRequests(text: string): OutlineSaveRequestParseR
   return { requests, errors }
 }
 
+export function formatOutlineSaveParseFeedback(errors: string[]): string {
+  const uniqueErrors = Array.from(new Set(errors.filter(Boolean)))
+  if (uniqueErrors.length === 0) return ""
+  const preview = uniqueErrors.slice(0, 4).join("；")
+  const remaining = uniqueErrors.length > 4 ? `；另有 ${uniqueErrors.length - 4} 项未列出` : ""
+  return [
+    `自动保存失败：${preview}${remaining}。`,
+    "请让 AI 重新输出 outlineSaveRequest，必须包含 targetFolder、fileName、fileType、writeMode、referencedSkills、sourceIntent、content。",
+    "当前内容不会写入文件。",
+  ].join("")
+}
+
 export function characterDraftsToSaveRequests(
   drafts: CharacterSaveDraft[],
   sourceIntent: string,

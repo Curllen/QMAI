@@ -56,6 +56,7 @@ export interface OutlineChatMessage {
   sources?: string[]
   agentToolCalls?: AgentRunRecord["toolCalls"]
   multiAgentRun?: OutlineMultiAgentRunState
+  showThinkingProcess?: boolean
   isAgentRunning?: boolean
   attachedReferences?: ReferenceToken[]
 }
@@ -67,6 +68,7 @@ export interface OutlineChatConversation {
   updatedAt: number
   messages: OutlineChatMessage[]
   modelId?: string
+  contextSummary?: string
 }
 
 interface OutlineChatState {
@@ -84,6 +86,7 @@ interface OutlineChatState {
   removeLastMessage: (convId: string) => void
   deleteConversation: (id: string) => void
   setConversationModel: (id: string, modelId: string) => void
+  setConversationContextSummary: (id: string, contextSummary: string) => void
   setStreamingContent: (content: string) => void
   setIsStreaming: (value: boolean) => void
   enqueueReferenceTokens: (tokens: ReferenceToken[]) => void
@@ -179,6 +182,16 @@ export const useOutlineChatStore = create<OutlineChatState>((set, get) => ({
     set((s) => ({
       conversations: s.conversations.map((c) =>
         c.id === id ? { ...c, modelId, updatedAt: now } : c
+      ),
+    }))
+    void get().saveToDisk()
+  },
+
+  setConversationContextSummary: (id, contextSummary) => {
+    const now = Date.now()
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, contextSummary, updatedAt: now } : c
       ),
     }))
     void get().saveToDisk()

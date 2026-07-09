@@ -2,9 +2,77 @@ import type { Tool } from "../types"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 import { isLikelyChapterOutline, summarizeChapterOutlineQuality } from "@/lib/novel/outline-quality-check"
 
+function isJsonContent(text: string): boolean {
+  const trimmed = text.trim()
+  return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+}
+
+function convertJsonToMarkdown(jsonText: string): string {
+  try {
+    const parsed = JSON.parse(jsonText)
+    // Start at depth 3 because nodeTitle already uses ## (depth 2)
+    return jsonObjectToMarkdown(parsed, 3)
+  } catch {
+    return jsonText
+  }
+}
+
+function jsonObjectToMarkdown(value: unknown, depth: number): string {
+  const heading = (): string => "#".repeat(Math.min(depth, 5))
+  const indent = (): string => "  ".repeat(Math.max(0, depth - 2))
+
+  if (value === null || value === undefined) return "（空）"
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "（空列表）"
+    return value.map((item) => {
+      if (typeof item === "object" && item !== null) {
+        const keys = Object.keys(item as Record<string, unknown>)
+        if (keys.length <= 2) {
+          // Simple objects like {主角: "xxx", 反派: "xxx"} → bullet with colon
+          return `${indent()}- ${Object.entries(item as Record<string, unknown>)
+            .map(([k, v]) => `${k}：${jsonObjectToMarkdown(v, depth + 1)}`)
+            .join("，")}`
+        }
+        return `${indent()}- ${jsonObjectToMarkdown(item, depth + 1)}`
+      }
+      return `${indent()}- ${jsonObjectToMarkdown(item, depth + 1)}`
+    }).join("\n")
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>
+    const keys = Object.keys(obj)
+    if (keys.length === 0) return "（空对象）"
+    return keys.map((key) => {
+      const val = obj[key]
+      if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+        // Nested object → heading + sub bullets
+        return `${heading()} ${key}\n\n${Object.entries(val as Record<string, unknown>)
+          .map(([sk, sv]) => `${indent()}- ${sk}：${jsonObjectToMarkdown(sv, depth + 1)}`)
+          .join("\n")}`
+      }
+      return `${heading()} ${key}\n\n${jsonObjectToMarkdown(val, depth + 1)}`
+    }).join("\n\n")
+  }
+
+  return String(value)
+}
+
 export function buildOutlineNodeWriteContent(nodeTitle: string, nodeContent: string): string {
   const trimmed = nodeContent.trim()
+  // If content is already pure Markdown headings, preserve it
   if (/^#{1,6}\s+/.test(trimmed)) return `${trimmed}\n`
+  // If content looks like JSON, convert to readable Markdown
+  if (isJsonContent(trimmed)) {
+    const markdown = convertJsonToMarkdown(trimmed)
+    if (markdown !== trimmed) {
+      return `## ${nodeTitle}\n\n${markdown}\n`
+    }
+  }
   return `## ${nodeTitle}\n\n${trimmed}\n`
 }
 

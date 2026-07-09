@@ -86,4 +86,19 @@ describe("AI大纲结构化输出协议", () => {
       expect(result.value.contentMarkdown).toContain("玄幻升级流")
     }
   })
+
+  it("子 Agent 空输出时返回明确的中文错误而不是 JSON 解析异常", () => {
+    const result = coerceOutlineSubAgentResult("", {
+      agentId: "character-agent",
+      agentName: "角色 Agent",
+      usedSkills: ["supporting-cast"],
+      stage: "character",
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain("子 Agent 未返回内容")
+      expect(result.error).not.toContain("Unexpected end of JSON input")
+    }
+  })
 })

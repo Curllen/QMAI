@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   characterDraftsToSaveRequests,
+  formatOutlineSaveParseFeedback,
   parseOutlineSaveRequests,
   saveOutlineSaveRequests,
   splitConfirmRequiredSaveRequests,
@@ -149,5 +150,27 @@ describe("outline-save-request", () => {
 
     expect(result.confirmRequired).toHaveLength(1)
     expect(result.autoSaveable).toHaveLength(1)
+  })
+
+  it("保存请求解析失败时返回可操作的中文纠错提示", () => {
+    const parsed = parseOutlineSaveRequests(JSON.stringify({
+      outlineSaveRequest: {
+        targetFolder: "",
+        fileName: "章纲-第001章.txt",
+        fileType: "unknown",
+        writeMode: "create",
+        referencedSkills: [],
+        sourceIntent: "保存章纲",
+        content: "正文",
+      },
+    }))
+
+    const feedback = formatOutlineSaveParseFeedback(parsed.errors)
+
+    expect(feedback).toContain("自动保存失败")
+    expect(feedback).toContain("请让 AI 重新输出 outlineSaveRequest")
+    expect(feedback).toContain("targetFolder")
+    expect(feedback).toContain("fileName")
+    expect(feedback).toContain("不会写入文件")
   })
 })

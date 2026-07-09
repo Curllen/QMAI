@@ -139,6 +139,16 @@ export function OutlineSaveConfirmDialog({
                   className="rounded-md border px-3 py-2"
                 >
                   <div className="font-medium">{request.fileName}</div>
+                  <div className="mt-1 grid gap-0.5 text-xs text-muted-foreground">
+                    <div>类型：{request.fileType}</div>
+                    <div>写入方式：{request.writeMode}</div>
+                    <div>来源：{request.sourceIntent || "未标注"}</div>
+                    <div>
+                      引用 skill：{request.referencedSkills.length > 0
+                        ? request.referencedSkills.join("、")
+                        : "无"}
+                    </div>
+                  </div>
                   <div className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
                     <label htmlFor={`outline-save-folder-${index}`}>
                       保存文件夹
