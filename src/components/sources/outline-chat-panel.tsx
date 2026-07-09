@@ -153,6 +153,17 @@ import {
   splitConversationToolbarItems,
 } from "@/lib/workspace-layout";
 import { createWriteOutlineNodeTool } from "@/lib/agent/tools/write-outline-node";
+import {
+  buildIntentAnalysisPrompt,
+  parseIntentClarity,
+  type IntentClarityResult,
+} from "@/lib/novel/outline-intent-clarity";
+import {
+  parseNextStep,
+  buildNextStepPromptSuffix,
+  type NextStepRecommendation,
+} from "@/lib/novel/outline-next-step";
+import { OutlineWorkflowStages } from "@/components/sources/outline-workflow-stages";
 
 const OUTLINE_CHAT_DISABLED_TOOLS = ["write_chapter", "write_memory"];
 const OUTLINE_CHAT_WIZARD_DISABLED_TOOLS = [
@@ -359,6 +370,31 @@ function buildOutlineSectionGenerationPrompt(
     getOutlineSectionOutputRules(title),
     "",
     "如果资料不足以完整生成，请只问一个最关键的澄清问题；如果资料足够，直接输出完整正文。",
+  ].join("\n");
+}
+
+function buildGenerationPrompt(
+  title: string,
+  requestHint: string,
+  scope?: string,
+): string {
+  return [
+    `请按「AI大纲生成工作流」生成「${title}」。`,
+    scope ? `\n## 已确认范围\n${scope}\n` : "",
+    "## PRD 3.1 主流程要求",
+    "1. 提取请求关键词。2. 识别用户意图。3. 读取资料。4. 提取关键内容。",
+    "5. 结合 skill + soul.md 生成可直接保存的大纲正文。6. 结果强约束收敛。",
+    "",
+    "## 本分项内容要求",
+    requestHint,
+    getOutlineSectionOutputRules(title),
+    "",
+    "## 文件输出要求",
+    "每个章节/每个项必须输出独立的 outlineSaveRequest，每个对应一个独立文件。",
+    "文件名格式：章节细纲/第N章-章节标题.md 或 人物小传/角色名.md",
+    "",
+    "如果资料足够，直接输出完整正文。",
+    buildNextStepPromptSuffix(),
   ].join("\n");
 }
 
@@ -709,9 +745,11 @@ function OutlineAssistantMessage({
 
   return (
     <>
-      {visibleThinking ? (
-        <OutlineThinkingBlock content={visibleThinking} open={isStreaming} />
-      ) : null}
+      <OutlineWorkflowStages
+        toolCalls={msg.agentToolCalls ?? []}
+        content={displayContent}
+        isStreaming={isStreaming && index === activeMessagesLength - 1}
+      />
       <OutlineMultiAgentPanel run={msg.multiAgentRun} />
       <AgentToolCallMessage
         toolCalls={msg.agentToolCalls}
@@ -853,6 +891,77 @@ function OutlineAssistantMessage({
           >
             <RefreshCw className="h-3 w-3" /> 重新生成
           </button>
+        </div>
+      ) : null}
+      {/* 意图不清晰时的推荐选项 */}
+      {msg.intentClarityResult?.clarity === "needs_input" && !isStreaming ? (
+        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-50/30 p-3 dark:bg-amber-950/10">
+          <div className="text-sm font-medium mb-2">{msg.intentClarityResult.question || "请选择生成范围："}</div>
+          <div className="space-y-2">
+            {msg.intentClarityResult.options.map((option) => (
+              <button
+                key={option.id}
+                className="w-full rounded-md border px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                onClick={() => {
+                  if (option.id === "D") {
+                    // 自定义：聚焦输入框（暂不实现，后续 Task 补充）
+                  } else {
+                    // 直接注入用户选择作为生成范围
+                    const outlineChatStore = useOutlineChatStore.getState();
+                    const convId = outlineChatStore.activeConversationId;
+                    if (!convId) return;
+                    useOutlineChatStore.getState().addMessage(convId, {
+                      id: crypto.randomUUID(),
+                      role: "user",
+                      content: option.label + (option.description ? `：${option.description}` : ""),
+                    });
+                  }
+                }}
+              >
+                <div className="font-medium">{option.label}</div>
+                {option.description ? (
+                  <div className="text-xs text-muted-foreground">{option.description}</div>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {/* 下一步推荐 */}
+      {msg.nextStepRecommendation && msg.nextStepRecommendation.recommendations.length > 0 && !isStreaming ? (
+        <div className="mt-3 rounded-md border border-sky-500/30 bg-sky-50/30 p-3 dark:bg-sky-950/10">
+          <div className="text-sm font-medium mb-2">接下来想做什么？</div>
+          <div className="space-y-2">
+            {msg.nextStepRecommendation.recommendations.map((rec) => (
+              <button
+                key={rec.id}
+                className="w-full rounded-md border px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                onClick={() => {
+                  if (rec.id === "D") {
+                    // 自定义：聚焦输入框
+                  } else {
+                    // 查找对应模块配置并触发生成
+                    const config = OUTLINE_SECTION_GENERATION_CONFIGS.find(c => c.title === rec.label);
+                    if (config) {
+                      const outlineChatStore = useOutlineChatStore.getState();
+                      const convId = outlineChatStore.activeConversationId;
+                      if (!convId) return;
+                      useOutlineChatStore.getState().addMessage(convId, {
+                        id: crypto.randomUUID(),
+                        role: "user",
+                        content: `生成${rec.label}`,
+                      });
+                    }
+                  }
+                }}
+              >
+                <div className="font-medium">{rec.label}</div>
+                {rec.reason ? (
+                  <div className="text-xs text-muted-foreground">{rec.reason}</div>
+                ) : null}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
     </>
@@ -1042,6 +1151,9 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const [historyDropdownStyle, setHistoryDropdownStyle] = useState<CSSProperties | null>(null);
   const [deAiSkillConfig, setDeAiSkillConfig] = useState<DeAiSkillConfig | null>(null);
   const [writingSkills, setWritingSkills] = useState<UserSkill[]>([]);
+  const [lastIntentResult, setLastIntentResult] = useState<IntentClarityResult | null>(null);
+  const [lastIntentTitle, setLastIntentTitle] = useState("");
+  const [lastIntentHint, setLastIntentHint] = useState("");
   const outlineWritingSkills = useMemo(() => {
     const routed = filterSkillsForSkillRoutes(writingSkills, [...OUTLINE_CHAT_SKILL_ROUTES]);
     return routed.length > 0 ? routed : writingSkills;
@@ -1423,6 +1535,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         preferredSkillNames?: string[];
         enableMultiAgent?: boolean;
         forceRefresh?: boolean;
+        intentPhase?: "intent_analysis" | "generation" | "waiting_user_input";
       } = {},
     ) => {
       const prompt = inputText.trim();
@@ -1533,6 +1646,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         agentToolCalls: [],
         showThinkingProcess: historyPlan.showThinkingProcess,
         isAgentRunning: true,
+        intentPhase: options.intentPhase,
       });
       setIsStreaming(true);
       setStreamingContent("");
@@ -1958,6 +2072,35 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             : [],
           isAgentRunning: false,
         }));
+
+        // 解析意图清晰度结果
+        const intentResult = parseIntentClarity(finalContent);
+        if (intentResult) {
+          setLastIntentResult(intentResult);
+          updateOutlineAssistantMessage(convId, assistantId, (message) => ({
+            ...message,
+            intentClarityResult: intentResult,
+          }));
+          if (intentResult.clarity === "clear") {
+            // 自动注入生成 prompt
+            const scope = intentResult.detectedScope;
+            void handleSend(
+              buildGenerationPrompt(lastIntentTitle, lastIntentHint, scope),
+              [],
+              { intentPhase: "generation" },
+            );
+          }
+        }
+
+        // 解析下一步推荐
+        const nextStep = parseNextStep(finalContent);
+        if (nextStep && nextStep.recommendations.length > 0) {
+          updateOutlineAssistantMessage(convId, assistantId, (message) => ({
+            ...message,
+            nextStepRecommendation: nextStep,
+          }));
+        }
+
         const nextContextSummaryPayload = {
           contextSummary: buildOutlineContextSummary([
             ...historyBeforeSend,
@@ -2051,12 +2194,18 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
       outlineWritingSkills,
       setIsStreaming,
       setStreamingContent,
+      lastIntentTitle,
+      lastIntentHint,
+      setLastIntentResult,
     ],
   );
 
   const handleGenerateSection = useCallback(
     (title: string, requestHint: string) => {
-      void handleSend(buildOutlineSectionGenerationPrompt(title, requestHint));
+      setLastIntentTitle(title);
+      setLastIntentHint(requestHint);
+      const intentPrompt = buildIntentAnalysisPrompt(title, requestHint);
+      void handleSend(intentPrompt, [], { intentPhase: "intent_analysis" });
     },
     [handleSend],
   );
