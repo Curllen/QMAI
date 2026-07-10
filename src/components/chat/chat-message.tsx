@@ -140,7 +140,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate, novelMode,
             )}
           </div>
         )}
-        {saveStatus && (
+        {isLastAssistant && saveStatus && (
           <p className="mt-1 text-xs text-muted-foreground">{saveStatus}</p>
         )}
       </div>
