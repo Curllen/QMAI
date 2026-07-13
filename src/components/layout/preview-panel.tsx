@@ -1035,6 +1035,7 @@ export function PreviewPanel() {
       sourceContent: source,
     })
     let result = ""
+    let doneCalled = false
     try {
       await streamChat(
         llmConfig,
@@ -1044,17 +1045,29 @@ export function PreviewPanel() {
             result += token
           },
           onDone: () => {
+            doneCalled = true
             useDeAiTaskStore.getState().finishTask(taskId, result)
           },
           onError: (error) => {
+            doneCalled = true
             console.error("去AI味处理失败:", error)
             useDeAiTaskStore.getState().failTask(taskId, error.message ?? String(error))
           },
         },
       )
+      // 兜底：streamChat 正常返回但未调用 onDone/onError 时，用 result 完成
+      if (!doneCalled) {
+        if (result.trim()) {
+          useDeAiTaskStore.getState().finishTask(taskId, result)
+        } else {
+          useDeAiTaskStore.getState().failTask(taskId, "去AI味未返回内容")
+        }
+      }
     } catch (err) {
       console.error("去AI味处理失败:", err)
-      useDeAiTaskStore.getState().failTask(taskId, String(err))
+      if (!doneCalled) {
+        useDeAiTaskStore.getState().failTask(taskId, String(err))
+      }
     }
   }, [syncDiskBeforeAction, selectedFile, project, chapterHeader, chapterDeAiOptions.currentSkillId])
 
@@ -1666,7 +1679,7 @@ export function PreviewPanel() {
         const readyTasks = deAiTasks.filter(
           (t) => t.status === "ready" || t.status === "confirmed" || t.status === "cancelled"
         )
-        if (readyTasks.length === 0) return null
+        if (readyTasks.length === 0 && !deAiReviewOpen) return null
         const now = Date.now()
         const reviewChapters = readyTasks.map((t, index) => ({
           version: 1 as const,

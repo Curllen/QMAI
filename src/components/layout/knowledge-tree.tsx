@@ -1985,7 +1985,10 @@ export function RawSourcesSection({ onCancelExtraction }: { onCancelExtraction?:
     if (!project) return []
     const projectPath = normalizePath(project.path)
     return deAiTasks
-      .filter((t) => t.projectPath === projectPath && t.status === "processing")
+      .filter((t) =>
+        t.projectPath === projectPath
+        && (t.status === "processing" || t.status === "ready" || t.status === "failed")
+      )
       .sort((a, b) => b.createdAt - a.createdAt)
   }, [project, deAiTasks])
 
@@ -2090,14 +2093,24 @@ export function RawSourcesSection({ onCancelExtraction }: { onCancelExtraction?:
             {projectDeAiTasks.map((task) => (
               <div key={task.id} className="space-y-1 rounded-md bg-muted/30 px-2 py-1.5">
                 <div className="flex items-center gap-1">
-                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                  <span className="truncate text-foreground font-medium">
+                  {task.status === "processing" ? (
+                    <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                  ) : task.status === "ready" ? (
+                    <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                  ) : (
+                    <X className="h-3 w-3 shrink-0 text-destructive" />
+                  )}
+                  <span className={`truncate ${task.status === "processing" ? "text-foreground font-medium" : ""}`}>
                     去AI味：{task.chapterTitle}
+                    {task.status === "ready" ? " · 待确认" : ""}
+                    {task.status === "failed" ? ` · 失败：${task.error ?? ""}` : ""}
                   </span>
                 </div>
-                <div className="text-muted-foreground">
-                  Skill：{task.skillName} · 模型：{task.modelName}
-                </div>
+                {task.status === "processing" && (
+                  <div className="text-muted-foreground">
+                    Skill：{task.skillName} · 模型：{task.modelName}
+                  </div>
+                )}
               </div>
             ))}
             </>
