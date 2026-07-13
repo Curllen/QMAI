@@ -1,6 +1,6 @@
 import { useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { RefreshCw, Download, CheckCircle, AlertCircle } from "lucide-react"
+import { RefreshCw, Download, CheckCircle, AlertCircle, Globe } from "lucide-react"
 import { allChangelog } from "@/lib/changelog"
 import {
   APP_AUTO_UPDATE_RELEASES_URL,
@@ -209,6 +209,19 @@ export function ChangelogSection() {
             </button>
           </div>
         ) : null}
+      </div>
+
+      {/* 官网 */}
+      <div className="flex items-center gap-2 text-sm">
+        <Globe className="h-4 w-4 text-muted-foreground" />
+        <a
+          href="https://www.qmai.pro"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary hover:underline"
+        >
+          www.qmai.pro
+        </a>
       </div>
 
       {/* 完整版本历史 */}
