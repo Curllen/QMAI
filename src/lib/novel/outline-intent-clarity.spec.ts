@@ -57,4 +57,51 @@ describe("stripStructuredMarkers", () => {
     const text = "纯文本内容"
     expect(stripStructuredMarkers(text)).toBe("纯文本内容")
   })
+
+  it("流式中间态：intent_clarity 开标签无闭标签时截断后续内容", () => {
+    const text = "分析结果如下：\n<!-- intent_clarity -->\n{\"clarity\":\"clear\",\"module\":\"章节"
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("分析结果如下：")
+    expect(result).not.toContain("intent_clarity")
+    expect(result).not.toContain("clarity")
+  })
+
+  it("流式中间态：next_step 开标签无闭标签时截断后续内容", () => {
+    const text = "正文内容\n<!-- next_step -->\n{\"recommendations\":["
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("正文内容")
+    expect(result).not.toContain("next_step")
+    expect(result).not.toContain("recommendations")
+  })
+
+  it("完整标记对优先于不完整截断逻辑", () => {
+    // 完整标记对在步骤1被移除后，不应再被步骤2截断
+    const text = "<!-- intent_clarity -->\n{\"clarity\":\"clear\"}\n<!-- /intent_clarity -->\n正文内容"
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("正文内容")
+  })
+
+  it("残留裸闭标签被清理", () => {
+    const text = "正文内容\n<!-- /intent_clarity -->\n更多内容"
+    const result = stripStructuredMarkers(text)
+    expect(result).not.toContain("intent_clarity")
+    expect(result).toContain("正文内容")
+    expect(result).toContain("更多内容")
+  })
+
+  it("正常文本中包含 HTML 注释但不匹配标记名时不受影响", () => {
+    const text = "这是正文\n<!-- regular comment -->\n更多正文"
+    const result = stripStructuredMarkers(text)
+    expect(result).toContain("regular comment")
+    expect(result).toContain("这是正文")
+    expect(result).toContain("更多正文")
+  })
+
+  it("同时存在完整 intent_clarity 和不完整 next_step 时正确处理", () => {
+    const text = "<!-- intent_clarity -->\n{\"clarity\":\"clear\"}\n<!-- /intent_clarity -->\n正文\n<!-- next_step -->\n{\"recommendations\":["
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("正文")
+    expect(result).not.toContain("intent_clarity")
+    expect(result).not.toContain("next_step")
+  })
 })

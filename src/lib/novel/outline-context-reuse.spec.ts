@@ -192,4 +192,41 @@ describe("AI 大纲上下文复用策略", () => {
     expect(plan.showToolProcessOnError).toBe(true)
     expect(plan.sources).toContain("过程: 已隐藏重复工具过程")
   })
+
+  it("systemGenerated 标记跳过关键词检测，避免系统 prompt 触发刷新", () => {
+    // 系统生成的 prompt 包含"读取资料"关键词，但不应触发刷新
+    const decision = planOutlineContextReuse({
+      hasPriorAssistantAnswer: true,
+      attachedReferenceCount: 0,
+      inputText: "3. 读取资料。4. 提取关键内容。5. 生成大纲。",
+      enableMultiAgent: false,
+      systemGenerated: true,
+    })
+
+    expect(decision.mode).toBe("reuse")
+    expect(decision.disabledTools).toEqual(OUTLINE_CONTEXT_REUSE_DISABLED_TOOLS)
+  })
+
+  it("用户手动输入包含读取关键词时仍触发刷新（systemGenerated 为 false）", () => {
+    const decision = planOutlineContextReuse({
+      hasPriorAssistantAnswer: true,
+      attachedReferenceCount: 0,
+      inputText: "读取资料后重新分析",
+      enableMultiAgent: false,
+      systemGenerated: false,
+    })
+
+    expect(decision.mode).toBe("refresh")
+  })
+
+  it("systemGenerated 为 undefined 时保持原有行为（关键词检测生效）", () => {
+    const decision = planOutlineContextReuse({
+      hasPriorAssistantAnswer: true,
+      attachedReferenceCount: 0,
+      inputText: "读取资料后重新分析",
+      enableMultiAgent: false,
+    })
+
+    expect(decision.mode).toBe("refresh")
+  })
 })

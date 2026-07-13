@@ -101,8 +101,18 @@ export function buildIntentAnalysisPrompt(title: string, requestHint: string): s
 
 export function stripStructuredMarkers(text: string): string {
   return text
+    // 1. 移除完整的标记对（现有逻辑）
     .replace(/<!--\s*intent_clarity\s*-->[\s\S]*?<!--\s*\/intent_clarity\s*-->/gi, "")
     .replace(/<!--\s*next_step\s*-->[\s\S]*?<!--\s*\/next_step\s*-->/gi, "")
+    // 2. 移除不完整的 intent_clarity 开标签及其后所有内容
+    //    （流式中间态：开标签已到达，闭标签未到达，后续是 JSON payload）
+    .replace(/<!--\s*intent_clarity\s*-->[\s\S]*$/gi, "")
+    // 3. 移除不完整的 next_step 开标签及其后所有内容
+    .replace(/<!--\s*next_step\s*-->[\s\S]*$/gi, "")
+    // 4. 清理可能残留的裸闭标签
+    .replace(/<!--\s*\/intent_clarity\s*-->/gi, "")
+    .replace(/<!--\s*\/next_step\s*-->/gi, "")
+    // 5. 清理多余空行
     .replace(/\n{3,}/g, "\n\n")
     .trim()
 }

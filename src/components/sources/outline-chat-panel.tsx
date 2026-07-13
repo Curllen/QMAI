@@ -82,8 +82,10 @@ import {
 import {
   type OutlineSubAgentPlan,
   planOutlineSubAgents,
+  resumeOutlineMultiAgentWorkflow,
   runOutlineMultiAgentWorkflow,
 } from "@/lib/novel/outline-multi-agent-orchestrator";
+import type { OutlineSubAgentResult } from "@/lib/novel/outline-result-protocol";
 import {
   buildDynamicOutlinePlannerPrompt,
   parseDynamicOutlinePlan,
@@ -836,6 +838,8 @@ function OutlineAssistantMessage({
   onConfirmToolSave,
   onRejectTool,
   onSendMessage,
+  onResumeMultiAgent,
+  resumeMultiAgentDisabled,
   nextStepDisabled,
   nextStepDisabledReason,
   generationContext,
@@ -854,6 +858,8 @@ function OutlineAssistantMessage({
   onConfirmToolSave: (call: ToolCallRecord & { preview?: string }) => void;
   onRejectTool: (call: ToolCallRecord & { preview?: string }) => void;
   onSendMessage: (text: string, options?: { intentPhase?: "intent_analysis" | "generation" | "waiting_user_input"; scope?: string }) => Promise<boolean>;
+  onResumeMultiAgent: (messageId: string) => Promise<void>;
+  resumeMultiAgentDisabled: boolean;
   nextStepDisabled: boolean;
   nextStepDisabledReason?: string;
   generationContext: boolean;
@@ -913,7 +919,11 @@ function OutlineAssistantMessage({
   return (
     <>
 
-      <OutlineMultiAgentPanel run={msg.multiAgentRun} />
+      <OutlineMultiAgentPanel
+        run={msg.multiAgentRun}
+        onResume={() => { void onResumeMultiAgent(msg.id) }}
+        resumeDisabled={resumeMultiAgentDisabled}
+      />
       <AgentToolCallMessage
         toolCalls={msg.agentToolCalls}
         thinkingContent={thinking || undefined}
@@ -1687,6 +1697,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         clearDraft?: boolean;
         intentPhase?: "intent_analysis" | "generation" | "waiting_user_input";
         novelGenerationRequest?: NovelGenerationRequestPackage;
+        systemGenerated?: boolean;
       } = {},
     ): Promise<OutlineSendResult> => {
       const prompt = inputText.trim();
@@ -1772,6 +1783,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         inputText: prompt,
         enableMultiAgent: options.enableMultiAgent,
         forceRefresh,
+        systemGenerated: options.systemGenerated,
       });
       const cachedSummary =
         contextDecision.mode === "reuse"
@@ -1975,6 +1987,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         };
 
         let finalText = "";
+        let capturedSuccessfulResults: OutlineSubAgentResult[] = [];
         if (options.enableMultiAgent) {
           const maxConcurrency = 3;
           const fallbackSubAgentPlan = planOutlineSubAgents({
@@ -2119,6 +2132,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             },
             mergeResults: async (subAgentResults) => {
               if (!isCurrentRun()) throw new Error("aborted");
+              capturedSuccessfulResults = subAgentResults;
               result = "";
               updateOutlineMultiAgentRun(convId, assistantId, (run) => run ? ({
                 ...run,
@@ -2195,6 +2209,8 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             if (!run) return run;
             const successful = new Set(multiAgentResult.successfulAgents);
             const failed = new Set(multiAgentResult.failedAgents);
+            const shouldStoreResume = multiAgentResult.mode === "single-agent-fallback"
+              && multiAgentResult.successfulAgents.length > 0;
             return {
               ...run,
               mode: multiAgentResult.mode,
@@ -2216,6 +2232,11 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                     status: "skipped",
                     summary: "已回退为单 Agent 生成。",
                   },
+              resumeablePlan: shouldStoreResume ? {
+                plan: subAgentPlan as unknown[],
+                completedResults: capturedSuccessfulResults as unknown[],
+                failedAgentIds: multiAgentResult.failedAgents,
+              } : undefined,
             };
           });
           finalText = multiAgentResult.finalText;
@@ -2357,6 +2378,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             conversationId: capturedConvId,
             clearDraft: false,
             intentPhase: "generation",
+            systemGenerated: true,
           });
         }
         return { started: true, sent: true };
@@ -2453,7 +2475,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         setOutlineWorkflowStages((stages) => setOutlineSessionValue(stages, capturedConvId, "intent_analysis"));
       }
       const intentPrompt = buildIntentAnalysisPrompt(title, requestHint);
-      void handleSend(intentPrompt, [], { conversationId: capturedConvId, intentPhase: "intent_analysis" });
+      void handleSend(intentPrompt, [], { conversationId: capturedConvId, intentPhase: "intent_analysis", systemGenerated: true });
     },
     [activeConversationId, createConversation, handleSend, outlineWorkflowStages],
   );
@@ -2483,7 +2505,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
           const intentContext = intentContextsRef.current[capturedConvId] ?? { title: "", hint: "" };
           const generationPrompt = buildGenerationPrompt(intentContext.title, intentContext.hint, scope, intentContext.outputMode);
           const references = outlineReferenceTokens;
-          const result = await handleSend(generationPrompt, references, { conversationId: capturedConvId, intentPhase: "generation", clearDraft: false });
+          const result = await handleSend(generationPrompt, references, { conversationId: capturedConvId, intentPhase: "generation", clearDraft: false, systemGenerated: true });
           if (result.sent) {
             if (shouldClearOutlineReferences({
               invocationConversationId: capturedConvId,
@@ -2523,6 +2545,202 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
     [activeConversationId, canStartConversationRun, handleSend, outlineReferenceTokens, outlineWorkflowStage],
   );
 
+  const handleResumeMultiAgent = useCallback(
+    async (messageId: string) => {
+      if (!project || !activeConversationId) return;
+      const conv = useOutlineChatStore
+        .getState()
+        .conversations.find((c) => c.id === activeConversationId);
+      if (!conv) return;
+      const targetMsg = conv.messages.find((m) => m.id === messageId);
+      if (!targetMsg?.multiAgentRun?.resumeablePlan) return;
+
+      const { plan, completedResults, failedAgentIds } = targetMsg.multiAgentRun.resumeablePlan;
+
+      let effectiveLlmConfig = resolveNovelModel(llmConfig, novelConfig, "writing");
+      if (effectiveOutlineModelId) {
+        effectiveLlmConfig = resolveModelConfig(effectiveOutlineModelId, effectiveLlmConfig, providerConfigs);
+      }
+      const effectiveModelId = effectiveOutlineModelId || effectiveLlmConfig.model || "";
+      if (!hasUsableLlm(effectiveLlmConfig, providerConfigs)) {
+        toast.error("请先在设置中配置并选择一个可用的 AI 模型。");
+        return;
+      }
+
+      const capturedConvId = activeConversationId;
+      const runId = crypto.randomUUID();
+      if (!startConversationRun(capturedConvId, runId)) return;
+      const controller = new AbortController();
+      outlineConversationRunRegistry.register(capturedConvId, controller);
+      const isCurrentRun = () => canApplyOutlineRunEffect(
+        useOutlineChatStore.getState().runStates,
+        capturedConvId,
+        runId,
+      );
+
+      try {
+        const skillConfig = await loadDeAiSkillConfig(project.path).catch((): DeAiSkillConfig | null => null);
+        const soulDoc = await readSoulDoc(project.path).catch(() => "");
+        const systemPrompt = buildOutlineAgentSystemPrompt({ projectName: project.name, soulDoc });
+        const buildConfig = (_skillNames: string[], disableWriteTools: boolean) => {
+          const r = new ToolRegistry();
+          const c = buildAgentConfig(effectiveModelId, systemPrompt, r, {
+            wikiPath: `${normalizePath(project.path)}/wiki`,
+            getSkillConfig: () => skillConfig,
+            getUserSkills: () => outlineWritingSkills,
+            getChatConversations: () => {
+              const state = useChatStore.getState();
+              return state.conversations.map((conversation) => ({
+                id: conversation.id,
+                title: conversation.title,
+                messages: state.messages
+                  .filter((message) => message.conversationId === conversation.id)
+                  .map((message) => ({ role: message.role, content: message.content })),
+              }));
+            },
+            getOutlineConversations: () => mapOutlineConversationsForModel(useOutlineChatStore.getState().conversations),
+            llmConfig: effectiveLlmConfig,
+            disabledTools: disableWriteTools ? OUTLINE_CHAT_DISABLED_TOOLS : [],
+          });
+          return { agentConfig: c, registry: r };
+        };
+
+        // 更新状态为续传运行中
+        updateOutlineMultiAgentRun(capturedConvId, messageId, (run) => run ? ({
+          ...run,
+          status: "running",
+          resumeablePlan: undefined,
+          agents: run.agents.map((agent) =>
+            failedAgentIds.includes(agent.id)
+              ? { ...agent, status: "waiting" as const, error: undefined, startedAt: undefined, finishedAt: undefined }
+              : agent,
+          ),
+        }) : run);
+
+        const resumeResult = await resumeOutlineMultiAgentWorkflow({
+          plan: plan as OutlineSubAgentPlan[],
+          completedResults: completedResults as OutlineSubAgentResult[],
+          failedAgentIds,
+          runSubAgent: async (subAgentPlan) => {
+            if (!isCurrentRun()) throw new Error("aborted");
+            updateOutlineMultiAgentItem(capturedConvId, messageId, subAgentPlan.id, (agent) => ({
+              ...agent,
+              status: "running",
+              startedAt: Date.now(),
+              error: undefined,
+            }));
+            const { agentConfig, registry: reg } = buildConfig(subAgentPlan.skillNames, true);
+            let runText = "";
+            let agentError: Error | null = null;
+            await new AgentRunner().run(agentConfig, reg, [
+              { role: "system", content: [systemPrompt, "", "## 子 Agent 运行规则", `当前身份：${subAgentPlan.name}`, "你只能处理本 Agent 负责的维度，禁止写入文件。", "必须输出符合 AI 大纲子 Agent JSON 协议的 JSON，不要输出额外说明。"].join("\n") },
+              { role: "user", content: subAgentPlan.taskPrompt },
+            ], {
+              onText: (chunk) => { runText += chunk; },
+              onToolCall: () => {},
+              onToolResult: () => {},
+              onToolError: () => {},
+              onToolEvent: () => {},
+              onDone: () => {},
+              onError: (error) => { agentError = error; },
+            }, controller.signal);
+            if (agentError) throw agentError;
+            return runText;
+          },
+          mergeResults: async (subAgentResults) => {
+            if (!isCurrentRun()) throw new Error("aborted");
+            updateOutlineMultiAgentRun(capturedConvId, messageId, (run) => run ? ({
+              ...run,
+              status: "merging",
+              merge: { status: "running", startedAt: Date.now(), summary: `正在合并 ${subAgentResults.length} 个子 Agent 结果。` },
+            }) : run);
+            const { agentConfig, registry: reg } = buildConfig([], true);
+            let mergeText = "";
+            let mergeError: Error | null = null;
+            await new AgentRunner().run(agentConfig, reg, [
+              { role: "system", content: [systemPrompt, "", "## 合并 Agent 运行规则", "你负责合并多个子 Agent 的结构化结果，形成最终可预览的大纲草稿。", "输出必须是用户可直接阅读和保存的大纲正文，不要输出内部调度报告。"].join("\n") },
+              { role: "user", content: ["请合并以下 AI 大纲子 Agent 结果，解决冲突并输出最终大纲草稿。", "", "## 子 Agent 结构化结果", JSON.stringify(subAgentResults, null, 2)].join("\n") },
+            ], {
+              onText: (chunk) => {
+                mergeText += chunk;
+                if (isCurrentRun()) setStreamingContent(capturedConvId, mergeText);
+              },
+              onToolCall: () => {},
+              onToolResult: () => {},
+              onToolError: () => {},
+              onToolEvent: () => {},
+              onDone: () => {},
+              onError: (error) => { mergeError = error; },
+            }, controller.signal);
+            if (mergeError) throw mergeError;
+            return mergeText || "AI大纲未返回内容。";
+          },
+          onStatusChange: (event) => {
+            if (!isCurrentRun()) return;
+            updateOutlineMultiAgentItem(capturedConvId, messageId, event.agentId, (agent) => ({
+              ...agent,
+              status: event.status === "running" ? "running" : event.status === "retrying" ? "retrying" : event.status === "completed" ? "done" : event.status === "failed" ? "error" : "waiting",
+              retryCount: Math.max(0, event.attempt - 1),
+              error: event.error,
+              summary: event.status === "completed" ? agent.summary ?? "已完成本 Agent 任务。" : agent.summary,
+              finishedAt: event.status === "completed" || event.status === "failed" ? Date.now() : undefined,
+            }));
+          },
+        });
+
+        if (!isCurrentRun()) return;
+
+        // 更新最终状态
+        updateOutlineMultiAgentRun(capturedConvId, messageId, (run) => {
+          if (!run) return run;
+          const successful = new Set(resumeResult.successfulAgents);
+          const failed = new Set(resumeResult.failedAgents);
+          return {
+            ...run,
+            mode: resumeResult.mode,
+            status: resumeResult.mode === "multi-agent" ? "done" : "fallback",
+            fallbackReason: resumeResult.fallbackReason ?? run.fallbackReason,
+            failureDetails: resumeResult.failureDetails ?? run.failureDetails,
+            agents: run.agents.map((agent) => {
+              if (successful.has(agent.id) && agent.status !== "done") {
+                return { ...agent, status: "done" as const, summary: agent.summary ?? "已完成。", finishedAt: Date.now() };
+              }
+              if (failed.has(agent.id) && agent.status !== "error") {
+                return { ...agent, status: "error" as const, error: agent.error ?? "子 Agent 执行失败。", finishedAt: Date.now() };
+              }
+              return agent;
+            }),
+            merge: resumeResult.mode === "multi-agent"
+              ? { status: "done" as const, finishedAt: Date.now(), summary: "合并完成，已输出最终大纲草稿。" }
+              : run.merge?.status === "error"
+                ? run.merge
+                : { status: "skipped" as const, summary: "已回退为单 Agent 生成。" },
+            resumeablePlan: resumeResult.mode === "single-agent-fallback" && resumeResult.successfulAgents.length > 0
+              ? { plan, completedResults, failedAgentIds: resumeResult.failedAgents }
+              : undefined,
+          };
+        });
+
+        // 更新消息内容
+        if (resumeResult.finalText) {
+          updateOutlineAssistantMessage(capturedConvId, messageId, (message) => ({
+            ...message,
+            content: resumeResult.finalText,
+          }));
+        }
+      } catch (err) {
+        const aborted = controller.signal.aborted || (err instanceof Error ? err.message : "").toLowerCase().includes("aborted");
+        if (!aborted) {
+          toast.error("续传失败，请稍后重试。");
+        }
+      } finally {
+        stopConversationRun(capturedConvId, runId);
+        clearStreamingContent(capturedConvId);
+      }
+    },
+    [project, activeConversationId, llmConfig, novelConfig, effectiveOutlineModelId, providerConfigs, outlineWritingSkills, startConversationRun, stopConversationRun, clearStreamingContent],
+  );
+
   const handleFocusInput = useCallback(() => {
     setTimeout(() => {
       const textarea = document.querySelector<HTMLTextAreaElement>(
@@ -2540,6 +2758,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         preferredSkillNames: getOutlineWizardSkillNames(request),
         enableMultiAgent: true,
         novelGenerationRequest: createNovelGenerationRequestPackage(request, modelContent),
+        systemGenerated: true,
       });
     },
     [handleSend],
@@ -3260,6 +3479,8 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                   onConfirmToolSave={handleConfirmToolSave}
                   onRejectTool={handleRejectTool}
                   onSendMessage={handleSendMessage}
+                  onResumeMultiAgent={handleResumeMultiAgent}
+                  resumeMultiAgentDisabled={isStreaming}
                   nextStepDisabled={submitDisabled}
                   generationContext={activeMessages.slice(0, i).some((message) => message.role === "user" && Boolean(message.novelGenerationRequest))
                     || Boolean(msg.nextStepRecommendation?.completedModule && /^#{1,6}\s/m.test(msg.content))}

@@ -27,6 +27,8 @@ export interface OutlineContextReuseInput {
   inputText: string
   enableMultiAgent?: boolean
   forceRefresh?: boolean
+  /** 标记 prompt 由系统生成（如 buildGenerationPrompt），跳过关键词检测 */
+  systemGenerated?: boolean
 }
 
 export interface OutlineContextReuseDecision {
@@ -76,7 +78,7 @@ export function planOutlineContextReuse(input: OutlineContextReuseInput): Outlin
     input.forceRefresh === true ||
     input.enableMultiAgent === true ||
     input.attachedReferenceCount > 0 ||
-    REFRESH_KEYWORD_PATTERN.test(trimmed)
+    (!input.systemGenerated && REFRESH_KEYWORD_PATTERN.test(trimmed))
 
   if (shouldRefresh) {
     return {

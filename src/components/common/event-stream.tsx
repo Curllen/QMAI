@@ -63,6 +63,14 @@ function EventStreamImpl({ events, isStreaming, totalDurationMs, totalTokens }: 
     return () => container.removeEventListener("scroll", handleScroll)
   }, [isStreaming])
 
+  // 流式结束后重置滚动按钮状态，避免 ArrowDown 残留遮挡底部耗时统计
+  useEffect(() => {
+    if (!isStreaming) {
+      setShowScrollButton(false)
+      userScrolledRef.current = false
+    }
+  }, [isStreaming])
+
   useEffect(() => {
     if (!isStreaming || userScrolledRef.current) return
     if (containerRef.current) {

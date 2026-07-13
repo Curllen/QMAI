@@ -65,6 +65,12 @@ export interface OutlineMultiAgentRunState {
   }
   fallbackReason?: string
   failureDetails?: string[]
+  /** 当多 Agent 部分失败时，存储可恢复的 plan 和成功结果，用于"继续未完成的任务" */
+  resumeablePlan?: {
+    plan: unknown[]
+    completedResults: unknown[]
+    failedAgentIds: string[]
+  }
 }
 
 export interface OutlineChatMessage {
@@ -371,6 +377,19 @@ export const useOutlineChatStore = create<OutlineChatState>((set, get) => {
           novelGenerationRequest: isNovelGenerationRequestPackage(message.novelGenerationRequest)
             ? message.novelGenerationRequest
             : undefined,
+          // 验证 resumeablePlan 数据完整性，清除结构不完整的续传数据
+          multiAgentRun: message.multiAgentRun
+            ? {
+                ...message.multiAgentRun,
+                resumeablePlan: message.multiAgentRun.resumeablePlan
+                  && Array.isArray(message.multiAgentRun.resumeablePlan.plan)
+                  && Array.isArray(message.multiAgentRun.resumeablePlan.completedResults)
+                  && Array.isArray(message.multiAgentRun.resumeablePlan.failedAgentIds)
+                  && message.multiAgentRun.resumeablePlan.failedAgentIds.length > 0
+                  ? message.multiAgentRun.resumeablePlan
+                  : undefined,
+              }
+            : message.multiAgentRun,
         })),
       }))
       const conversationIds = new Set(conversations.map((conversation) => conversation.id))

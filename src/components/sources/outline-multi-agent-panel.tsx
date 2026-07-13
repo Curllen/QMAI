@@ -6,6 +6,7 @@ import {
   Circle,
   Loader2,
   Network,
+  RotateCw,
   XCircle,
 } from "lucide-react"
 import type {
@@ -16,6 +17,8 @@ import { cn } from "@/lib/utils"
 
 interface OutlineMultiAgentPanelProps {
   run?: OutlineMultiAgentRunState
+  onResume?: () => void
+  resumeDisabled?: boolean
 }
 
 function statusLabel(status: OutlineMultiAgentStepStatus | OutlineMultiAgentRunState["status"]): string {
@@ -103,7 +106,7 @@ function summarizeFailureDetails(values: string[] | undefined): string[] {
   return summaries
 }
 
-export function OutlineMultiAgentPanel({ run }: OutlineMultiAgentPanelProps) {
+export function OutlineMultiAgentPanel({ run, onResume, resumeDisabled }: OutlineMultiAgentPanelProps) {
   const [showFallbackDetails, setShowFallbackDetails] = useState(false)
   const generatedId = useId().replace(/[^a-zA-Z0-9_-]/g, "")
   const fallbackDetailsId = `outline-multi-agent-fallback-details-${generatedId}`
@@ -128,16 +131,29 @@ export function OutlineMultiAgentPanel({ run }: OutlineMultiAgentPanelProps) {
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <span className="min-w-0 break-words [overflow-wrap:anywhere]">{FALLBACK_SUMMARY}</span>
           </div>
-          <button
-            type="button"
-            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-200 dark:hover:bg-amber-950/50"
-            aria-expanded={showFallbackDetails}
-            aria-controls={showFallbackDetails ? fallbackDetailsId : undefined}
-            onClick={() => setShowFallbackDetails((value) => !value)}
-          >
-            <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showFallbackDetails && "rotate-90")} />
-            {showFallbackDetails ? "\u6536\u8d77\u8be6\u60c5" : "\u67e5\u770b\u8be6\u60c5"}
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {run.resumeablePlan && onResume ? (
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-emerald-300 dark:hover:bg-emerald-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={onResume}
+                disabled={resumeDisabled}
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                {"\u7ee7\u7eed\u672a\u5b8c\u6210\u7684\u4efb\u52a1"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-200 dark:hover:bg-amber-950/50"
+              aria-expanded={showFallbackDetails}
+              aria-controls={showFallbackDetails ? fallbackDetailsId : undefined}
+              onClick={() => setShowFallbackDetails((value) => !value)}
+            >
+              <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showFallbackDetails && "rotate-90")} />
+              {showFallbackDetails ? "\u6536\u8d77\u8be6\u60c5" : "\u67e5\u770b\u8be6\u60c5"}
+            </button>
+          </div>
         </div>
 
         {showFallbackDetails ? (

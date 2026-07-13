@@ -1,4 +1,4 @@
-﻿import {
+import {
   coerceOutlineSubAgentResult,
   type OutlineSubAgentResult,
 } from "./outline-result-protocol"
@@ -338,4 +338,115 @@ function buildSubAgentTaskPrompt(
       questions: [],
     }, null, 2),
   ].join("\n")
+}
+
+export interface OutlineMultiAgentResumeInput {
+  /** 上一次运行的完整 plan */
+  plan: OutlineSubAgentPlan[]
+  /** 已成功 Agent 的结果（跳过不重试） */
+  completedResults: OutlineSubAgentResult[]
+  /** 上次运行中失败的 Agent ID 列表 */
+  failedAgentIds: string[]
+  maxConcurrency?: number
+  runSubAgent: (plan: OutlineSubAgentPlan) => Promise<string>
+  mergeResults: (results: OutlineSubAgentResult[]) => Promise<string>
+  onStatusChange?: (event: OutlineSubAgentStatusEvent) => void
+}
+
+/**
+ * 仅重试失败 Agent，已成功 Agent 的结果直接复用。
+ * 最终合并 completedResults + 新成功的失败 Agent 结果。
+ */
+export async function resumeOutlineMultiAgentWorkflow(
+  input: OutlineMultiAgentResumeInput,
+): Promise<OutlineMultiAgentRunResult> {
+  const failedPlan = input.plan.filter((task) =>
+    input.failedAgentIds.includes(task.id),
+  )
+
+  if (failedPlan.length === 0) {
+    // 没有失败 Agent，直接合并已有结果
+    try {
+      const finalText = await input.mergeResults(input.completedResults)
+      return {
+        mode: "multi-agent",
+        finalText,
+        successfulAgents: input.completedResults.map((item) => item.agentId),
+        failedAgents: [],
+        failureDetails: [],
+      }
+    } catch (error) {
+      const detail = formatError(error)
+      return {
+        mode: "single-agent-fallback",
+        finalText: "",
+        successfulAgents: input.completedResults.map((item) => item.agentId),
+        failedAgents: [],
+        fallbackReason: `合并 Agent 失败：${detail}`,
+        failureDetails: [`合并 Agent：${detail}`],
+      }
+    }
+  }
+
+  const maxConcurrency = Math.min(
+    DEFAULT_MAX_CONCURRENCY,
+    Math.max(1, input.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY),
+  )
+
+  // 仅执行失败 Agent
+  const resumeInput: OutlineMultiAgentRunInput = {
+    plan: failedPlan,
+    maxConcurrency,
+    runSubAgent: input.runSubAgent,
+    runSingleAgentFallback: async () => "",
+    mergeResults: input.mergeResults,
+    onStatusChange: input.onStatusChange,
+  }
+
+  const outcomes = await runDependencyGraph(failedPlan, maxConcurrency, resumeInput)
+
+  // 收集本次重试的结果
+  const retriedSuccessful = failedPlan
+    .map((task) => outcomes.get(task.id)?.result)
+    .filter((result): result is OutlineSubAgentResult => Boolean(result))
+
+  const retriedFailures = failedPlan
+    .map((task) => ({ task, error: outcomes.get(task.id)?.error }))
+    .filter((item): item is { task: OutlineSubAgentPlan; error: string } => Boolean(item.error))
+
+  const allSuccessful = [...input.completedResults, ...retriedSuccessful]
+  const stillFailedAgents = retriedFailures.map(({ task }) => task.id)
+  const failureDetails = retriedFailures.map(({ task, error }) => `${task.name}：${error}`)
+
+  if (allSuccessful.length === 0) {
+    return {
+      mode: "single-agent-fallback",
+      finalText: "",
+      successfulAgents: [],
+      failedAgents: stillFailedAgents,
+      fallbackReason: "续传后仍无成功结果。",
+      failureDetails,
+    }
+  }
+
+  try {
+    const finalText = await input.mergeResults(allSuccessful)
+    return {
+      mode: "multi-agent",
+      finalText,
+      successfulAgents: allSuccessful.map((item) => item.agentId),
+      failedAgents: stillFailedAgents,
+      failureDetails,
+    }
+  } catch (error) {
+    const detail = formatError(error)
+    return {
+      mode: "single-agent-fallback",
+      finalText: "",
+      successfulAgents: allSuccessful.map((item) => item.agentId),
+      failedAgents: stillFailedAgents,
+      fallbackReason: `合并 Agent 失败：${detail}`,
+      failureDetails: [...failureDetails, `合并 Agent：${detail}`],
+    }
+  }
 }
