@@ -3068,11 +3068,23 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
 
   const handleSaveAsOutline = useCallback(
     async (content: string) => {
-      if (!project || !activeConversationId) return;
+      if (!project) {
+        toast.error("请先打开一个项目，再保存大纲");
+        return;
+      }
+      if (!activeConversationId) {
+        toast.error("当前没有活跃的对话，无法保存大纲");
+        return;
+      }
+      const cleanedContent = cleanNextStepArtifacts(content);
+      if (!cleanedContent.trim()) {
+        toast.error("内容为空，无法保存为大纲");
+        return;
+      }
       const capturedConvId = activeConversationId;
       setSaveStatus("");
       try {
-        const draft = prepareOutlineSaveDraft(cleanNextStepArtifacts(content), []);
+        const draft = prepareOutlineSaveDraft(cleanedContent, []);
         const classification = classifyOutlineSaveTarget({
           title: draft.title,
           content: draft.content,

@@ -1,4 +1,4 @@
-﻿import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { PreviewPanel } from "./preview-panel"
 import { clampChatWidth, getInitialChatWidth } from "@/lib/workspace-layout"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -22,6 +22,18 @@ export function WritingWorkspace() {
   useEffect(() => {
     localStorage.setItem("lk-chat-right-width", String(chatWidth))
   }, [chatWidth])
+
+  // 窗口缩小时自动 clamp 面板宽度，避免面板超出窗口
+  useEffect(() => {
+    const handleResize = () => {
+      setChatWidth((prev) => {
+        const clamped = clampChatWidth(prev)
+        return clamped !== prev ? clamped : prev
+      })
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
 
   const startHorizontalResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault()

@@ -104,4 +104,51 @@ describe("stripStructuredMarkers", () => {
     expect(result).not.toContain("intent_clarity")
     expect(result).not.toContain("next_step")
   })
+
+  it("移除 <details> 折叠块及其内部内容", () => {
+    const text = "正文内容\n<details>\n<summary>清单</summary>\n内部内容\n</details>\n更多正文"
+    const result = stripStructuredMarkers(text)
+    expect(result).toContain("正文内容")
+    expect(result).toContain("更多正文")
+    expect(result).not.toContain("details")
+    expect(result).not.toContain("summary")
+    expect(result).not.toContain("内部内容")
+  })
+
+  it("移除流式中间态的 <details> 开标签及后续内容", () => {
+    const text = "正文内容\n<details>\n<summary><b>清单</b></summary>\n"
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("正文内容")
+    expect(result).not.toContain("details")
+  })
+
+  it("移除 <b> <strong> <br> 等行内 HTML 标签但保留文本", () => {
+    const text = "这是<b>粗体</b>文本<br>换行<strong>加粗</strong>"
+    const result = stripStructuredMarkers(text)
+    expect(result).toContain("粗体")
+    expect(result).toContain("加粗")
+    expect(result).toContain("换行")
+    expect(result).not.toContain("<b>")
+    expect(result).not.toContain("</b>")
+    expect(result).not.toContain("<strong>")
+    expect(result).not.toContain("<br>")
+  })
+
+  it("移除 <div> <p> 等块级 HTML 标签但保留文本", () => {
+    const text = "<div>段落一</div><p>段落二</p>"
+    const result = stripStructuredMarkers(text)
+    expect(result).toContain("段落一")
+    expect(result).toContain("段落二")
+    expect(result).not.toContain("<div>")
+    expect(result).not.toContain("<p>")
+  })
+
+  it("移除包含 emoji 的 <summary> 标签", () => {
+    const text = '<details>\n<summary><b>📋 新增设定写回清单</b></summary>\n\n***\n</details>\n正文'
+    const result = stripStructuredMarkers(text)
+    expect(result).toBe("正文")
+    expect(result).not.toContain("📋")
+    expect(result).not.toContain("details")
+    expect(result).not.toContain("summary")
+  })
 })

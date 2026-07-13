@@ -112,7 +112,14 @@ export function stripStructuredMarkers(text: string): string {
     // 4. 清理可能残留的裸闭标签
     .replace(/<!--\s*\/intent_clarity\s*-->/gi, "")
     .replace(/<!--\s*\/next_step\s*-->/gi, "")
-    // 5. 清理多余空行
+    // 5. 移除 AI 生成的 HTML 折叠块（<details>...</details>）及其内部内容
+    .replace(/<details[\s\S]*?<\/details>/gi, "")
+    .replace(/<details[^>]*>[\s\S]*$/gi, "")
+    // 6. 移除其他 AI 常见的 HTML 块级标签对（<summary>...</summary> 等）
+    .replace(/<\/?(?:details|summary|fieldset|legend|table|thead|tbody|tr|td|th|caption|colgroup|col)\b[^>]*>/gi, "")
+    // 7. 移除 AI 常见的 HTML 行内标签（保留标签内的文本内容）
+    .replace(/<\/?(?:b|strong|i|em|u|ins|del|s|mark|small|sub|sup|code|kbd|samp|var|abbr|cite|q|span|font|br|hr|wbr|div|p|section|article|header|footer|nav|aside|main|ul|ol|li|dl|dt|dd|h[1-6]|pre|blockquote|figure|figcaption)\b[^>]*>/gi, "")
+    // 8. 清理多余空行
     .replace(/\n{3,}/g, "\n\n")
     .trim()
 }
