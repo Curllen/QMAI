@@ -14,6 +14,7 @@ const DATA_SOURCE_KINDS: Record<string, ContextSourceKind[]> = {
   relatedSettings: ["entity", "setting"],
   canonRules: ["setting"],
   writingStyle: ["setting"],
+  bookAnalysisReferences: ["book-analysis"],
   searchResults: ["chapter", "outline", "memory", "setting", "entity"],
   graphSearchResults: ["chapter", "outline", "memory", "setting", "entity"],
   revisionFeedback: ["chapter", "snapshot"],
@@ -37,6 +38,7 @@ export function classifyContextSourcePath(projectPath: string, path: string): Co
 
   if (relative === ".qmai/context-cache" || relative.startsWith(".qmai/context-cache/")) return "ignored"
   if (relative === ".qmai/writing-style.json") return "setting"
+  if (relative === ".qmai/book-analysis-context.json") return "book-analysis"
   if (relative === ".qmai/character-aura.json") return "entity"
   if (relative.startsWith("wiki/chapters/")) return "chapter"
   if (relative.startsWith("wiki/outlines/")) return "outline"

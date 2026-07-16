@@ -4,12 +4,13 @@ import { getFileSize } from "@/commands/fs"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { BatchImportCandidate } from "@/lib/novel/book-analysis/batch-import-types"
+import type { AnalysisSkill } from "@/lib/novel/book-analysis/analysis-pipeline-types"
 import { normalizePath } from "@/lib/path-utils"
 
 interface BookAnalysisInputDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (files: BatchImportCandidate[]) => Promise<void> | void
+  onSubmit: (files: BatchImportCandidate[], analysisSkills?: AnalysisSkill[]) => Promise<void> | void
 }
 
 function getFileName(path: string) {
@@ -38,6 +39,7 @@ export function BookAnalysisInputDialog({
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSelecting, setIsSelecting] = useState(false)
+  const [analysisSkills, setAnalysisSkills] = useState<AnalysisSkill[]>([])
   const filesRef = useRef<BatchImportCandidate[]>([])
   const isSubmittingRef = useRef(false)
   const isSelectingRef = useRef(false)
@@ -66,6 +68,7 @@ export function BookAnalysisInputDialog({
     setError("")
     setIsSubmitting(false)
     setIsSelecting(false)
+    setAnalysisSkills([])
   }
 
   useEffect(() => {
@@ -170,7 +173,8 @@ export function BookAnalysisInputDialog({
     const submittedPathKeys = new Set(submittedFiles.map((file) => getPathKey(file.sourcePath)))
 
     try {
-      await onSubmit(submittedFiles)
+      if (analysisSkills.length > 0) await onSubmit(submittedFiles, analysisSkills)
+      else await onSubmit(submittedFiles)
       if (sessionTokenRef.current !== sessionToken) return
       replaceFiles((currentFiles) => (
         currentFiles.filter((file) => !submittedPathKeys.has(getPathKey(file.sourcePath)))
@@ -196,6 +200,12 @@ export function BookAnalysisInputDialog({
   }
 
   const isBusy = isSelecting || isSubmitting
+  const skillOptions: Array<{ skill: AnalysisSkill; label: string }> = [
+    { skill: "characters", label: "角色 Skill" },
+    { skill: "story", label: "故事 Skill" },
+    { skill: "style", label: "文风 Skill" },
+  ]
+  const allSelected = analysisSkills.length === skillOptions.length
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -204,7 +214,7 @@ export function BookAnalysisInputDialog({
         showCloseButton={!isBusy}
       >
         <DialogHeader>
-          <DialogTitle>批量导入小说</DialogTitle>
+          <DialogTitle>{files.length > 1 ? "批量导入小说" : "导入小说"}</DialogTitle>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden py-4">
@@ -253,6 +263,34 @@ export function BookAnalysisInputDialog({
               ))
             )}
           </div>
+
+          <fieldset className="shrink-0 border-t pt-3" disabled={isBusy}>
+            <legend className="text-sm font-medium">导入后提取项目</legend>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {skillOptions.map(({ skill, label }) => (
+                <label key={skill} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={analysisSkills.includes(skill)}
+                    onChange={(event) => setAnalysisSkills((current) => (
+                      event.target.checked
+                        ? [...new Set([...current, skill])]
+                        : current.filter((item) => item !== skill)
+                    ))}
+                  />
+                  {label}
+                </label>
+              ))}
+              <label className="flex items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={(event) => setAnalysisSkills(event.target.checked ? skillOptions.map((item) => item.skill) : [])}
+                />
+                全部提取
+              </label>
+            </div>
+          </fieldset>
 
           {error && (
             <div

@@ -8,7 +8,7 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useBookAnalysisStore } from "@/stores/book-analysis-store"
 import { useBookAnalysisImportStore } from "@/stores/book-analysis-import-store"
 import { Button } from "@/components/ui/button"
-import { BookOpen, Trash2, RefreshCw, Loader2, Square, CheckCircle2 } from "lucide-react"
+import { BookOpen, Trash2, RefreshCw, Loader2, Square, CheckCircle2, Plus } from "lucide-react"
 import { listDirectory, readFile } from "@/commands/fs"
 import { joinPath, normalizePath } from "@/lib/path-utils"
 import { toast } from "@/lib/toast"
@@ -16,6 +16,8 @@ import { deleteOrphanAurasForBook } from "@/lib/novel/book-analysis/aura-cleanup
 import { listCharacterAuras } from "@/lib/novel/character-aura"
 import { PanelHeaderWithHelp } from "@/components/layout/panel-header-with-help"
 import type { BookAnalysisMetadata } from "@/lib/novel/book-analysis/types"
+import { BookAnalysisInputDialog } from "@/components/novel/book-analysis-input-dialog"
+import { BookAnalysisImportTaskPanel } from "@/components/novel/book-analysis-import-task-panel"
 
 interface BookItem {
   id: string
@@ -38,10 +40,25 @@ export function BookAnalysisSidebarPanel() {
   const cancelTask = useBookAnalysisStore((s) => s.cancelTask)
   const requestReopenChapterSelection = useBookAnalysisStore((s) => s.requestReopenChapterSelection)
   const deletePublishedBook = useBookAnalysisImportStore((s) => s.deletePublishedBook)
+  const importBatches = useBookAnalysisImportStore((s) => s.batches) ?? []
+  const importTasks = useBookAnalysisImportStore((s) => s.tasks) ?? []
+  const createBatch = useBookAnalysisImportStore((s) => s.createBatch)
+  const continueImport = useBookAnalysisImportStore((s) => s.continueTask)
+  const regenerateImport = useBookAnalysisImportStore((s) => s.regenerateTask)
+  const cancelImport = useBookAnalysisImportStore((s) => s.cancelTask)
+  const cancelAllQueued = useBookAnalysisImportStore((s) => s.cancelAllQueued)
+  const deleteFailed = useBookAnalysisImportStore((s) => s.deleteFailedTask)
+  const renameCompleted = useBookAnalysisImportStore((s) => s.renameCompletedTask)
+  const collapsed = useBookAnalysisImportStore((s) => s.panelCollapsed)
+  const setCollapsed = useBookAnalysisImportStore((s) => s.setPanelCollapsed)
   const [books, setBooks] = useState<BookItem[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
   const [bookAuraCount, setBookAuraCount] = useState<Record<string, number>>({})
+  const [inputOpen, setInputOpen] = useState(false)
+  const multiBatchIds = new Set(importBatches.filter((batch) => batch.taskIds.length > 1 && !batch.panelDismissedAt).map((batch) => batch.id))
+  const visibleBatches = importBatches.filter((batch) => multiBatchIds.has(batch.id))
+  const visibleImportTasks = importTasks.filter((task) => multiBatchIds.has(task.batchId))
 
   // 正在运行的任务：识别已完成的任务退出"运行中"，不再显示 Loader2 转圈
   const runningTasks = tasks.filter((t) => t.status === "running" && t.progress.recognitionStatus !== "done")
@@ -232,7 +249,27 @@ export function BookAnalysisSidebarPanel() {
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
+        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => setInputOpen(true)} title="导入小说">
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
+
+      <BookAnalysisImportTaskPanel
+        batches={visibleBatches}
+        tasks={visibleImportTasks}
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        onContinue={(id) => void continueImport(id)}
+        onRegenerate={(id) => void regenerateImport(id)}
+        onCancel={(id) => void cancelImport(id)}
+        onCancelAllQueued={(id) => void cancelAllQueued(id)}
+        onDeleteFailed={(id) => void deleteFailed(id)}
+        onRenameCompleted={(id, title) => void renameCompleted(id, title)}
+        onOpenBook={(id) => {
+          setSelectedLibraryBookId(id)
+          setActiveView("bookAnalysis")
+        }}
+      />
 
       {/* 作品列表 */}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
@@ -240,7 +277,7 @@ export function BookAnalysisSidebarPanel() {
           <div className="px-2 py-4 text-xs text-muted-foreground">正在加载...</div>
         ) : books.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-xs leading-5 text-muted-foreground">
-            还没有作品。点击主面板的"导入小说"按钮开始分析。
+            还没有作品。点击上方“导入小说”按钮添加作品。
           </div>
         ) : (
           books.map((book) => (
@@ -347,6 +384,10 @@ export function BookAnalysisSidebarPanel() {
           })}
         </div>
       )}
+      <BookAnalysisInputDialog open={inputOpen} onOpenChange={setInputOpen} onSubmit={async (files, skills) => {
+        await createBatch(files, skills)
+        setInputOpen(false)
+      }} />
     </div>
   )
 }

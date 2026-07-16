@@ -15,6 +15,7 @@ export type ContextSourceKind =
   | "snapshot"
   | "deduction"
   | "soul"
+  | "book-analysis"
   | "other"
   | "ignored"
 

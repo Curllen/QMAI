@@ -15,6 +15,7 @@ import type {
   BatchImportTask,
   BatchImportTaskStatus,
 } from "./batch-import-types"
+import { ANALYSIS_SKILL_ORDER } from "./analysis-pipeline-types"
 
 const INTERRUPTED_ERROR = "软件上次关闭时任务尚未完成"
 const TASK_ID_PATTERN = /^[A-Za-z0-9_-]+$/
@@ -135,6 +136,12 @@ function isBatchImportBatch(
   ) {
     return false
   }
+  if (
+    value.analysisSkills !== undefined
+    && (!Array.isArray(value.analysisSkills)
+      || !value.analysisSkills.every((skill) => ANALYSIS_SKILL_ORDER.includes(skill as never)))
+  ) return false
+  if (value.panelDismissedAt !== undefined && !isNullableNonNegativeNumber(value.panelDismissedAt)) return false
   try {
     return normalizeProjectKey(value.projectPath) === expectedProjectKey
   } catch {

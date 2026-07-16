@@ -20,11 +20,13 @@ import type {
   BatchImportCandidate,
   BatchImportTask,
 } from "@/lib/novel/book-analysis/batch-import-types"
+import type { AnalysisSkill } from "@/lib/novel/book-analysis/analysis-pipeline-types"
 import {
   findBookLibraryEntryBySha256,
   renameBookLibraryEntry,
   reconcileBookLibrary,
 } from "@/lib/novel/book-analysis/library-store"
+import { hasActiveAnalysisForBook } from "@/lib/novel/book-analysis/analysis-active-registry"
 
 const OPEN_PANEL_STATUSES = new Set(["queued", "copying", "splitting", "interrupted", "failed"])
 const DELETE_BLOCKING_STATUSES = new Set(["queued", "copying", "splitting"])
@@ -81,7 +83,7 @@ export interface BookAnalysisImportState {
   panelTouched: boolean
   revision: number
   initializeProject(projectPath: string): Promise<void>
-  createBatch(candidates: BatchImportCandidate[]): Promise<void>
+  createBatch(candidates: BatchImportCandidate[], analysisSkills?: AnalysisSkill[]): Promise<void>
   deletePublishedBook(bookId: string): Promise<void>
   continueTask(taskId: string): Promise<void>
   regenerateTask(taskId: string): Promise<void>
@@ -135,6 +137,7 @@ export function createBookAnalysisImportStore(options: { onRevision?: () => void
 
     async function runCreateBatch(
       candidates: BatchImportCandidate[],
+      analysisSkills: AnalysisSkill[],
       projectPath: string,
       token: number,
       expectedScheduler: BatchImportScheduler,
@@ -163,6 +166,7 @@ export function createBookAnalysisImportStore(options: { onRevision?: () => void
         id: batchId,
         projectPath,
         taskIds: tasks.map((task) => task.id),
+        ...(analysisSkills.length > 0 ? { analysisSkills } : {}),
         createdAt,
         updatedAt: createdAt,
       }
@@ -377,12 +381,18 @@ export function createBookAnalysisImportStore(options: { onRevision?: () => void
         schedulerLifecycleChain = operation.catch(() => undefined)
         return operation
       },
-      createBatch: (candidates) => {
+      createBatch: (candidates, analysisSkills = []) => {
         const projectPath = get().projectPath
         const expectedScheduler = scheduler
         const token = generation
         if (!projectPath || !expectedScheduler) return Promise.reject(new Error("请先初始化拆书项目"))
-        const operation = createBatchChain.then(() => runCreateBatch(candidates, projectPath, token, expectedScheduler))
+        const operation = createBatchChain.then(() => runCreateBatch(
+          candidates,
+          analysisSkills,
+          projectPath,
+          token,
+          expectedScheduler,
+        ))
         createBatchChain = operation.catch(() => undefined)
         return operation
       },
@@ -397,6 +407,9 @@ export function createBookAnalysisImportStore(options: { onRevision?: () => void
           task.bookId === bookId && DELETE_BLOCKING_STATUSES.has(task.status)
         ))) {
           throw new Error("作品正在导入或重新生成，请先取消任务后再删除。")
+        }
+        if (hasActiveAnalysisForBook(projectPath, bookId)) {
+          throw new Error("作品正在进行章节分析，请先暂停或取消分析后再删除。")
         }
 
         const history = await deleteBookAnalysisBook(projectPath, bookId)

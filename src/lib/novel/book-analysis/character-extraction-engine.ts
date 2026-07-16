@@ -48,6 +48,8 @@ export interface CharacterExtractionInput {
     dimensions?: SixDimensionProgressItem[]
   }) => void
   signal?: AbortSignal
+  /** 是否把中间结果写入正式角色目录；分析区块并发执行时必须关闭。 */
+  persistResults?: boolean
 }
 
 export interface CharacterExtractionResult {
@@ -90,25 +92,45 @@ ${chapterContent.substring(0, 8000)} ${chapterContent.length > 8000 ? "...(内�
   ]
 
   let response = ""
+  let streamError: Error | null = null
 
   try {
     await streamChat(llmConfig, messages, {
       onToken: (text) => { response += text },
       onDone: () => {},
-      onError: (err) => { console.error(err) },
+      onError: (err) => { streamError = err },
     }, signal)
+
+    if (streamError) throw streamError
 
     // 解析 JSON
     const jsonMatch = response.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      const data = JSON.parse(jsonMatch[0])
-      return data.characters || []
+      const data = JSON.parse(jsonMatch[0]) as { characters?: unknown }
+      if (!Array.isArray(data.characters)) throw new Error("模型返回内容缺少 characters 数组")
+      return data.characters.flatMap((item): Array<{ name: string; aliases: string[]; importance: number }> => {
+        if (!item || typeof item !== "object") return []
+        const candidate = item as Record<string, unknown>
+        const name = typeof candidate.name === "string" ? candidate.name.trim() : ""
+        if (!name) return []
+        const rawImportance = Number(candidate.importance)
+        return [{
+          name,
+          aliases: Array.isArray(candidate.aliases)
+            ? candidate.aliases.filter((alias): alias is string => typeof alias === "string")
+            : [],
+          importance: Number.isFinite(rawImportance)
+            ? Math.max(1, Math.min(10, rawImportance))
+            : 5,
+        }]
+      })
     }
 
-    return []
+    throw new Error("模型返回内容不是有效 JSON")
   } catch (error) {
     console.error(`Failed to identify characters in chapter ${chapterTitle}:`, error)
-    return []
+    if (signal?.aborted) throw new Error("用户取消分析")
+    throw new Error(`角色识别失败（${chapterTitle}）：${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -117,13 +139,13 @@ ${chapterContent.substring(0, 8000)} ${chapterContent.length > 8000 ? "...(内�
  */
 async function analyzeCharacterDetails(
   characterName: string,
-  relevantChapters: Array<{ title: string; content: string; order: number }>,
+  relevantChapters: Array<{ id: string; title: string; content: string; order: number }>,
   llmConfig: LlmConfig,
   signal?: AbortSignal
 ): Promise<ExtractedCharacter | null> {
   // 收集角色相关的文本片段
   const corpus = relevantChapters
-    .map(ch => ch.content)
+    .map(ch => `【${ch.id} · 第${ch.order}章 · ${ch.title}】\n${ch.content}`)
     .join("\n\n")
     .substring(0, 20000) // 限制长度
 
@@ -139,6 +161,11 @@ ${corpus}
   "category": "protagonist/antagonist/supporting/minor",
   "description": "角色外貌、身份、背景描述",
   "personality": "性格特征，包括优点、缺点、特质",
+  "motivation": "底层动机与核心欲望",
+  "goals": ["当前目标与长期目标"],
+  "fears": ["恐惧、禁区与不能接受的结果"],
+  "growthArc": "本批章节内的关系变化、认知变化和成长弧",
+  "behaviorPatterns": "面对压力、利益、冲突和亲密关系时的稳定行为模式",
   "speechStyle": "说话方式和语言特点",
   "relationships": [
     {
@@ -152,6 +179,12 @@ ${corpus}
       "chapterId": "章节ID",
       "description": "关键事件描述"
     }
+  ],
+  "representativeQuotes": [
+    {
+      "chapterId": "必须使用上文【】中的章节ID",
+      "text": "80-300字的短原文片段，不得改写"
+    }
   ]
 }
 
@@ -162,13 +195,16 @@ ${corpus}
   ]
 
   let response = ""
+  let streamError: Error | null = null
 
   try {
     await streamChat(llmConfig, messages, {
       onToken: (text) => { response += text },
       onDone: () => {},
-      onError: (err) => { console.error(err) },
+      onError: (err) => { streamError = err },
     }, signal)
+
+    if (streamError) throw streamError
 
     // 解析 JSON
     const jsonMatch = response.match(/\{[\s\S]*\}/)
@@ -187,19 +223,32 @@ ${corpus}
         appearanceCount: relevantChapters.length,
         description: data.description || "",
         personality: data.personality || "",
+        motivation: typeof data.motivation === "string" ? data.motivation : "",
+        goals: Array.isArray(data.goals) ? data.goals.filter((item: unknown): item is string => typeof item === "string") : [],
+        fears: Array.isArray(data.fears) ? data.fears.filter((item: unknown): item is string => typeof item === "string") : [],
+        growthArc: typeof data.growthArc === "string" ? data.growthArc : "",
+        behaviorPatterns: typeof data.behaviorPatterns === "string" ? data.behaviorPatterns : "",
         speechStyle: data.speechStyle || "",
         relationships: data.relationships || [],
         keyEvents: data.keyEvents || [],
+        representativeQuotes: Array.isArray(data.representativeQuotes)
+          ? data.representativeQuotes.filter((item: unknown): item is { chapterId: string; text: string } => {
+              if (!item || typeof item !== "object") return false
+              const candidate = item as Record<string, unknown>
+              return typeof candidate.chapterId === "string" && typeof candidate.text === "string"
+            })
+          : [],
         corpus: corpus.substring(0, 10000), // 保留部分语料
       }
 
       return character
     }
 
-    return null
+    throw new Error("模型返回内容不是有效 JSON")
   } catch (error) {
     console.error(`Failed to analyze character ${characterName}:`, error)
-    return null
+    if (signal?.aborted) throw new Error("用户取消分析")
+    throw new Error(`角色详情提取失败（${characterName}）：${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -417,6 +466,7 @@ export async function extractCharactersFromChapters(
       }
       // 保存更新后的角色（feature/fix-six-dim-extract：writeFile 失败不应中断整个 6 维流程）
       try {
+        if (input.persistResults === false) continue
         await writeFile(
           joinPath(bookPath, "characters", `${character.id}.json`),
           JSON.stringify(characters[i], null, 2)

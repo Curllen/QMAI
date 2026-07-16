@@ -51,6 +51,9 @@ export interface BatchImportBatch {
   id: string
   projectPath: string
   taskIds: string[]
+  analysisSkills?: AnalysisSkill[]
+  panelDismissedAt?: number | null
   createdAt: number
   updatedAt: number
 }
+import type { AnalysisSkill } from "./analysis-pipeline-types"

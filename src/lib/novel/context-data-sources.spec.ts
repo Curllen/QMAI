@@ -10,6 +10,7 @@ describe("getDataSourceNamesForCategories", () => {
     expect(names).toContain("canonRules")
     expect(names).toContain("outline")
     expect(names).toContain("chapterOutline")
+    expect(names).toContain("bookAnalysisReferences")
     expect(names).not.toContain("recentChapterContents")
     expect(names).not.toContain("searchResults")
     expect(names).not.toContain("graphSearchResults")

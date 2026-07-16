@@ -7,6 +7,7 @@ import { BookAnalysisResultViewer } from "./book-analysis-result-viewer"
 import { ChapterSelectionPanel } from "./chapter-selection-panel"
 import { useBookAnalysisStore } from "@/stores/book-analysis-store"
 import { useBookAnalysisImportStore } from "@/stores/book-analysis-import-store"
+import { useBookAnalysisPipelineStore } from "@/stores/book-analysis-pipeline-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { resolveDefaultModel } from "@/lib/novel/model-resolver"
 import { streamChat, type ChatMessage } from "@/lib/llm-client"
@@ -35,6 +36,10 @@ import {
 import { loadPlotFrameworkLibrary, upsertPlotFramework } from "@/lib/novel/plot-framework-library"
 import type { PlotFramework } from "@/lib/novel/plot-framework"
 import type { BatchImportCandidate } from "@/lib/novel/book-analysis/batch-import-types"
+import type { AnalysisSkill } from "@/lib/novel/book-analysis/analysis-pipeline-types"
+import type { AnalysisChapterRange } from "@/lib/novel/book-analysis/analysis-pipeline-types"
+import { loadChapterList } from "@/lib/novel/book-analysis/analysis-engine"
+import { BookAnalysisRunDialog } from "./book-analysis-run-dialog"
 import { OutlineCreatorDialog } from "./outline-editor"
 
 interface StoryFrameworkSelectionData {
@@ -83,6 +88,13 @@ export function BookAnalysisView() {
   })
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
+  const [pipelineDialog, setPipelineDialog] = useState<{
+    taskId: string
+    chapters: Awaited<ReturnType<typeof loadChapterList>>
+    initialSkills: AnalysisSkill[]
+    lockedSkills?: AnalysisSkill[]
+    initialRange?: AnalysisChapterRange | null
+  } | null>(null)
 
   const currentProject = useWikiStore((s) => s.project)
   const storeSelectedBookId = useBookAnalysisStore((s) => s.selectedLibraryBookId)
@@ -108,6 +120,17 @@ export function BookAnalysisView() {
   const renameCompletedImportTask = useBookAnalysisImportStore((s) => s.renameCompletedTask)
   const setImportPanelCollapsed = useBookAnalysisImportStore((s) => s.setPanelCollapsed)
   const disposeImportStore = useBookAnalysisImportStore((s) => s.dispose)
+  const pipelineTasks = useBookAnalysisPipelineStore((s) => s.tasks)
+  const pipelineChunks = useBookAnalysisPipelineStore((s) => s.chunks)
+  const initializePipelineProject = useBookAnalysisPipelineStore((s) => s.initializeProject)
+  const createAwaitingRangeTask = useBookAnalysisPipelineStore((s) => s.createAwaitingRangeTask)
+  const configureTaskRange = useBookAnalysisPipelineStore((s) => s.configureTaskRange)
+  const startPipelineTask = useBookAnalysisPipelineStore((s) => s.startTask)
+  const pausePipelineTask = useBookAnalysisPipelineStore((s) => s.pauseTask)
+  const continuePipelineTask = useBookAnalysisPipelineStore((s) => s.continueTask)
+  const retryPipelineChunk = useBookAnalysisPipelineStore((s) => s.retryFailedChunk)
+  const cancelPipelineTask = useBookAnalysisPipelineStore((s) => s.cancelTask)
+  const disposePipeline = useBookAnalysisPipelineStore((s) => s.dispose)
   const importRevisionBaselineRef = useRef({ projectPath: currentProject?.path ?? null, revision: importRevision })
   const importInitializationSequenceRef = useRef(0)
   const importInitializationTokenRef = useRef<{ sequence: number; projectPath: string } | null>(null)
@@ -213,6 +236,9 @@ export function BookAnalysisView() {
     const initializationToken = { sequence: ++importInitializationSequenceRef.current, projectPath }
     importInitializationTokenRef.current = initializationToken
     importRevisionBaselineRef.current = { projectPath, revision: useBookAnalysisImportStore.getState().revision }
+    void initializePipelineProject(projectPath).catch((error) => {
+      console.error("加载拆书分析任务失败", error)
+    })
     void initializeImportProject(projectPath).then(() => {
       if (importInitializationTokenRef.current !== initializationToken) return
       const importState = useBookAnalysisImportStore.getState()
@@ -228,11 +254,26 @@ export function BookAnalysisView() {
     })
 
     return () => {
-      void disposeImportStore().catch((error) => {
+      void Promise.all([disposeImportStore(), disposePipeline()]).catch((error) => {
         console.error("释放批量导入任务失败", error)
       })
     }
-  }, [currentProject?.path, initializeImportProject, disposeImportStore])
+  }, [currentProject?.path, initializeImportProject, disposeImportStore, initializePipelineProject, disposePipeline])
+
+  useEffect(() => {
+    if (!currentProject?.path) return
+    for (const importTask of importTasks) {
+      if (importTask.status !== "completed") continue
+      const batch = importBatches.find((item) => item.id === importTask.batchId)
+      if (!batch?.analysisSkills?.length) continue
+      void createAwaitingRangeTask({
+        batchId: batch.id,
+        bookId: importTask.bookId,
+        bookPath: `${currentProject.path}/book-analysis/${importTask.bookId}`,
+        selectedSkills: batch.analysisSkills,
+      })
+    }
+  }, [createAwaitingRangeTask, currentProject?.path, importBatches, importTasks])
 
   useEffect(() => {
     const projectPath = currentProject?.path ?? null
@@ -445,10 +486,43 @@ export function BookAnalysisView() {
     }
   }
 
-  const handleStartAnalysis = useCallback(async function handleStartAnalysis(files: BatchImportCandidate[]) {
-    await createImportBatch(files)
+  const handleStartAnalysis = useCallback(async function handleStartAnalysis(files: BatchImportCandidate[], analysisSkills?: AnalysisSkill[]) {
+    await createImportBatch(files, analysisSkills)
     setInputDialogOpen(false)
   }, [createImportBatch])
+
+  const selectedPipelineTask = pipelineTasks
+    .filter((task) => task.bookId === selectedLibraryBook?.id)
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null
+
+  const openPipelineDialog = useCallback(async (skill: AnalysisSkill) => {
+    if (!selectedLibraryBook) return
+    const existingModule = selectedLibraryBook.analysisManifest?.modules[skill]
+    const created = await createAwaitingRangeTask({
+      bookId: selectedLibraryBook.id,
+      bookPath: selectedLibraryBook.path,
+      selectedSkills: [skill],
+      forceNew: true,
+    })
+    if (!created) return
+    setPipelineDialog({
+      taskId: created.id,
+      chapters: await loadChapterList(selectedLibraryBook.path),
+      initialSkills: [skill],
+      lockedSkills: [skill],
+      initialRange: existingModule?.range ?? null,
+    })
+  }, [createAwaitingRangeTask, selectedLibraryBook])
+
+  const openExistingPipelineDialog = useCallback(async () => {
+    if (!selectedLibraryBook || !selectedPipelineTask) return
+    setPipelineDialog({
+      taskId: selectedPipelineTask.id,
+      chapters: await loadChapterList(selectedLibraryBook.path),
+      initialSkills: selectedPipelineTask.selectedSkills,
+      initialRange: selectedPipelineTask.range,
+    })
+  }, [selectedLibraryBook, selectedPipelineTask])
 
   const runImportTaskAction = useCallback((action: () => Promise<void>, failureMessage: string) => {
     void action().catch((error) => {
@@ -500,6 +574,7 @@ export function BookAnalysisView() {
   }, [handleSelectBook, libraryState.books])
 
   const libraryLayout = (
+    <>
     <BookAnalysisLibraryLayout
       state={libraryState}
       selectedBookId={selectedLibraryBook?.id ?? selectedBookId}
@@ -524,6 +599,8 @@ export function BookAnalysisView() {
           onOpenBook={handleOpenImportedBook}
         />
       }
+      analysisTask={selectedPipelineTask}
+      analysisChunks={pipelineChunks.filter((chunk) => chunk.taskId === selectedPipelineTask?.id)}
       onSelectBook={handleSelectBook}
       onSelectCharacter={setSelectedCharacterId}
       onImportNovel={() => setInputDialogOpen(true)}
@@ -533,8 +610,39 @@ export function BookAnalysisView() {
       onToggleStyle={handleLibraryToggleStyle}
       onAddSelectedSkillsToSoul={handleLibraryAddSkillsToSoul}
       onReextractCharacters={handleLibraryReextractCharacters}
+      onReextractSkill={openPipelineDialog}
+      onConfigureAnalysisTask={openExistingPipelineDialog}
+      onPauseAnalysisTask={selectedPipelineTask ? () => void pausePipelineTask(selectedPipelineTask.id) : undefined}
+      onContinueAnalysisTask={selectedPipelineTask ? () => void continuePipelineTask(selectedPipelineTask.id) : undefined}
+      onRetryAnalysisTask={selectedPipelineTask ? () => {
+        const skill = selectedPipelineTask.currentSkill
+        const failedChunkId = skill ? selectedPipelineTask.modules[skill].failedChunkId : null
+        const retry = skill && failedChunkId
+          ? retryPipelineChunk(selectedPipelineTask.id, skill, failedChunkId)
+          : continuePipelineTask(selectedPipelineTask.id)
+        void retry.catch((error) => toast.error(`重试失败：${error instanceof Error ? error.message : String(error)}`))
+      } : undefined}
+      onCancelAnalysisTask={selectedPipelineTask ? () => void cancelPipelineTask(selectedPipelineTask.id) : undefined}
       onDeleteBook={(bookId) => handleLibraryDeleteBook(bookId, selectedBookId)}
     />
+    {pipelineDialog && (
+      <BookAnalysisRunDialog
+        open
+        chapters={pipelineDialog.chapters}
+        initialSkills={pipelineDialog.initialSkills}
+        lockedSkills={pipelineDialog.lockedSkills}
+        initialRange={pipelineDialog.initialRange}
+        onOpenChange={(open) => !open && setPipelineDialog(null)}
+        onSubmit={async ({ range, selectedSkills }) => {
+          await configureTaskRange(pipelineDialog.taskId, range, selectedSkills)
+          setPipelineDialog(null)
+          void startPipelineTask(pipelineDialog.taskId).then(reloadLibraryState).catch((error) => {
+            toast.error(`分析失败：${error instanceof Error ? error.message : String(error)}`)
+          })
+        }}
+      />
+    )}
+    </>
   )
 
   if (tasks.length === 0) {

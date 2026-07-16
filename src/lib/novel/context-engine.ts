@@ -151,6 +151,10 @@ async function buildContextPackFromRawData(
   rawData: Record<string, any>,
   context: ContextLoadContext,
 ): Promise<ContextPack> {
+  const searchResults = joinNonEmpty([
+    rawData.searchResults || "",
+    rawData.bookAnalysisReferences || "",
+  ], "\n\n")
   // 合并快照数据和降级数据，优先使用 retrieval 索引
   const retrievalRecentSummaries = Array.isArray(rawData.retrieval?.recentSummaries)
     ? rawData.retrieval.recentSummaries
@@ -199,7 +203,7 @@ async function buildContextPackFromRawData(
     foreshadowingSignals.length > 0 
       ? foreshadowingSignals 
       : [rawData.fallbackForeshadowingStates].filter(Boolean),
-    rawData.searchResults,
+    searchResults,
   )
   
   // 构建章节目标
@@ -248,7 +252,7 @@ async function buildContextPackFromRawData(
     relatedSettings: rawData.relatedSettings,
     canonRules: rawData.canonRules,
     writingStyle: rawData.writingStyle,
-    searchResults: rawData.searchResults,
+    searchResults,
     graphSearchResults: rawData.graphSearchResults,
     mustDo: buildMustDo(chapterGoal, previousChapterEnding, foreshadowingStates),
     mustAvoid: buildMustAvoid(rawData.canonRules, timeline, characterStates),
@@ -258,7 +262,7 @@ async function buildContextPackFromRawData(
       previousChapterEnding,
       foreshadowingStates,
       timeline,
-      searchResults: rawData.searchResults,
+      searchResults,
     }),
     revisionDirectives,
   }

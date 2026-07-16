@@ -136,6 +136,46 @@ describe("extractCharactersFromChapters 目标角色约束", () => {
   })
 })
 
+describe("extractCharactersFromChapters 角色识别失败处理", () => {
+  it("模型未返回重要度时仍按默认重要角色继续提取", async () => {
+    vi.mocked(readFile).mockResolvedValue("---\ntitle: 第一章\norder: 1\n---\n林烬推门而入。")
+    streamChatMock
+      .mockImplementationOnce(async (_cfg, _messages, handlers: any) => {
+        handlers.onToken(JSON.stringify({ characters: [{ name: "林烬", aliases: [] }] }))
+        handlers.onDone()
+      })
+      .mockImplementationOnce(async (_cfg, _messages, handlers: any) => {
+        handlers.onToken(JSON.stringify({ name: "林烬", category: "protagonist", personality: "冷静" }))
+        handlers.onDone()
+      })
+
+    const result = await extractCharactersFromChapters({
+      bookPath: "E:/Novel/book-analysis/book-1",
+      selectedChapterIds: ["chapter-1"],
+      llmConfig: fakeLlmConfig,
+      depth: "fast",
+      persistResults: false,
+    })
+
+    expect(result.characters.map((item) => item.name)).toEqual(["林烬"])
+  })
+
+  it("角色识别请求失败时向上返回明确错误", async () => {
+    vi.mocked(readFile).mockResolvedValue("---\ntitle: 第一章\norder: 1\n---\n林烬推门而入。")
+    streamChatMock.mockImplementationOnce(async (_cfg, _messages, handlers: any) => {
+      handlers.onError(new Error("模型连接失败"))
+    })
+
+    await expect(extractCharactersFromChapters({
+      bookPath: "E:/Novel/book-analysis/book-1",
+      selectedChapterIds: ["chapter-1"],
+      llmConfig: fakeLlmConfig,
+      depth: "fast",
+      persistResults: false,
+    })).rejects.toThrow("角色识别失败")
+  })
+})
+
 describe("extractSingleCharacter (fix/character-reextract-and-loading-state)", () => {
   it("simple 模式内部直接调用 LLM（不再依赖外部 _llmCall 注入）", async () => {
     streamChatMock.mockImplementationOnce(async (_cfg, _msgs, handlers: any) => {

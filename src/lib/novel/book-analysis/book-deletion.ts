@@ -18,5 +18,12 @@ export async function deleteBookAnalysisBook(
   const bookPath = joinPath(projectPath, "book-analysis", bookId)
   if (await fileExists(bookPath)) await deleteFile(bookPath)
   await removeBookLibraryEntry(projectPath, bookId)
-  return removeBatchImportHistoryForBook(projectPath, bookId)
+  const history = await removeBatchImportHistoryForBook(projectPath, bookId)
+  try {
+    const { rebuildBookAnalysisContextIndex } = await import("./analysis-context-index")
+    await rebuildBookAnalysisContextIndex(projectPath)
+  } catch (error) {
+    console.warn("删除作品后重建拆书上下文索引失败", error)
+  }
+  return history
 }
