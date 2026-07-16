@@ -154,6 +154,7 @@ export class DataSourceRegistry {
       relatedSettings: "",
       canonRules: "",
       writingStyle: "",
+      bookAnalysisReferences: "",
       searchResults: "",
       graphSearchResults: "",
       revisionFeedback: [],

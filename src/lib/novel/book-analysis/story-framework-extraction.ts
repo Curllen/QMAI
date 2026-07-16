@@ -33,10 +33,21 @@ export async function loadBookStoryFrameworkChapters(
 export function buildBookStoryFrameworkPrompt(input: {
   bookTitle: string
   chapters: BookStoryFrameworkChapter[]
+  temporaryCharacters?: Array<{ name: string; aliases: string[]; category: string }>
 }): string {
   return [
     `拆书作品：${input.bookTitle}`,
     "",
+    ...(input.temporaryCharacters?.length
+      ? [
+          "临时人物线索（只用于理解人物关系、目标和冲突）：",
+          ...input.temporaryCharacters.map((character) => (
+            `- ${character.name}${character.aliases.length ? `（别名：${character.aliases.join("、")}）` : ""} · ${character.category}`
+          )),
+          "禁止输出角色 Skill、角色档案或人物仿写指令。",
+          "",
+        ]
+      : []),
     ...input.chapters.map((chapter) =>
       [
         `## 第 ${chapter.order} 章：${chapter.title}`,

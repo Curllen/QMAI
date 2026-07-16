@@ -33,6 +33,7 @@ const SOURCE_LABELS: Record<string, string> = {
   relatedSettings: "相关设定",
   canonRules: "硬性世界规则",
   writingStyle: "写作风格",
+  bookAnalysisReferences: "拆书库分析",
   searchResults: "任务检索结果",
   graphSearchResults: "关系图检索结果",
   revisionFeedback: "修订反馈",

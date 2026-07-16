@@ -19,6 +19,7 @@ describe("context source paths", () => {
     ["E:/Novel/.novel/revision-feedback.json", "snapshot"],
     ["E:/Novel/.novel/timeline.json", "memory"],
     ["E:/Novel/.qmai/writing-style.json", "setting"],
+    ["E:/Novel/.qmai/book-analysis-context.json", "book-analysis"],
     ["E:/Novel/.qmai/character-aura.json", "entity"],
     ["E:/Novel/.qmai/simulations/latest.json", "deduction"],
     ["E:/Novel/.qmai/context-cache/v1/manifest.json", "ignored"],
@@ -41,5 +42,6 @@ describe("context source paths", () => {
     expect(getDataSourceKinds("relatedSettings")).toEqual(["entity", "setting"])
     expect(getDataSourceKinds("recentChapterContents")).toEqual(["chapter"])
     expect(getDataSourceKinds("storyFrameworkBinding")).toEqual(["outline", "setting", "deduction"])
+    expect(getDataSourceKinds("bookAnalysisReferences")).toEqual(["book-analysis"])
   })
 })

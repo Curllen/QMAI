@@ -41,6 +41,12 @@ const snapshot: ContextHubSnapshot = {
       status: "refreshed",
       dependencyPaths: ["wiki/settings/world.md"],
     },
+    {
+      key: "data-source:book-analysis",
+      sourceName: "bookAnalysisReferences",
+      status: "hit",
+      dependencyPaths: [".qmai/book-analysis-context.json"],
+    },
   ],
   stableCore: "稳定核心正文",
   sessionSummary: "会话摘要正文",
@@ -94,6 +100,7 @@ describe("ContextHubDetails", () => {
 
     expect(loadSnapshot).toHaveBeenCalledWith(reference)
     expect(host.textContent).toContain("大纲资料")
+    expect(host.textContent).toContain("拆书库分析")
     expect(host.textContent).toContain("稳定核心缓存")
     expect(host.textContent).toContain("wiki/outlines/main.md")
     expect(host.textContent).toContain("稳定核心正文")

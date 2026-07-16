@@ -160,9 +160,8 @@ describe("BookAnalysisSidebarPanel", () => {
     const { cleanup } = renderPanel()
     await flushAsync(50)
     // 点击作品行（作品内容区域的 button，不是刷新按钮）
-    const allButtons = document.querySelectorAll("button")
-    // 第一个 button 是刷新按钮，第二个是作品内容区域
-    const bookBtn = allButtons[1] as HTMLButtonElement
+    const bookBtn = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("测试书")) as HTMLButtonElement
     expect(bookBtn).toBeTruthy()
     await act(async () => {
       bookBtn.click()

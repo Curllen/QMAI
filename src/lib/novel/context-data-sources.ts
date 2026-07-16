@@ -51,6 +51,7 @@ const DATA_SOURCE_CATEGORY_MAP: Record<string, DataSourceCategory[]> = {
   relatedSettings: ["settings"],
   canonRules: ["settings"],
   writingStyle: ["settings"],
+  bookAnalysisReferences: ["memory", "plot_tools", "settings", "character_states"],
   searchResults: ["memory", "plot_tools"],
   graphSearchResults: ["graph"],
   revisionFeedback: ["revision"],
@@ -398,6 +399,15 @@ export const writingStyleDataSource: DataSource<string> = {
   },
 }
 
+export const bookAnalysisReferencesDataSource: DataSource<string> = {
+  name: "bookAnalysisReferences",
+  priority: 19,
+  async load(context: ContextLoadContext): Promise<string> {
+    const { searchBookAnalysisContext } = await import("./book-analysis/analysis-context-index")
+    return searchBookAnalysisContext(context.projectPath, context.task)
+  },
+}
+
 /**
  * 搜索结果数据源
  */
@@ -636,6 +646,7 @@ export function getAllDataSources(): DataSource<any>[] {
     relatedSettingsDataSource,
     canonRulesDataSource,
     writingStyleDataSource,
+    bookAnalysisReferencesDataSource,
     searchResultsDataSource,
     graphSearchResultsDataSource,
     revisionFeedbackDataSource,
