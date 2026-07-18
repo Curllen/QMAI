@@ -20,6 +20,10 @@ import {
 } from "./context-data-source"
 import { getAllDataSources, getDataSourcesForCategories } from "./context-data-sources"
 import type { DataSourceCategory } from "./classification"
+import {
+  buildNovelVectorSnippet,
+  selectRelevantNovelVectorResults,
+} from "./vector-relevance"
 
 const FIELD_PRIORITY: Record<string, number> = {
   sectionBriefing: 0,
@@ -827,7 +831,7 @@ export async function searchRelevantContentUnified(
   }
   const query = queryParts.join(" ")
 
-  const [semanticResults, indexResults, vectorResults] = await Promise.all([
+  const [semanticResults, indexResults] = await Promise.all([
     novelMixedSearch({
       projectPath: pp,
       query,
@@ -841,11 +845,11 @@ export async function searchRelevantContentUnified(
       includeCanon: true,
     }).catch(() => []),
     searchWiki(pp, `关键词索引 向量索引 ${task}`, {
+      includeVector: false,
       rerank: true,
       topK: Math.max(limit, 4),
       rerankPurpose: "用于补充剧情上下文中的索引和记忆条目。",
     }).catch(() => []),
-    runVectorSearchForContext(pp, query, limit).catch(() => []),
   ])
 
   const candidates = [
@@ -863,13 +867,6 @@ export async function searchRelevantContentUnified(
       snippet: result.snippet ?? "",
       source: "index",
     })),
-    ...vectorResults.map((result, index) => ({
-      id: `vector-context:${index}:${result.title}`,
-      path: result.path,
-      title: result.title,
-      snippet: result.snippet,
-      source: "vector_context",
-    })),
   ].filter((item) => {
     const path = typeof (item as { path?: unknown }).path === "string"
       ? (item as { path?: string }).path ?? ""
@@ -879,15 +876,25 @@ export async function searchRelevantContentUnified(
     return isAuthoritativeGenerationPath(path)
   })
 
-  const reranked = await rerankCandidates(query, candidates, {
+  const deduplicatedCandidates = candidates.filter((item, index, all) => {
+    const path = typeof item.path === "string" ? normalizePath(item.path) : ""
+    if (!path) return all.findIndex((candidate) => candidate.id === item.id) === index
+    return all.findIndex((candidate) => (
+      typeof candidate.path === "string" && normalizePath(candidate.path) === path
+    )) === index
+  })
+
+  const reranked = await rerankCandidates(query, deduplicatedCandidates, {
     topK: Math.max(limit * 2, limit),
     purpose: "用于构建小说写作上下文，优先保留最能支撑当前章节任务的记忆、设定、伏笔和正史约束。",
-  }).catch(() => candidates)
+  }).catch(() => deduplicatedCandidates)
 
   const merged: string[] = []
   const seen = new Set<string>()
   for (const result of reranked) {
-    const key = `${result.title}|${result.snippet.slice(0, 50)}`
+    const key = result.path
+      ? normalizePath(result.path)
+      : `${result.title}|${result.snippet.slice(0, 50)}`
     if (seen.has(key)) continue
     seen.add(key)
     merged.push(`- ${result.title}: ${result.snippet}`)
@@ -907,12 +914,13 @@ async function runVectorSearchForContext(
   try {
     const { searchByEmbedding } = await import("@/lib/embedding")
     const vectorResults = await searchByEmbedding(pp, query, embCfg, Math.max(limit * 2, 10))
-    if (vectorResults.length === 0) return []
+    const relevantResults = selectRelevantNovelVectorResults(vectorResults, limit)
+    if (relevantResults.length === 0) return []
 
     const items: { title: string; snippet: string; path: string }[] = []
     const dirs = ["entities", "concepts", "sources", "synthesis", "comparison", "queries"]
 
-    for (const vr of vectorResults.slice(0, limit)) {
+    for (const vr of relevantResults) {
       let found = false
       for (const dir of dirs) {
         const tryPath = `${pp}/wiki/${dir}/${vr.id}.md`
@@ -921,7 +929,12 @@ async function runVectorSearchForContext(
           const title = content.match(/^#\s+(.+)/m)?.[1]?.trim()
             ?? content.match(/^---\ntitle:\s*(.+)/m)?.[1]?.trim()
             ?? vr.id
-          items.push({ title, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
+          const matchedSnippet = buildNovelVectorSnippet(vr)
+          items.push({
+            title,
+            snippet: matchedSnippet || content.slice(0, 300).replace(/\n/g, " "),
+            path: tryPath,
+          })
           found = true
           break
         } catch {}
@@ -930,7 +943,12 @@ async function runVectorSearchForContext(
         const tryPath = `${pp}/wiki/${vr.id}.md`
         try {
           const content = await readFile(tryPath)
-          items.push({ title: vr.id, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
+          const matchedSnippet = buildNovelVectorSnippet(vr)
+          items.push({
+            title: vr.id,
+            snippet: matchedSnippet || content.slice(0, 300).replace(/\n/g, " "),
+            path: tryPath,
+          })
         } catch {}
       }
     }
