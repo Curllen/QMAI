@@ -128,6 +128,8 @@ import {
   type ContextHubResult,
   type ContextIntent,
 } from "@/lib/context-hub"
+import { enqueueUserMemoryLearning } from "@/lib/user-memory/learning-service"
+import { recordLatestUserMemoryFeedback } from "@/lib/user-memory/feedback-service"
 
 
 /* spec-test patterns */
@@ -1726,7 +1728,12 @@ export function ChatPanel() {
             systemPrompt: systemPromptForConfig,
             projectPath,
             taskGoal: plainText,
-            requestOverrides: agentConfig.requestOverrides,
+            requestOverrides: {
+              ...agentConfig.requestOverrides,
+              userMemorySurface: "ai-chat",
+              userMemoryProjectKey: projectPath,
+              userMemorySessionKey: capturedConvId,
+            },
           },
           enabledToolNames: prePluginResult?.enabledToolNames,
           registry: sessionRegistry,
@@ -1862,6 +1869,15 @@ export function ChatPanel() {
               dependencies: contextHubResult.dependencies,
             }),
           )
+        }
+        if (!hasAgentError) {
+          enqueueUserMemoryLearning({
+            message: plainText,
+            llmConfig: agentConfig.llmConfig,
+            surface: "ai-chat",
+            projectKey: projectPath,
+            sessionKey: capturedConvId,
+          })
         }
         if (hasAgentError) {
           useChatStore.getState().failConversationRun(capturedConvId, lastAgentError, runId)
@@ -2015,6 +2031,7 @@ export function ChatPanel() {
     const active = storeState.getActiveMessages()
     const lastUserMsg = [...active].reverse().find((m) => m.role === "user")
     if (!lastUserMsg) return
+    recordLatestUserMemoryFeedback("negative")
     // Remove the last assistant reply, then re-send
     removeLastAssistantMessage()
     // Zustand set 是同步的，无需延迟，直接读取最新状态

@@ -26,7 +26,7 @@ describe("动态大纲 Agent 规划器", () => {
     expect(prompt).toContain("检查世界规则")
     expect(prompt).toContain("planning")
     expect(prompt).toContain("knowledge")
-    expect(prompt).toContain("最多 12")
+    expect(prompt).toContain("最多 5")
     expect(prompt).toContain("最多同时运行 3")
   })
 
@@ -69,7 +69,7 @@ describe("动态大纲 Agent 规划器", () => {
     expect(result.plan[1].finalReview).toBe(true)
   })
 
-  it("拒绝使用不存在 Skill、循环依赖或超过 12 个任务的规划结果", () => {
+  it("拒绝使用不存在 Skill、循环依赖或超过 5 个任务的规划结果", () => {
     const unknownSkill = parseDynamicOutlinePlan(JSON.stringify({ tasks: [{
       id: "a", name: "A", dimension: "A", skillNames: ["不存在"], taskPrompt: "A",
     }] }), ["人物设计"])
@@ -81,9 +81,18 @@ describe("动态大纲 Agent 规划器", () => {
     ] }))
     expect(cycle.ok).toBe(false)
 
-    const tooMany = parseDynamicOutlinePlan(JSON.stringify({ tasks: Array.from({ length: 13 }, (_, index) => ({
+    const tooMany = parseDynamicOutlinePlan(JSON.stringify({ tasks: Array.from({ length: 6 }, (_, index) => ({
       id: `a${index}`, name: `A${index}`, dimension: `D${index}`, skillNames: [], taskPrompt: "执行",
     })) }))
     expect(tooMany.ok).toBe(false)
+  })
+
+  it("拒绝为简单局部调整规划多个 Agent", () => {
+    const result = parseDynamicOutlinePlan(JSON.stringify({ tasks: [
+      { id: "a", name: "标题 Agent", dimension: "标题", skillNames: [], taskPrompt: "缩短标题" },
+      { id: "b", name: "审查 Agent", dimension: "审查", skillNames: [], taskPrompt: "审查标题" },
+    ] }), undefined, "把当前标题改短一些")
+
+    expect(result.ok).toBe(false)
   })
 })

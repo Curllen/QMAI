@@ -709,6 +709,7 @@
       "interface": "Interface",
       "novel": "Novel",
       "novelHint": "Model settings",
+      "userMemory": "Global User Memory",
       "usageGuide": "Usage Guide",
       "maintenance": "Maintenance",
       "feedback": "Feedback",

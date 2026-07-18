@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  buildBoundedSubAgentMergePayload,
   planOutlineSubAgents,
+  resumeOutlineMultiAgentWorkflow,
   runOutlineMultiAgentWorkflow,
   type OutlineSubAgentPlan,
 } from "./outline-multi-agent-orchestrator"
+import type { OutlineSubAgentResult } from "./outline-result-protocol"
 
 const baseSkillNames = [
   "outline-master-builder",
@@ -110,6 +113,92 @@ describe("AI大纲多 Agent 编排器", () => {
     expect(result.mode).toBe("single-agent-fallback")
     expect(result.finalText).toBe("单 Agent 兜底结果")
     expect(result.fallbackReason).toContain("合并 Agent 失败")
+  })
+
+  it("简单调整任务只使用一个 Agent", () => {
+    const plan = planOutlineSubAgents({
+      preferredSkillNames: baseSkillNames,
+      taskPrompt: "把当前标题改短一些",
+    })
+
+    expect(plan).toHaveLength(1)
+  })
+
+  it("将成功依赖的结构化结论传给下游 Agent", async () => {
+    const parent = { ...makePlan("outline"), id: "parent" }
+    const child = { ...makePlan("character"), id: "child", dependencies: ["parent"] }
+    let childPrompt = ""
+
+    await runOutlineMultiAgentWorkflow({
+      plan: [parent, child],
+      maxConcurrency: 2,
+      runSubAgent: async (item) => {
+        if (item.id === "child") childPrompt = item.taskPrompt
+        return makeSubAgentJson(item.id, item.name)
+      },
+      runSingleAgentFallback: async () => "fallback",
+      mergeResults: async () => "merged",
+    })
+
+    expect(childPrompt).toContain("上游依赖结论")
+    expect(childPrompt).toContain("完成")
+  })
+
+  it("续传失败 Agent 时复用已完成的上游依赖", async () => {
+    const parent = { ...makePlan("outline"), id: "parent" }
+    const child = { ...makePlan("character"), id: "child", dependencies: ["parent"] }
+    const completedParent: OutlineSubAgentResult = {
+      agentId: "parent",
+      agentName: parent.name,
+      stage: "outline",
+      usedSkills: [],
+      confidence: 0.9,
+      summary: "上游大纲已经完成",
+      contentMarkdown: "## 已完成的大纲",
+      constraints: ["保持主线"],
+      writebackItems: [],
+      risks: [],
+      questions: [],
+    }
+    let resumedPrompt = ""
+
+    const result = await resumeOutlineMultiAgentWorkflow({
+      plan: [parent, child],
+      completedResults: [completedParent],
+      failedAgentIds: ["child"],
+      runSubAgent: async (item) => {
+        resumedPrompt = item.taskPrompt
+        return makeSubAgentJson(item.id, item.name)
+      },
+      mergeResults: async (items) => `合并数量：${items.length}`,
+    })
+
+    expect(resumedPrompt).toContain("上游大纲已经完成")
+    expect(result.finalText).toBe("合并数量：2")
+    expect(result.successfulAgents).toEqual(["parent", "child"])
+  })
+
+  it("合并载荷按预算压缩完整子 Agent 输出", () => {
+    const results = Array.from({ length: 5 }, (_, index) => ({
+      agentId: `a${index}`,
+      agentName: `Agent ${index}`,
+      stage: "planning",
+      usedSkills: [],
+      confidence: 0.8,
+      summary: `总结 ${index}`,
+      contentMarkdown: `内容 ${index}`.repeat(3000),
+      constraints: ["保持一致"],
+      writebackItems: [],
+      risks: ["存在冲突"],
+      questions: [],
+    }))
+
+    const payload = buildBoundedSubAgentMergePayload(results, 6000)
+
+    expect(payload.length).toBeLessThanOrEqual(6000)
+    expect(payload).toContain("总结 0")
+    expect(payload).toContain("总结 4")
+    expect(payload).toContain("冲突与风险")
   })
 })
 

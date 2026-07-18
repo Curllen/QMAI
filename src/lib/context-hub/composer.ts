@@ -95,7 +95,7 @@ function applyBudget(
   for (const fragment of fragments) {
     if (!fragment.text.trim()) continue
     const tokens = estimateContextTokens(section(fragment.title, fragment.text))
-    if (fragment.required || used + tokens <= availableTokens) {
+    if (used + tokens <= availableTokens) {
       selected.push(fragment)
       used += tokens
     }
@@ -103,18 +103,78 @@ function applyBudget(
   return selected
 }
 
+function truncateWithMarker(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  const marker = "\n[内容已按上下文预算压缩]\n"
+  if (maxChars <= marker.length) return value.slice(0, maxChars)
+  const available = maxChars - marker.length
+  const head = Math.ceil(available * 0.6)
+  return `${value.slice(0, head)}${marker}${value.slice(-(available - head))}`
+}
+
+function fitFragment(fragment: ContextFragment, tokenBudget: number): ContextFragment | null {
+  if (tokenBudget <= 0 || !fragment.text.trim()) return null
+  if (estimateContextTokens(section(fragment.title, fragment.text)) <= tokenBudget) return fragment
+  let low = 0
+  let high = fragment.text.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    const text = truncateWithMarker(fragment.text, middle)
+    if (estimateContextTokens(section(fragment.title, text)) <= tokenBudget) low = middle
+    else high = middle - 1
+  }
+  if (low <= 0) return null
+  return { ...fragment, text: truncateWithMarker(fragment.text, low) }
+}
+
+function fitPlainText(value: string, tokenBudget: number): string {
+  if (!value.trim() || tokenBudget <= 0) return ""
+  if (estimateContextTokens(value) <= tokenBudget) return value
+  let low = 0
+  let high = value.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (estimateContextTokens(truncateWithMarker(value, middle)) <= tokenBudget) low = middle
+    else high = middle - 1
+  }
+  return truncateWithMarker(value, low)
+}
+
+function fitFragmentsProportionally(fragments: ContextFragment[], tokenBudget: number): ContextFragment[] {
+  const available = fragments.filter((fragment) => fragment.text.trim())
+  if (estimateContextTokens(joinSections(available)) <= tokenBudget) return available
+  const result: ContextFragment[] = []
+  let remaining = tokenBudget
+  for (let index = 0; index < available.length; index += 1) {
+    const share = Math.floor(remaining / (available.length - index))
+    const fitted = fitFragment(available[index]!, share)
+    if (fitted) {
+      result.push(fitted)
+      remaining -= estimateContextTokens(section(fitted.title, fitted.text))
+    }
+  }
+  return result
+}
+
 export function composeContext(input: ComposeContextInput): ComposedContext {
-  const stableCore = joinSections(stableFragments(input.contextPack))
-  const sessionSummary = input.sessionSummary?.trim() ?? ""
   const expanded = (input.confidence ?? 0.8) < 0.6
   const tokenBudget = Math.max(0, input.tokenBudget ?? 16_000)
+  const stableBudget = Math.floor(tokenBudget * 0.4)
+  const summaryBudget = Math.floor(tokenBudget * 0.15)
+  const stableCore = joinSections(fitFragmentsProportionally(stableFragments(input.contextPack), stableBudget))
+  const sessionSummary = fitPlainText(input.sessionSummary?.trim() ?? "", summaryBudget)
   const stableTokens = estimateContextTokens(stableCore)
   const summaryTokens = estimateContextTokens(sessionSummary)
   const availableDynamicTokens = Math.max(0, tokenBudget - stableTokens - summaryTokens)
   const dynamicFragmentsForRequest = dynamicFragments(input, expanded)
-  const dynamicContext = joinSections(
-    applyBudget(dynamicFragmentsForRequest, availableDynamicTokens),
-  )
+  const requiredFragments = dynamicFragmentsForRequest.filter((fragment) => fragment.required)
+  const optionalFragments = dynamicFragmentsForRequest.filter((fragment) => !fragment.required)
+  const fittedRequired = fitFragmentsProportionally(requiredFragments, availableDynamicTokens)
+  const requiredTokens = estimateContextTokens(joinSections(fittedRequired))
+  const dynamicContext = joinSections([
+    ...fittedRequired,
+    ...applyBudget(optionalFragments, Math.max(0, availableDynamicTokens - requiredTokens)),
+  ])
   const dynamicTokens = estimateContextTokens(dynamicContext)
   const candidateTokens = estimateContextTokens(contextPackToPrompt(input.contextPack))
     + summaryTokens
@@ -142,6 +202,9 @@ export function composeContext(input: ComposeContextInput): ComposedContext {
       estimatedSavedPercent,
       expanded,
       providerCacheEnabled: stableCore.length > 0,
+      budgetTokens: tokenBudget,
+      composedTokens,
+      utilizationPercent: tokenBudget > 0 ? Math.min(100, Math.round((composedTokens / tokenBudget) * 100)) : 0,
     },
   }
 }

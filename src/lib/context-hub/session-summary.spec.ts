@@ -57,4 +57,37 @@ describe("session context summary", () => {
     expect(selectContextHistoryMessages(messages, "")).toEqual(messages)
     expect(selectContextHistoryMessages(messages, undefined)).toEqual(messages)
   })
+
+  it("长对话始终保留首个用户任务目标和最近进展", () => {
+    const messages = [
+      { role: "user", content: "初始任务：写完整悬疑小说，禁止让主角提前知道真相。" },
+      ...Array.from({ length: 18 }, (_, index) => ({
+        role: index % 2 === 0 ? "assistant" : "user",
+        content: `中间消息 ${index + 1}`,
+      })),
+      { role: "assistant", content: "最近进展：已经完成第十章。" },
+    ]
+
+    const summary = buildSessionContextSummary({ messages, dependencies: {}, maxChars: 1000 })
+
+    expect(summary.text).toContain("初始任务")
+    expect(summary.text).toContain("禁止让主角提前知道真相")
+    expect(summary.text).toContain("最近进展")
+  })
+
+  it("摘要预算很小时仍同时保留初始任务和最新进展", () => {
+    const summary = buildSessionContextSummary({
+      messages: [
+        { role: "user", content: `初始任务：${"保持悬疑主线".repeat(80)}` },
+        { role: "assistant", content: "中间分析。".repeat(80) },
+        { role: "assistant", content: "最新进展：已经完成关键冲突设计。" },
+      ],
+      dependencies: {},
+      maxChars: 120,
+    })
+
+    expect(summary.text.length).toBeLessThanOrEqual(120)
+    expect(summary.text).toContain("初始任务")
+    expect(summary.text).toContain("最新进展")
+  })
 })

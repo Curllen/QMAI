@@ -1,4 +1,5 @@
 import type { LlmUsage } from "@/lib/llm-usage"
+import { getLatestUserMemoryDecision, type UserMemoryDecision } from "@/lib/user-memory/decision-trace"
 import type {
   ContextHub,
   ContextHubResult,
@@ -9,6 +10,7 @@ import type {
 export function applyProviderUsageToStats(
   stats: ContextHubStats,
   usage: LlmUsage,
+  memoryDecision?: UserMemoryDecision | null,
 ): ContextHubStats {
   return {
     ...stats,
@@ -18,6 +20,13 @@ export function applyProviderUsageToStats(
     ...(usage.cacheWriteInputTokens !== undefined
       ? { providerCacheWriteTokens: usage.cacheWriteInputTokens }
       : {}),
+    ...(memoryDecision ? {
+      memoryCandidateCount: memoryDecision.candidateCount,
+      memorySelectedCount: memoryDecision.selectedRuleIds.length,
+      memoryFilteredCount: memoryDecision.filtered.length,
+      memoryInjectedChars: memoryDecision.injectedChars,
+      memoryEstimatedTokens: memoryDecision.estimatedTokens,
+    } : {}),
   }
 }
 
@@ -28,6 +37,6 @@ export async function persistContextHubProviderUsage(
   usage: LlmUsage | undefined,
 ): Promise<ContextHubSnapshotRef | null> {
   if (!usage) return null
-  result.stats = applyProviderUsageToStats(result.stats, usage)
+  result.stats = applyProviderUsageToStats(result.stats, usage, getLatestUserMemoryDecision())
   return contextHub.saveSnapshot(snapshotId, result)
 }

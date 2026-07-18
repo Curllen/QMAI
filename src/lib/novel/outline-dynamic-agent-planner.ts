@@ -1,4 +1,5 @@
 ﻿import {
+  isSimpleOutlineTask,
   validateOutlineSubAgentPlan,
   type OutlineSubAgentKind,
   type OutlineSubAgentPlan,
@@ -27,7 +28,7 @@ export function buildDynamicOutlinePlannerPrompt(context: DynamicOutlinePlannerC
   return [
     "你是 AI 大纲多 Agent 动态规划器。只输出 JSON，不要输出解释。",
     "请根据任务、项目现状和全部可用 Skill 规划独立任务，而不是按固定类别机械分组。",
-    "最多 12 个 Agent，最多同时运行 3 个 Agent。最终审查任务必须依赖需要审查的前置任务。",
+    "最多 5 个 Agent，最多同时运行 3 个 Agent。简单局部任务只规划 1 个 Agent；最终审查任务必须依赖需要审查的前置任务。",
     "每个任务包含 id、中文 name、dimension、skillNames、taskPrompt、dependencies、priority、finalReview。",
     "依赖失败后下游仍会继续，因此任务提示词必须能接受缺失维度风险。",
     "",
@@ -62,6 +63,7 @@ export function buildDynamicOutlinePlannerPrompt(context: DynamicOutlinePlannerC
 export function parseDynamicOutlinePlan(
   text: string,
   availableSkillNames?: string[],
+  userTask?: string,
 ): DynamicOutlinePlanParseResult {
   const jsonText = extractJsonObject(text)
   if (!jsonText) return { ok: false, error: "规划器未返回 JSON 对象" }
@@ -111,6 +113,9 @@ export function parseDynamicOutlinePlan(
 
   const validation = validateOutlineSubAgentPlan(plan)
   if (!validation.ok) return { ok: false, error: validation.errors.join("；") }
+  if (userTask && isSimpleOutlineTask(userTask) && plan.length > 1) {
+    return { ok: false, error: "简单局部任务只能规划 1 个 Agent" }
+  }
   return { ok: true, plan }
 }
 

@@ -173,6 +173,16 @@ export function ContextHubDetails({
           <span className="mt-0.5 block text-[11px] text-muted-foreground">
             稳定核心 {stats.stableTokens.toLocaleString()} Token　会话摘要 {stats.summaryTokens.toLocaleString()} Token　动态片段 {stats.dynamicTokens.toLocaleString()} Token
           </span>
+          {stats.composedTokens !== undefined && stats.budgetTokens !== undefined ? (
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              最终上下文占用 {stats.composedTokens.toLocaleString()} / {stats.budgetTokens.toLocaleString()} Token（{stats.utilizationPercent ?? 0}%）
+            </span>
+          ) : null}
+          {stats.memoryCandidateCount !== undefined ? (
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              用户记忆：候选 {stats.memoryCandidateCount}，命中 {stats.memorySelectedCount ?? 0}，过滤 {stats.memoryFilteredCount ?? 0}，注入约 {stats.memoryEstimatedTokens ?? 0} Token
+            </span>
+          ) : null}
         </span>
         {expanded
           ? <ChevronUp aria-hidden="true" className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />

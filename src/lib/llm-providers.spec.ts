@@ -60,6 +60,32 @@ describe("llm provider reasoning options", () => {
   })
 })
 
+describe("internal request overrides", () => {
+  it.each([
+    ["OpenAI-compatible", customConfig()],
+    ["Responses API", customConfig({ apiMode: "responses" })],
+    ["Anthropic Messages", customConfig({ apiMode: "anthropic_messages" })],
+    ["Gemini", customConfig({ provider: "google", model: "gemini-2.5-pro" })],
+  ])("does not send user-memory control fields through %s", (_label, config) => {
+    const body = getProviderConfig(config).buildBody(
+      [{ role: "user", content: "测试请求" }],
+      {
+        temperature: 0.2,
+        skipUserMemory: true,
+        userMemorySurface: "ai-chat",
+        userMemoryProjectKey: "project-1",
+        userMemorySessionKey: "session-1",
+      },
+    ) as Record<string, unknown>
+    const serialized = JSON.stringify(body)
+
+    expect(serialized).not.toContain("skipUserMemory")
+    expect(serialized).not.toContain("userMemorySurface")
+    expect(serialized).not.toContain("userMemoryProjectKey")
+    expect(serialized).not.toContain("userMemorySessionKey")
+  })
+})
+
 describe("custom provider headers", () => {
   it("clears Origin for remote custom gateways", () => {
     expect(getCustomCompatibleHeaders("sk-test", "https://example.test/v1/chat/completions")).toMatchObject({

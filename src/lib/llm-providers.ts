@@ -6,6 +6,7 @@ import {
 } from "@/lib/azure-openai"
 import { normalizeEndpoint } from "@/lib/endpoint-normalizer"
 import type { LlmUsage } from "./llm-usage"
+import type { UserMemorySurface } from "./user-memory/types"
 
 /**
  * One piece of a multimodal message body. Text + image is the only
@@ -71,6 +72,14 @@ export interface RequestOverrides {
   reasoning?: ReasoningConfig
   tools?: { type: string; function: { name: string; description: string; parameters: object } }[]
   toolChoice?: "auto" | "none"
+  /** Internal: prevent recursive global-user-memory injection for the memory extractor itself. */
+  skipUserMemory?: boolean
+  /** Internal: explicit task surface for global-user-memory selection. */
+  userMemorySurface?: UserMemorySurface
+  /** Internal: project scope key for layered user-memory selection. */
+  userMemoryProjectKey?: string
+  /** Internal: conversation/session scope key for layered user-memory selection. */
+  userMemorySessionKey?: string
 }
 
 interface ProviderConfig {
@@ -468,8 +477,15 @@ function buildResponsesBody(
   return body
 }
 
-function stripWireAgnosticOverrides(overrides?: RequestOverrides): Omit<RequestOverrides, "reasoning"> {
-  const { reasoning: _reasoning, ...rest } = overrides ?? {}
+function stripWireAgnosticOverrides(overrides?: RequestOverrides): Omit<RequestOverrides, "reasoning" | "skipUserMemory" | "userMemorySurface" | "userMemoryProjectKey" | "userMemorySessionKey"> {
+  const {
+    reasoning: _reasoning,
+    skipUserMemory: _skipUserMemory,
+    userMemorySurface: _userMemorySurface,
+    userMemoryProjectKey: _userMemoryProjectKey,
+    userMemorySessionKey: _userMemorySessionKey,
+    ...rest
+  } = overrides ?? {}
   return rest
 }
 

@@ -26,6 +26,7 @@ import { applyVisualStyle } from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
 import { countChapterBodyWords } from "@/lib/chapter-word-count"
 import { flattenMdFiles } from "@/lib/novel/chapter-utils"
+import { runUserMemoryMaintenance } from "@/lib/user-memory/maintenance"
 
 function App() {
   const project = useWikiStore((s) => s.project)
@@ -42,6 +43,10 @@ function App() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [loading, setLoading] = useState(true)
   const [appTitleTotalWordCount, setAppTitleTotalWordCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    runUserMemoryMaintenance()
+  }, [])
 
   function isCurrentProject(proj: WikiProject): boolean {
     const current = useWikiStore.getState().project

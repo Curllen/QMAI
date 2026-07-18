@@ -80,6 +80,7 @@ import {
   type NovelGenerationRequestPackage,
 } from "@/lib/novel/novel-generation-request-package";
 import {
+  buildBoundedSubAgentMergePayload,
   type OutlineSubAgentPlan,
   planOutlineSubAgents,
   resumeOutlineMultiAgentWorkflow,
@@ -90,6 +91,7 @@ import {
   buildDynamicOutlinePlannerPrompt,
   parseDynamicOutlinePlan,
 } from "@/lib/novel/outline-dynamic-agent-planner";
+import { buildScopedOutlineSubAgentContext } from "@/lib/novel/outline-agent-context";
 import { normalizeOutlineMarkdown, prepareOutlineSaveDraft } from "@/lib/outline-save";
 import {
   type CharacterSaveDraft,
@@ -179,6 +181,8 @@ import {
   type ContextHubSnapshotRef,
 } from "@/lib/context-hub";
 import { addLlmUsage, type LlmUsage } from "@/lib/llm-usage";
+import { enqueueUserMemoryLearning } from "@/lib/user-memory/learning-service";
+import { recordLatestUserMemoryFeedback } from "@/lib/user-memory/feedback-service";
 import {
   getConversationTabTitle,
   splitConversationToolbarItems,
@@ -1950,6 +1954,22 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
               ])
             : [legacySystemPrompt, extraRules].filter(Boolean).join("\n\n")
         );
+        const buildSubAgentSystemContent = (plan: OutlineSubAgentPlan, extraRules: string): AgentMessage["content"] => {
+          if (!contextHubResult) return [legacySystemPrompt, extraRules].filter(Boolean).join("\n\n");
+          return [
+            { type: "text", text: baseSystemPrompt.trim() ? `${baseSystemPrompt.trim()}\n\n` : "" },
+            {
+              type: "text",
+              text: `## 子 Agent 局部上下文\n${buildScopedOutlineSubAgentContext(contextHubResult.contextPack, plan.kind)}`,
+              cacheControl: true,
+            },
+            {
+              type: "text",
+              text: [contextHubResult.sessionSummary ? `## 当前会话摘要\n${contextHubResult.sessionSummary}` : "", ...commonDynamicParts, extraRules]
+                .filter(Boolean).join("\n\n"),
+            },
+          ];
+        };
         const primarySystemContent = buildOutlineRunSystemContent();
         const systemPrompt = typeof primarySystemContent === "string"
           ? primarySystemContent
@@ -2011,7 +2031,18 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                 : {}),
             },
           );
-          return { agentConfig, registry };
+          return {
+            agentConfig: {
+              ...agentConfig,
+              requestOverrides: {
+                ...agentConfig.requestOverrides,
+                userMemorySurface: "ai-outline" as const,
+                userMemoryProjectKey: normalizePath(project.path),
+                userMemorySessionKey: capturedConvId,
+              },
+            },
+            registry,
+          };
         };
 
         const runOutlineAgentOnce = async (
@@ -2127,6 +2158,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             const dynamicPlan = parseDynamicOutlinePlan(
               plannerRun.text,
               outlineWritingSkills.map((skill) => skill.name),
+              prompt,
             );
             if (dynamicPlan.ok) subAgentPlan = dynamicPlan.plan;
           } catch {
@@ -2170,14 +2202,14 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
               const subAgentMessages: AgentMessage[] = [
                 {
                   role: "system",
-                  content: buildOutlineRunSystemContent([
+                  content: buildSubAgentSystemContent(subAgentPlan, [
                     "## 子 Agent 运行规则",
                     `当前身份：${subAgentPlan.name}`,
                     "你只能处理本 Agent 负责的维度，禁止写入文件。",
                     "必须输出符合 AI 大纲子 Agent JSON 协议的 JSON，不要输出额外说明。",
                   ].join("\n")),
                 },
-                ...historyPlan.messages,
+                ...historyPlan.messages.slice(-2),
                 {
                   role: "user",
                   content: buildOutlineAgentUserContent(
@@ -2250,7 +2282,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                     "输出必须是用户可直接阅读和保存的大纲正文，不要输出内部调度报告。",
                   ].join("\n")),
                 },
-                ...historyPlan.messages,
+                ...historyPlan.messages.slice(-2),
                 {
                   role: "user",
                   content: [
@@ -2260,7 +2292,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
                     buildOutlineAgentUserContent(prompt, tokens),
                     "",
                     "## 子 Agent 结构化结果",
-                    JSON.stringify(subAgentResults, null, 2),
+                    buildBoundedSubAgentMergePayload(subAgentResults),
                   ].join("\n"),
                 },
               ];
@@ -2462,6 +2494,15 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
         };
         if (!isCurrentRun()) return { started: true, sent: false };
         setConversationContextSummary(convId, nextContextSummaryPayload.contextSummary);
+        if (!options.systemGenerated) {
+          enqueueUserMemoryLearning({
+            message: prompt,
+            llmConfig: effectiveLlmConfig,
+            surface: "ai-outline",
+            projectKey: normalizePath(project.path),
+            sessionKey: capturedConvId,
+          });
+        }
         await handleAutoSaveOutlineRequests(capturedConvId, finalContent, isCurrentRun);
         if (!isCurrentRun()) return { started: true, sent: false };
         const firstUser = useOutlineChatStore
@@ -2741,6 +2782,18 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             ? buildContextHubSystemContent(baseSystemPrompt, contextHubResult, [extraRules])
             : [legacySystemPrompt, extraRules].filter(Boolean).join("\n\n")
         );
+        const buildResumeSubAgentSystemContent = (plan: OutlineSubAgentPlan, extraRules: string): AgentMessage["content"] => {
+          if (!contextHubResult) return [legacySystemPrompt, extraRules].filter(Boolean).join("\n\n");
+          return [
+            { type: "text", text: baseSystemPrompt.trim() ? `${baseSystemPrompt.trim()}\n\n` : "" },
+            {
+              type: "text",
+              text: `## 子 Agent 局部上下文\n${buildScopedOutlineSubAgentContext(contextHubResult.contextPack, plan.kind)}`,
+              cacheControl: true,
+            },
+            { type: "text", text: [contextHubResult.sessionSummary ? `## 当前会话摘要\n${contextHubResult.sessionSummary}` : "", extraRules].filter(Boolean).join("\n\n") },
+          ];
+        };
         const primarySystemContent = buildResumeSystemContent("");
         const systemPrompt = typeof primarySystemContent === "string"
           ? primarySystemContent
@@ -2768,7 +2821,18 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
               ? { readTextFile: contextHubResult.readFile }
               : {}),
           });
-          return { agentConfig: c, registry: r };
+          return {
+            agentConfig: {
+              ...c,
+              requestOverrides: {
+                ...c.requestOverrides,
+                userMemorySurface: "ai-outline" as const,
+                userMemoryProjectKey: normalizePath(project.path),
+                userMemorySessionKey: capturedConvId,
+              },
+            },
+            registry: r,
+          };
         };
 
         // 更新状态为续传运行中
@@ -2799,7 +2863,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             let runText = "";
             let agentError: Error | null = null;
             const record = await new AgentRunner().run(agentConfig, reg, [
-              { role: "system", content: buildResumeSystemContent(["## 子 Agent 运行规则", `当前身份：${subAgentPlan.name}`, "你只能处理本 Agent 负责的维度，禁止写入文件。", "必须输出符合 AI 大纲子 Agent JSON 协议的 JSON，不要输出额外说明。"].join("\n")) },
+              { role: "system", content: buildResumeSubAgentSystemContent(subAgentPlan, ["## 子 Agent 运行规则", `当前身份：${subAgentPlan.name}`, "你只能处理本 Agent 负责的维度，禁止写入文件。", "必须输出符合 AI 大纲子 Agent JSON 协议的 JSON，不要输出额外说明。"].join("\n")) },
               { role: "user", content: subAgentPlan.taskPrompt },
             ], {
               onText: (chunk) => { runText += chunk; },
@@ -2826,7 +2890,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
             let mergeError: Error | null = null;
             const record = await new AgentRunner().run(agentConfig, reg, [
               { role: "system", content: buildResumeSystemContent(["## 合并 Agent 运行规则", "你负责合并多个子 Agent 的结构化结果，形成最终可预览的大纲草稿。", "输出必须是用户可直接阅读和保存的大纲正文，不要输出内部调度报告。"].join("\n")) },
-              { role: "user", content: ["请合并以下 AI 大纲子 Agent 结果，解决冲突并输出最终大纲草稿。", "", "## 子 Agent 结构化结果", JSON.stringify(subAgentResults, null, 2)].join("\n") },
+              { role: "user", content: ["请合并以下 AI 大纲子 Agent 结果，解决冲突并输出最终大纲草稿。", "", "## 子 Agent 结构化结果", buildBoundedSubAgentMergePayload(subAgentResults)].join("\n") },
             ], {
               onText: (chunk) => {
                 mergeText += chunk;
@@ -2997,6 +3061,7 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
   const handleRegenerate = useCallback(
     async (msgIndex: number) => {
       if (!project || isStreaming || !activeConversationId) return;
+      recordLatestUserMemoryFeedback("negative");
       let effectiveLlmConfig = resolveNovelModel(
         llmConfig,
         novelConfig,
@@ -3153,6 +3218,12 @@ export function OutlineChatPanel({ onClose }: { onClose: () => void }) {
               : {}),
           },
         );
+        agentConfig.requestOverrides = {
+          ...agentConfig.requestOverrides,
+          userMemorySurface: "ai-outline",
+          userMemoryProjectKey: normalizePath(project.path),
+          userMemorySessionKey: capturedConvId,
+        };
         let agentError: Error | null = null;
         const record = await new AgentRunner().run(
           agentConfig,

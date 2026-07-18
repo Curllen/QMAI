@@ -39,20 +39,51 @@ function selectSentences(value: string, limit: number): string {
   return sentences.slice(0, limit).join("").trim()
 }
 
+function fitHeadTail(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  if (maxChars <= 1) return value.slice(0, maxChars)
+  const available = maxChars - 1
+  const head = Math.ceil(available * 0.65)
+  return `${value.slice(0, head)}…${value.slice(-(available - head))}`
+}
+
+function fitRecentTail(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  if (maxChars <= 0) return ""
+  if (maxChars === 1) return value.slice(-1)
+  return `…${value.slice(-(maxChars - 1))}`
+}
+
 export function buildSessionContextSummary(
   input: BuildSessionContextSummaryInput,
 ): SessionContextSummary {
   const maxChars = Math.max(0, input.maxChars ?? 4000)
-  const lines = input.messages
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .slice(-12)
-    .map((message) => {
-      const text = selectSentences(messageText(message.content), message.role === "user" ? 3 : 2)
-      if (!text) return ""
-      return `${message.role === "user" ? "用户" : "助手"}：${text}`
-    })
+  const eligible = input.messages.filter((message) => message.role === "user" || message.role === "assistant")
+  const firstUser = eligible.find((message) => message.role === "user")
+  const toLine = (message: SessionSummaryMessage): string => {
+    const text = selectSentences(messageText(message.content), message.role === "user" ? 3 : 2)
+    return text ? `${message.role === "user" ? "用户" : "助手"}：${text}` : ""
+  }
+  const firstLine = firstUser ? toLine(firstUser) : ""
+  const recentLines = eligible
+    .slice(-11)
+    .filter((message) => message !== firstUser)
+    .map(toLine)
     .filter(Boolean)
-  const text = lines.join("\n").slice(0, maxChars)
+  const recentText = recentLines.join("\n")
+  const fullText = [firstLine, recentText].filter(Boolean).join("\n")
+  let text = fullText
+  if (fullText.length > maxChars) {
+    if (firstLine && recentText && maxChars > 1) {
+      const firstBudget = Math.max(1, Math.floor((maxChars - 1) * 0.45))
+      const recentBudget = Math.max(0, maxChars - firstBudget - 1)
+      text = `${fitHeadTail(firstLine, firstBudget)}\n${fitRecentTail(recentText, recentBudget)}`
+    } else if (firstLine) {
+      text = fitHeadTail(firstLine, maxChars)
+    } else {
+      text = fitRecentTail(recentText, maxChars)
+    }
+  }
 
   return {
     text,

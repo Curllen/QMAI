@@ -69,4 +69,28 @@ describe("streamChat usage", () => {
     expect(onDone).toHaveBeenCalledOnce()
     expect(onError).not.toHaveBeenCalled()
   })
+
+  it("发送前把总输入限制在模型窗口的 85%", async () => {
+    mocks.fetch.mockResolvedValue(new Response([
+      'data: {"choices":[{"delta":{"content":"完成"}}]}',
+      "data: [DONE]",
+      "",
+    ].join("\n"), { status: 200 }))
+
+    await streamChat({ ...config, maxContextSize: 1_000 }, [
+      { role: "system", content: "系统".repeat(450) },
+      { role: "user", content: `任务目标：续写。${"正文".repeat(450)}结尾限制：保持人物关系。` },
+    ], {
+      onToken: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    })
+
+    const request = mocks.fetch.mock.calls[0][1] as RequestInit
+    const body = JSON.parse(String(request.body)) as { messages: Array<{ content: string }> }
+    const total = body.messages.reduce((sum, message) => sum + message.content.length, 0)
+    expect(total).toBeLessThanOrEqual(850)
+    expect(body.messages.at(-1)?.content).toContain("任务目标")
+    expect(body.messages.at(-1)?.content).toContain("保持人物关系")
+  })
 })

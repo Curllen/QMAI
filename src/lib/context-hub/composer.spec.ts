@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { ContextPack } from "@/lib/novel/context-engine"
 import { composeContext } from "./composer"
+import { estimateContextTokens } from "./token-estimator"
 
 function pack(overrides: Partial<ContextPack> = {}): ContextPack {
   return {
@@ -116,5 +117,28 @@ describe("composeContext", () => {
     expect(supplemented.stats.estimatedSavedTokens).toBe(base.stats.estimatedSavedTokens)
     expect(supplemented.stats.candidateTokens - base.stats.candidateTokens)
       .toBe(supplementedComposed - baseComposed)
+  })
+
+  it("稳定核心和必需片段都不能突破总 Token 预算", () => {
+    const result = composeContext({
+      contextPack: pack({
+        soulDoc: "作品灵魂".repeat(1000),
+        canonRules: "硬规则".repeat(1000),
+        relatedSettings: "设定".repeat(1000),
+        outline: "大纲".repeat(2000),
+        task: "本轮任务".repeat(500),
+        mustDo: "必须做到".repeat(500),
+      }),
+      sessionSummary: "会话摘要".repeat(1000),
+      dependencies: {},
+      tokenBudget: 800,
+    })
+
+    expect(estimateContextTokens(result.stableCore) + estimateContextTokens(result.sessionSummary) + estimateContextTokens(result.dynamicContext))
+      .toBeLessThanOrEqual(800)
+    expect(result.dynamicContext).toContain("本轮任务")
+    expect(result.stats.budgetTokens).toBe(800)
+    expect(result.stats.composedTokens).toBeLessThanOrEqual(800)
+    expect(result.stats.utilizationPercent).toBeLessThanOrEqual(100)
   })
 })

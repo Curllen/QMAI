@@ -2,7 +2,6 @@ import { streamChat } from "../llm-client"
 import type { StreamCallbacks } from "../llm-client"
 import { accumulateToolCalls } from "./tool-call-parser"
 import { toOpenAITools } from "./tools-schema"
-import { formatToolResultForModel } from "./tool-result"
 import type { ToolRegistry } from "./registry"
 import type { AgentConfig, AgentMessage, AgentRunCallbacks, AgentRunRecord, ToolCall, ToolCallDelta } from "./types"
 import { DEFAULT_MAX_ROUNDS, TOOL_EXECUTE_TIMEOUT_MS } from "./types"
@@ -16,6 +15,8 @@ import {
 import type { ChatMessage } from "../llm-providers"
 import { isReasoningDisabled, isReasoningOnlyResponseError, withReasoningDisabled } from "../reasoning-retry"
 import { addLlmUsage } from "../llm-usage"
+import { trimChatMessagesToBudget } from "../chat-request-budget"
+import { ToolEvidenceLedger } from "./tool-evidence-ledger"
 
 export class ModelDoesNotSupportToolsError extends Error {
   constructor() {
@@ -59,6 +60,13 @@ export class AgentRunner {
       config.taskGoal ||
       messageContentText([...messages].reverse().find((m) => m.role === "user")?.content ?? "") ||
       "未命名任务"
+    const taskContract = `## 任务契约\n初始任务目标：${taskGoal.slice(0, 1800)}\n执行过程中不得因历史裁剪丢失该目标；当前用户新要求优先。`
+    const contractInsertIndex = workingMessages.findIndex((message) => message.role !== "system")
+    workingMessages.splice(contractInsertIndex < 0 ? workingMessages.length : contractInsertIndex, 0, {
+      role: "system",
+      content: taskContract,
+    })
+    const evidenceLedger = new ToolEvidenceLedger(config.toolResultContextLimit ?? 6000)
     let taskBreakpoint: TaskBreakpoint | null = projectPath
       ? createTaskBreakpoint({
           taskGoal,
@@ -138,6 +146,9 @@ export class AgentRunner {
           : baseOverrides
       let requestOverrides = buildRequestOverrides()
       const streamRound = async () => {
+        const internalBudget = Math.max(1, Math.floor((config.llmConfig.maxContextSize || 204_800) * 0.75))
+        const compacted = trimChatMessagesToBudget(workingMessages as ChatMessage[], internalBudget) as AgentMessage[]
+        workingMessages.splice(0, workingMessages.length, ...compacted)
         await streamChat(
           config.llmConfig,
           workingMessages as ChatMessage[],
@@ -265,7 +276,12 @@ export class AgentRunner {
             result: errorMsg,
             timestamp: toolCallRecord.finishedAt,
           })
-          workingMessages.push({ role: "tool", content: toolCallRecord.result, tool_call_id: tc.id, name: toolName })
+          workingMessages.push({
+            role: "tool",
+            content: evidenceLedger.format(toolName, params, toolCallRecord.result),
+            tool_call_id: tc.id,
+            name: toolName,
+          })
           await saveToolProgress()
           continue
         }
@@ -293,7 +309,12 @@ export class AgentRunner {
             preview,
             timestamp: toolCallRecord.finishedAt,
           })
-          workingMessages.push({ role: "tool", content: preview, tool_call_id: tc.id, name: toolName })
+          workingMessages.push({
+            role: "tool",
+            content: evidenceLedger.format(toolName, params, preview),
+            tool_call_id: tc.id,
+            name: toolName,
+          })
           await saveToolProgress()
           continue
         }
@@ -331,7 +352,7 @@ export class AgentRunner {
         await saveToolProgress()
         workingMessages.push({
           role: "tool",
-          content: formatToolResultForModel(toolName, toolCallRecord.result, config.toolResultContextLimit),
+          content: evidenceLedger.format(toolName, params, toolCallRecord.result),
           tool_call_id: tc.id,
           name: toolName,
         })

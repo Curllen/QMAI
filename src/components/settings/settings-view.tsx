@@ -14,6 +14,7 @@ import {
   Archive,
   FileText,
   Download,
+  Brain,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -42,6 +43,7 @@ import { UsageGuideSection } from "./sections/usage-guide-section"
 import { ContactSupportSection } from "./sections/contact-support-section"
 import { DataManagementSection } from "./sections/data-management-section"
 import { ExportCenterSection } from "./sections/export-center-section"
+import { UserMemorySection } from "./sections/user-memory-section"
 
 type CategoryId =
   | "llm"
@@ -51,6 +53,7 @@ type CategoryId =
   | "mcp"
   | "interface"
   | "novel"
+  | "user-memory"
   | "usage-guide"
   | "maintenance"
   | "data-management"
@@ -80,6 +83,7 @@ const CATEGORIES: Category[] = [
   { id: "mcp", labelKey: "settings.categories.mcp", icon: Network },
   { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
   { id: "novel", labelKey: "settings.categories.novel", hintKey: "settings.categories.novelHint", icon: BookOpen },
+  { id: "user-memory", labelKey: "settings.categories.userMemory", icon: Brain },
   { id: "usage-guide", labelKey: "settings.categories.usageGuide", icon: HelpCircle },
   { id: "maintenance", labelKey: "settings.categories.maintenance", icon: Wrench },
   { id: "data-management", labelKey: "settings.categories.dataManagement", icon: Archive },
@@ -536,6 +540,8 @@ export function SettingsView() {
         return <InterfaceSection draft={draft} setDraft={setDraft} />
       case "novel":
         return <NovelSection draft={draft} setDraft={setDraft} />
+      case "user-memory":
+        return <UserMemorySection />
       case "classification":
         return <ClassificationSection projectPath={project?.path ?? undefined} />
       case "usage-guide":

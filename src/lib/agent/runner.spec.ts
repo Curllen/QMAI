@@ -587,6 +587,77 @@ describe("AgentRunner", () => {
     expect(compressedToolMessage).toContain("结尾")
   })
 
+  it("每轮模型请求保留任务契约并压缩内部工作消息", async () => {
+    mockStreamChat.mockImplementation(async (_config: unknown, messages: AgentMessage[], cb: StreamCallbacks) => {
+      const total = messages.reduce((sum, message) => sum + (typeof message.content === "string" ? message.content.length : 0), 0)
+      expect(total).toBeLessThanOrEqual(750)
+      expect(messages.some((message) => String(message.content).includes("任务契约"))).toBe(true)
+      expect(messages.some((message) => String(message.content).includes("完成整本小说"))).toBe(true)
+      cb.onToken("完成")
+      cb.onDone()
+    })
+
+    const callbacks = { onText: vi.fn(), onToolCall: vi.fn(), onToolResult: vi.fn(), onToolError: vi.fn(), onDone: vi.fn(), onError: vi.fn() }
+    await runner.run(
+      {
+        maxRounds: 2,
+        tools: [],
+        systemPrompt: "",
+        taskGoal: "完成整本小说，不能改变主角身份。",
+        llmConfig: { ...mockLlmConfig, maxContextSize: 1_000 },
+      },
+      registry,
+      [
+        { role: "system", content: "系统规则".repeat(120) },
+        { role: "assistant", content: "旧结果".repeat(180) },
+        { role: "user", content: "继续执行当前任务" },
+      ],
+      callbacks,
+    )
+    expect(callbacks.onError).not.toHaveBeenCalled()
+  })
+
+  it("15 轮重复工具调用不会让内部上下文无限增长", async () => {
+    const tool: Tool = {
+      name: "read_memory",
+      description: "read",
+      category: "read",
+      parameters: {},
+      execute: vi.fn(async () => "记忆原文".repeat(3000)),
+    }
+    registry.register(tool)
+    let round = 0
+    const injectedToolContents: string[] = []
+    mockStreamChat.mockImplementation(async (_config: unknown, messages: AgentMessage[], cb: StreamCallbacks) => {
+      round += 1
+      const total = messages.reduce((sum, message) => sum + (typeof message.content === "string" ? message.content.length : 0), 0)
+      expect(total).toBeLessThanOrEqual(2250)
+      const latestTool = [...messages].reverse().find((message) => message.role === "tool")
+      if (latestTool) injectedToolContents.push(String(latestTool.content))
+      if (round <= 15) {
+        cb.onToolCallDelta?.({ index: 0, id: `call-${round}`, name: "read_memory", arguments: '{"name":"核心目标"}' })
+      } else {
+        cb.onToken("全部完成")
+      }
+      cb.onDone()
+    })
+    const callbacks = { onText: vi.fn(), onToolCall: vi.fn(), onToolResult: vi.fn(), onToolError: vi.fn(), onDone: vi.fn(), onError: vi.fn() }
+
+    const result = await runner.run({
+      maxRounds: 16,
+      tools: [tool],
+      systemPrompt: "",
+      taskGoal: "持续读取并完成长期任务",
+      llmConfig: { ...mockLlmConfig, maxContextSize: 3000 },
+      toolResultContextLimit: 1200,
+    }, registry, [systemMsg, userMsg], callbacks)
+
+    expect(result.toolCalls).toHaveLength(15)
+    expect(tool.execute).toHaveBeenCalledTimes(15)
+    expect(injectedToolContents.some((content) => content.includes("工具证据引用"))).toBe(true)
+    expect(callbacks.onError).not.toHaveBeenCalled()
+  })
+
   it("merges caller request overrides with tool calling options", async () => {
     const tool: Tool = {
       name: "read_chapter",

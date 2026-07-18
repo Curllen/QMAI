@@ -6,6 +6,7 @@ import { countReasoningCharsInLine, extractReasoningTextFromLine } from "./reaso
 import { resolveRuntimeLocalCliConfig } from "./local-cli-config"
 import { trimChatMessagesToBudget } from "./chat-request-budget"
 import { mergeLlmUsageSnapshot, type LlmUsage } from "./llm-usage"
+import { applyGlobalUserMemoryToMessages } from "./user-memory/request-integration"
 
 export type { ChatMessage, RequestOverrides } from "./llm-providers"
 export { isFetchNetworkError } from "./tauri-fetch"
@@ -134,6 +135,18 @@ export async function streamChat(
   requestOverrides?: RequestOverrides,
 ): Promise<void> {
   const runtimeConfig = await resolveRuntimeLocalCliConfig(config)
+  const preparedMessages = applyGlobalUserMemoryToMessages(messages, requestOverrides)
+  const configuredWindow = Number.isFinite(runtimeConfig.maxContextSize) && runtimeConfig.maxContextSize > 0
+    ? runtimeConfig.maxContextSize
+    : 204_800
+  const outputReserveChars = requestOverrides?.max_tokens
+    ? Math.max(0, requestOverrides.max_tokens * 4)
+    : Math.floor(configuredWindow * 0.15)
+  const requestInputBudget = Math.max(1, Math.min(
+    Math.floor(configuredWindow * 0.85),
+    configuredWindow - outputReserveChars,
+  ))
+  const budgetedMessages = trimChatMessagesToBudget(preparedMessages, requestInputBudget)
   const { onToken, onDone, onError } = callbacks
   const decoder = new TextDecoder()
 
@@ -141,11 +154,11 @@ export async function streamChat(
   // HTTP. Dispatch before getProviderConfig — that function throws for
   // this provider because it has no URL/headers.
   if (runtimeConfig.provider === "claude-code") {
-    return streamViaClaudeCodeCli(runtimeConfig, messages, callbacks, signal, requestOverrides)
+    return streamViaClaudeCodeCli(runtimeConfig, budgetedMessages, callbacks, signal, requestOverrides)
   }
 
   if (runtimeConfig.provider === "codex-cli") {
-    return streamViaCodexCli(runtimeConfig, messages, callbacks, signal, requestOverrides)
+    return streamViaCodexCli(runtimeConfig, budgetedMessages, callbacks, signal, requestOverrides)
   }
 
   const providerConfig = getProviderConfig(runtimeConfig)
@@ -212,7 +225,7 @@ export async function streamChat(
       }
     }
 
-    let requestInit = buildRequestInit(messages)
+    let requestInit = buildRequestInit(budgetedMessages)
     let response: Response
     try {
       response = await sendRequest(requestInit)
@@ -259,7 +272,7 @@ export async function streamChat(
       const inputLimit = parseInputLengthLimit(errorDetail)
       if (inputLimit) {
         const retryRequestInit = buildRequestInit(
-          trimChatMessagesToBudget(messages, Math.floor(inputLimit.maxLength * 0.85)),
+          trimChatMessagesToBudget(budgetedMessages, Math.floor(inputLimit.maxLength * 0.85)),
         )
         if (retryRequestInit.body === requestInit.body) {
           onError(new Error(inputLengthLimitMessage(inputLimit)))

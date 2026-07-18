@@ -77,10 +77,31 @@ const KIND_ORDER: OutlineSubAgentKind[] = [
   "foreshadowing",
 ]
 
-const MAX_AGENT_TASKS = 12
+const MAX_AGENT_TASKS = 5
 const DEFAULT_MAX_CONCURRENCY = 3
 
+export function isSimpleOutlineTask(task: string): boolean {
+  const value = task.trim()
+  return value.length <= 40
+    && /修改|调整|改短|改长|润色|改名|补一句|删除|替换/.test(value)
+    && !/完整|全本|长篇|重做|重新生成|世界观|人物关系|多线|多卷/.test(value)
+}
+
 export function planOutlineSubAgents(input: OutlineMultiAgentPlanInput): OutlineSubAgentPlan[] {
+  if (isSimpleOutlineTask(input.taskPrompt)) {
+    return [{
+      id: "outline-agent",
+      name: subAgentName("outline"),
+      kind: "outline",
+      dimension: "局部调整",
+      skillNames: input.preferredSkillNames.slice(0, 2),
+      taskPrompt: buildSubAgentTaskPrompt("outline", input.taskPrompt, input.preferredSkillNames.slice(0, 2)),
+      dependencies: [],
+      priority: 1,
+      finalReview: false,
+      writeToolsEnabled: false,
+    }]
+  }
   const grouped = new Map<OutlineSubAgentKind, string[]>()
   for (const name of input.preferredSkillNames) {
     const kind = inferSubAgentKind(name)
@@ -212,8 +233,9 @@ async function runDependencyGraph(
   plan: OutlineSubAgentPlan[],
   maxConcurrency: number,
   input: OutlineMultiAgentRunInput,
+  initialOutcomes: Map<string, AgentOutcome> = new Map(),
 ): Promise<Map<string, AgentOutcome>> {
-  const outcomes = new Map<string, AgentOutcome>()
+  const outcomes = new Map<string, AgentOutcome>(initialOutcomes)
   const running = new Map<string, Promise<void>>()
   const order = new Map(plan.map((task, index) => [task.id, index]))
   const pending = new Set(plan.map((task) => task.id))
@@ -233,7 +255,20 @@ async function runDependencyGraph(
         .finally(() => { running.delete(task.id) })
       running.set(task.id, promise)
     }
-    if (running.size > 0) await Promise.race(running.values())
+    if (running.size > 0) {
+      await Promise.race(running.values())
+      continue
+    }
+    if (pending.size > 0) {
+      for (const id of pending) {
+        const task = plan.find((item) => item.id === id)
+        const missing = (task?.dependencies ?? []).filter((dependency) => !outcomes.has(dependency))
+        const error = `依赖未满足：${missing.join("、") || "未知依赖"}`
+        outcomes.set(id, { error })
+        input.onStatusChange?.({ agentId: id, status: "failed", attempt: 0, error })
+      }
+      pending.clear()
+    }
   }
 
   return outcomes
@@ -247,20 +282,34 @@ async function executeWithRetry(
   const dependencyFailures = (task.dependencies ?? [])
     .map((id) => ({ id, outcome: outcomes.get(id) }))
     .filter(({ outcome }) => outcome?.error)
-  const runnableTask: OutlineSubAgentPlan = dependencyFailures.length === 0
-    ? task
-    : {
-        ...task,
-        taskPrompt: [
-          task.taskPrompt,
-          "",
-          "## ?????????",
-          ...dependencyFailures.map(({ id, outcome }) => {
-            const dependencyTask = input.plan.find((item) => item.id === id)
-            return `- ${dependencyTask?.dimension || dependencyTask?.name || id}?${outcome?.error}`
-          }),
-        ].join("\n"),
-      }
+  const dependencyResults = (task.dependencies ?? [])
+    .map((id) => ({ id, outcome: outcomes.get(id) }))
+    .filter((item): item is { id: string; outcome: AgentOutcome & { result: OutlineSubAgentResult } } => Boolean(item.outcome?.result))
+  const dependencyContext = [
+    ...(dependencyResults.length > 0 ? [
+      "## 上游依赖结论",
+      ...dependencyResults.map(({ id, outcome }) => {
+        const dependencyTask = input.plan.find((item) => item.id === id)
+        const result = outcome.result
+        return [
+          `### ${dependencyTask?.dimension || dependencyTask?.name || id}`,
+          `结论：${result.summary}`,
+          result.constraints.length > 0 ? `约束：${result.constraints.join("；")}` : "",
+          result.contentMarkdown.slice(0, 1600),
+        ].filter(Boolean).join("\n")
+      }),
+    ] : []),
+    ...(dependencyFailures.length > 0 ? [
+      "## 缺失依赖风险",
+      ...dependencyFailures.map(({ id, outcome }) => {
+        const dependencyTask = input.plan.find((item) => item.id === id)
+        return `- ${dependencyTask?.dimension || dependencyTask?.name || id}：${outcome?.error}`
+      }),
+    ] : []),
+  ]
+  const runnableTask: OutlineSubAgentPlan = dependencyContext.length > 0
+    ? { ...task, taskPrompt: [task.taskPrompt, "", ...dependencyContext].join("\n") }
+    : task
 
   let lastError = "执行失败"
   for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -291,6 +340,34 @@ async function executeWithRetry(
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function truncateMergeContent(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value
+  const marker = "\n[子 Agent 内容已压缩]\n"
+  if (maxChars <= marker.length) return value.slice(0, maxChars)
+  const available = maxChars - marker.length
+  const head = Math.ceil(available * 0.65)
+  return `${value.slice(0, head)}${marker}${value.slice(-(available - head))}`
+}
+
+export function buildBoundedSubAgentMergePayload(results: OutlineSubAgentResult[], maxChars = 24_000): string {
+  const limit = Math.max(0, Math.floor(maxChars))
+  if (limit === 0 || results.length === 0) return ""
+  const fixedSections = results.map((result) => [
+    `## ${result.agentName}`,
+    `摘要：${result.summary}`,
+    `置信度：${result.confidence}`,
+    result.constraints.length > 0 ? `约束：${result.constraints.join("；")}` : "",
+    result.risks.length > 0 ? `冲突与风险：${result.risks.join("；")}` : "冲突与风险：无",
+  ].filter(Boolean).join("\n"))
+  const fixedLength = fixedSections.reduce((sum, section) => sum + section.length + 2, 0)
+  const contentShare = Math.max(0, Math.floor((limit - fixedLength) / results.length))
+  const payload = results.map((result, index) => [
+    fixedSections[index],
+    contentShare > 0 ? truncateMergeContent(result.contentMarkdown, contentShare) : "",
+  ].filter(Boolean).join("\n")).join("\n\n")
+  return payload.slice(0, limit)
 }
 
 function inferSubAgentKind(skillName: string): OutlineSubAgentKind {
@@ -395,7 +472,7 @@ export async function resumeOutlineMultiAgentWorkflow(
 
   // 仅执行失败 Agent
   const resumeInput: OutlineMultiAgentRunInput = {
-    plan: failedPlan,
+    plan: input.plan,
     maxConcurrency,
     runSubAgent: input.runSubAgent,
     runSingleAgentFallback: async () => "",
@@ -403,7 +480,10 @@ export async function resumeOutlineMultiAgentWorkflow(
     onStatusChange: input.onStatusChange,
   }
 
-  const outcomes = await runDependencyGraph(failedPlan, maxConcurrency, resumeInput)
+  const completedOutcomes = new Map<string, AgentOutcome>(
+    input.completedResults.map((result) => [result.agentId, { result }]),
+  )
+  const outcomes = await runDependencyGraph(failedPlan, maxConcurrency, resumeInput, completedOutcomes)
 
   // 收集本次重试的结果
   const retriedSuccessful = failedPlan

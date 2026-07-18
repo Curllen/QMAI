@@ -37,4 +37,11 @@ describe("AI chat context hub integration", () => {
       /removeLastAssistantMessage\(\)[\s\S]{0,900}setConversationContextSummary\(capturedConversationId, undefined\)[\s\S]{0,300}handleSend\(/,
     )
   })
+
+  it("passes project and conversation scope into global user memory", () => {
+    expect(source).toContain("userMemoryProjectKey: projectPath")
+    expect(source).toContain("userMemorySessionKey: capturedConvId")
+    expect(source).toContain("projectKey: projectPath")
+    expect(source).toContain("sessionKey: capturedConvId")
+  })
 })

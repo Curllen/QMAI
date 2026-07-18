@@ -72,6 +72,14 @@ export interface ContextHubStats {
   providerInputTokens?: number
   providerCachedTokens?: number
   providerCacheWriteTokens?: number
+  budgetTokens?: number
+  composedTokens?: number
+  utilizationPercent?: number
+  memoryCandidateCount?: number
+  memorySelectedCount?: number
+  memoryFilteredCount?: number
+  memoryInjectedChars?: number
+  memoryEstimatedTokens?: number
 }
 
 export type ContextCacheItemStatus = "hit" | "refreshed" | "failed"
