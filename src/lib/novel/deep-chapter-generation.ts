@@ -653,9 +653,22 @@ export async function runDeepChapterGeneration(
   );
   throwIfAborted(signal);
 
+  // 任务书(workflowConfig)、初稿/返修(writingConfig)、去AI味(deAiConfig)复用同一份
+  // outlinePrompt + contextPrompt。这三个环节可能用不同模型、各有独立上下文窗口，
+  // 因此预算取三者窗口的最小值：确保任一环节都不必依赖 llm-client 末级无差别截断
+  // （末级截断按字符砍，会绕过 ContextPack 的字段优先级），并让各环节看到一致的上下文。
+  const sharedContextWindows = [
+    writingConfig.maxContextSize,
+    workflowConfig.maxContextSize,
+    deAiConfig.maxContextSize,
+  ].filter((size): size is number => typeof size === "number" && size > 0);
+  const sharedContextWindow = sharedContextWindows.length > 0
+    ? Math.min(...sharedContextWindows)
+    : input.llmConfig.maxContextSize;
+
   // 大纲与其余上下文共用同一窗口预算：按单章目标字数×2预留输出，再分配资料包。
   const totalContextTokenBudget = computeWritingContextPackTokenBudget({
-    maxContextSize: input.llmConfig.maxContextSize,
+    maxContextSize: sharedContextWindow,
     contextTokenBudget: novelConfig.contextTokenBudget,
     chapterTargetChars: novelConfig.chapterTargetChars,
   });

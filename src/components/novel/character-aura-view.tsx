@@ -357,11 +357,12 @@ export function CharacterAuraView({ hideSidebar = false }: { hideSidebar?: boole
       }
       const contextPack = await buildContextPack(project.path, auraPreviewTask)
       const previewPack = { ...contextPack, characterAuras: characterAuraPreview }
+      // 预算须绑定实际发起调用的模型窗口，而非 store 里的基础 llmConfig。
+      const effectiveConfig = resolveNovelModel(llmConfig, novelConfig, "writing")
       const contextPrompt = contextPackToPrompt(previewPack, resolveContextPackTokenBudget({
-        maxContextSize: llmConfig.maxContextSize,
+        maxContextSize: effectiveConfig.maxContextSize,
         contextTokenBudget: novelConfig.contextTokenBudget,
       }))
-      const effectiveConfig = resolveNovelModel(llmConfig, novelConfig, "writing")
       const messages: ChatMessage[] = [
         {
           role: "system",
