@@ -143,6 +143,7 @@ export function useAgentConfig(systemPrompt: string, getPlanBlueprint?: () => st
       getOutlineConversations,
       mcpTools: mcpRuntime.mcpTools,
       llmConfig: agentLlmConfig,
+      maxContextSize: agentLlmConfig.maxContextSize,
       chapterWritingLlmConfig,
       aiWorkflowMode,
       runDeepChapterGeneration,
