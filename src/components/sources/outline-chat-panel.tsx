@@ -722,7 +722,7 @@ function buildFallbackCharacterDraftsFromRequests(
       roleType,
       fileName: request.fileName,
       content: request.content,
-      selected: false,
+      selected: true,
       confidence: "low",
     };
   });

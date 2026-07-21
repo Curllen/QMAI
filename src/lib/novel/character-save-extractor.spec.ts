@@ -103,7 +103,7 @@ describe("character-save-extractor", () => {
     expect(volumeResult.errors.join("；")).toContain("未识别到可单独保存的角色")
   })
 
-  it("无角色前缀但标题是人名且附近有角色定位时生成高置信度草稿", () => {
+  it("无角色前缀但标题是人名且附近有角色定位时生成中置信度草稿", () => {
     const result = extractCharacterSaveDrafts([
       "## 林辰",
       "- 角色定位：男主",
@@ -116,7 +116,64 @@ describe("character-save-extractor", () => {
       roleType: "男主",
       fileName: "角色-男主-林辰.md",
       selected: true,
+      confidence: "medium",
+    })
+  })
+
+  it("支持新格式标题：姓名（角色）", () => {
+    const result = extractCharacterSaveDrafts([
+      "## 林辰（男主）",
+      "- 核心动机：守住家人",
+      "",
+      "## 苏晚（女主）",
+      "- 核心动机：查清真相",
+    ].join("\n"))
+
+    expect(result.drafts).toHaveLength(2)
+    expect(result.drafts[0]).toMatchObject({
+      characterName: "林辰",
+      roleType: "男主",
+      fileName: "角色-男主-林辰.md",
+      selected: true,
       confidence: "high",
+    })
+    expect(result.drafts[1]).toMatchObject({
+      characterName: "苏晚",
+      roleType: "女主",
+      fileName: "角色-女主-苏晚.md",
+      selected: true,
+      confidence: "high",
+    })
+  })
+
+  it("支持新格式标题：姓名 - 角色", () => {
+    const result = extractCharacterSaveDrafts([
+      "## 林辰 - 男主",
+      "- 核心动机：守住家人",
+    ].join("\n"))
+
+    expect(result.drafts).toHaveLength(1)
+    expect(result.drafts[0]).toMatchObject({
+      characterName: "林辰",
+      roleType: "男主",
+      selected: true,
+      confidence: "high",
+    })
+  })
+
+  it("支持新格式标题：角色设定：姓名", () => {
+    const result = extractCharacterSaveDrafts([
+      "## 角色设定：林辰",
+      "- 角色定位：男主",
+      "- 核心动机：守住家人",
+    ].join("\n"))
+
+    expect(result.drafts).toHaveLength(1)
+    expect(result.drafts[0]).toMatchObject({
+      characterName: "林辰",
+      roleType: "男主",
+      selected: true,
+      confidence: "medium",
     })
   })
 
