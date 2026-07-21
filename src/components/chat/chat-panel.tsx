@@ -1773,6 +1773,10 @@ export function ChatPanel() {
             onText: (chunk: string) => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
               appendStreamToken(chunk, capturedConvId)
+              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+                ...message,
+                content: message.content + chunk,
+              }))
             },
               onToolEvent: (event) => {
                 if (contextTrace) {
@@ -2191,8 +2195,8 @@ export function ChatPanel() {
                     <ChatMessage
                       key={msg.id}
                       message={msg}
-                      isLastAssistant={isLastAssistant && !isStreaming}
-                      onRegenerate={isLastAssistant ? handleRegenerate : undefined}
+                      isLastAssistant={isLastAssistant}
+                      onRegenerate={isLastAssistant && !isStreaming ? handleRegenerate : undefined}
                       novelMode={novelMode}
                       projectPath={project?.path ?? null}
                       onSaveAsChapter={handleSaveAsChapter}
@@ -2203,7 +2207,7 @@ export function ChatPanel() {
                     />
                   )
                 })}
-                {isStreaming && batchedStreamingContent && <StreamingMessage content={batchedStreamingContent} isStreaming={isStreaming} />}
+                {isStreaming && batchedStreamingContent && !activeMessages.some((msg) => msg.role === "assistant" && msg.isAgentRunning) && <StreamingMessage content={batchedStreamingContent} isStreaming={isStreaming} />}
                 <div ref={bottomRef} />
               </div>
             </div>
