@@ -25,6 +25,7 @@ import {
   buildNovelVectorSnippet,
   selectRelevantNovelVectorResults,
 } from "./vector-relevance"
+import { stripOutlineFrontmatter } from "./outline-markdown"
 
 const FIELD_PRIORITY: Record<string, number> = {
   sectionBriefing: 0,
@@ -423,14 +424,22 @@ export async function readOutlineContent(pp: string): Promise<string> {
       const contents = await Promise.all(
         results.map(async (result) => {
           try {
-            return await readFile(result.path)
+            return stripOutlineFrontmatter(await readFile(result.path))
           } catch {
             return ""
           }
         }),
       )
-      return joinNonEmpty(contents, "\n\n---\n\n")
+      return joinNonEmpty(contents, "\n\n")
     }
+  } catch {}
+  try {
+    const tree = await listDirectory(`${pp}/wiki/outlines`)
+    const files = flattenOutlineMarkdownFiles(tree).slice(0, 80)
+    const contents = await Promise.all(
+      files.map(async (file) => stripOutlineFrontmatter(await readFile(file.path)).trim()),
+    )
+    return joinNonEmpty(contents, "\n\n")
   } catch {}
   return ""
 }
