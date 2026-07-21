@@ -788,6 +788,7 @@ export function ChatPanel() {
   const runStates = useChatStore((s) => s.runStates)
   const mode = useChatStore((s) => s.mode)
   const startStreaming = useChatStore((s) => s.startStreaming)
+  const appendStreamToken = useChatStore((s) => s.appendStreamToken)
   const finalizeStream = useChatStore((s) => s.finalizeStream)
   const clearStreaming = useChatStore((s) => s.clearStreaming)
   const createConversation = useChatStore((s) => s.createConversation)
@@ -1771,10 +1772,7 @@ export function ChatPanel() {
           callbacks: {
             onText: (chunk: string) => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
-              updateAgentAssistantMessage(assistantMessage.id, (message) => ({
-                ...message,
-                content: message.content + chunk,
-              }))
+              appendStreamToken(chunk, capturedConvId)
             },
               onToolEvent: (event) => {
                 if (contextTrace) {
@@ -1797,8 +1795,10 @@ export function ChatPanel() {
               },
               onDone: () => {
               if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
+              const finalContent = useChatStore.getState().streamingContents[capturedConvId] ?? ""
               updateAgentAssistantMessage(assistantMessage.id, (message) => ({
                 ...message,
+                content: finalContent,
                 isAgentRunning: false,
               }))
             },
@@ -1991,7 +1991,15 @@ export function ChatPanel() {
         if (controller.signal.aborted) return
         if (!streamSessionGuardRef.current.isActive(capturedConvId, sessionId)) return
         const errorMessage = error instanceof Error ? error.message : String(error)
+        const partialContent = useChatStore.getState().streamingContents[capturedConvId] ?? ""
         finishAgentSession(() => {
+          if (partialContent) {
+            updateAgentAssistantMessage(assistantMessage.id, (message) => ({
+              ...message,
+              content: partialContent,
+              isAgentRunning: false,
+            }))
+          }
           if (contextTrace) contextTrace = finishTrace(contextTrace, "error", errorMessage)
           markError(error instanceof Error ? error : new Error(String(error)))
         })
@@ -2058,7 +2066,7 @@ export function ChatPanel() {
         if (runningAssistant) {
           updateAgentAssistantMessage(runningAssistant.id, (message) => ({
             ...message,
-            content: message.content ? `${message.content}\n\n已停止生成。` : "已停止生成。",
+            content: currentStreamingContent ? `${currentStreamingContent}\n\n已停止生成。` : "已停止生成。",
             agentToolCalls: settleRunningAgentToolCalls(message.agentToolCalls, "cancelled"),
             agentStages: settleRunningAgentStages(message.agentStages, "cancelled"),
             isAgentRunning: false,
