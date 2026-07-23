@@ -7,6 +7,24 @@ export interface ChangelogEntry {
   };
 }
 
+const THREE_POINT_ZERO_ONE_CHANGELOG: ChangelogEntry = {
+  version: "3.0.1",
+  date: "2026-07-23",
+  highlights: {
+    en: [],
+    zh: [
+      "【模型选择修复】修复 AI 对话框、AI 大纲和设置中无法选择模型的问题，恢复正常使用。",
+      "【下拉框定位修复】修复模型选择下拉框位置偏移的问题，改为精准定位、自动判断上下翻转，滚动时同步更新位置。",
+      "【AI 大纲修改对比】新增共享差异工作区，支持源码对比、渲染预览、行数统计和候选稿编辑；单次选区去 AI 味与批量/章节去 AI 味审核统一接入。",
+      "【去 AI 味升级】编辑后的候选稿支持替换正文、另存草稿和批量确认写回，操作更灵活。",
+      "【大纲保存修复】修复 AI 大纲保存后内容包含格式错误（JSON 格式块）的问题，保存内容更加干净。",
+      "【大纲保存修复】修复 AI 大纲保存内容包含前置分析等不相关文本的问题。",
+      "【大纲标题优化】优化大纲标题提取，无需再次调用模型，直接从内容中智能识别并提取标题；支持章纲、卷纲、人物设定等 7 种类型自动识别。",
+      "【大纲保存优化】普通大纲保存改用文件夹确认弹窗，人物小传保留角色勾选确认流程；大纲保存统一使用纯 Markdown 格式。",
+    ],
+  },
+};
+
 const THREE_POINT_ZERO_ZERO_CHANGELOG: ChangelogEntry = {
   version: "3.0.0",
   date: "2026-07-22",
@@ -908,6 +926,8 @@ export const CHANGELOG: ChangelogEntry[] = [
 ];
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === THREE_POINT_ZERO_ONE_CHANGELOG.version)
+    return [THREE_POINT_ZERO_ONE_CHANGELOG];
   if (version === THREE_POINT_ZERO_ZERO_CHANGELOG.version)
     return [THREE_POINT_ZERO_ZERO_CHANGELOG];
   if (version === TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG.version)
@@ -981,6 +1001,7 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    THREE_POINT_ZERO_ONE_CHANGELOG,
     THREE_POINT_ZERO_ZERO_CHANGELOG,
     TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG,
     TWO_POINT_TWO_THIRTY_SIX_CHANGELOG,
