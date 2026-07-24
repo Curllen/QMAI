@@ -1,26 +1,27 @@
 import { writeFile, readFile, createDirectory } from "@/commands/fs"
 import type { ReviewItem } from "@/stores/review-store"
 import type { DisplayMessage, Conversation } from "@/stores/chat-store"
+import { normalizeLoadedRunStates, type ConversationRunStates } from "@/lib/conversation-run-state"
 import { normalizePath } from "@/lib/path-utils"
+import { normalizeSessionContextSummary } from "@/lib/context-hub/session-summary"
+import { getContextHub } from "@/lib/context-hub/context-hub"
 
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 500
 
 /**
  * 按项目路径的写入锁，防止同一项目的多个保存操作并发写入。
- * 当某个项目正在保存时，后续的保存请求会被跳过（最新数据会被下一次保存覆盖）。
+ * 当某个项目正在保存时，后续保存按调用顺序等待，确保最新状态不会丢失。
  */
 const saveLocks = new Map<string, Promise<void>>()
 
 /**
  * 获取指定项目的写入锁。
- * 如果已有保存操作在进行中，返回 null 表示跳过本次保存。
- * 否则返回一个 release 函数，调用后释放锁。
+ * 如果已有保存操作在进行中，等待它释放后再获取锁。
  */
-function acquireSaveLock(projectPath: string): (() => void) | null {
-  if (saveLocks.has(projectPath)) {
-    console.warn(`persist: 项目 ${projectPath} 正在保存中，跳过本次保存`)
-    return null
+async function acquireSaveLock(projectPath: string): Promise<() => void> {
+  while (saveLocks.has(projectPath)) {
+    await saveLocks.get(projectPath)
   }
   let release: () => void = () => {}
   const lock = new Promise<void>((resolve) => {
@@ -75,8 +76,7 @@ async function ensureDir(projectPath: string): Promise<void> {
 
 export async function saveReviewItems(projectPath: string, items: ReviewItem[]): Promise<void> {
   const pp = normalizePath(projectPath)
-  const release = acquireSaveLock(`review:${pp}`)
-  if (!release) return // 已有保存操作在进行中，跳过
+  const release = await acquireSaveLock(`review:${pp}`)
   try {
     await ensureDir(pp)
     await withRetry(
@@ -101,6 +101,22 @@ export async function loadReviewItems(projectPath: string): Promise<ReviewItem[]
 interface PersistedChatData {
   conversations: Conversation[]
   messages: DisplayMessage[]
+  runStates: ConversationRunStates
+}
+
+interface ConversationManifest {
+  conversations: Conversation[]
+  runStates?: ConversationRunStates
+}
+
+function normalizeConversationRunStates(
+  conversations: Conversation[],
+  runStates: ConversationRunStates | undefined,
+): ConversationRunStates {
+  const conversationIds = new Set(conversations.map((conversation) => conversation.id))
+  return Object.fromEntries(
+    Object.entries(normalizeLoadedRunStates(runStates)).filter(([id]) => conversationIds.has(id)),
+  )
 }
 
 function normalizeConversation(conv: Conversation): Conversation {
@@ -111,6 +127,7 @@ function normalizeConversation(conv: Conversation): Conversation {
       conv.selectedDeAiSkillId === null || typeof conv.selectedDeAiSkillId === "string"
         ? conv.selectedDeAiSkillId
         : undefined,
+    contextSummary: normalizeSessionContextSummary(conv.contextSummary),
   }
 }
 
@@ -118,11 +135,11 @@ export async function saveChatHistory(
   projectPath: string,
   conversations: Conversation[],
   messages: DisplayMessage[],
-  maxMessages?: number
+  maxMessages?: number,
+  runStates: ConversationRunStates = {},
 ): Promise<void> {
   const pp = normalizePath(projectPath)
-  const release = acquireSaveLock(`chat:${pp}`)
-  if (!release) return // 已有保存操作在进行中，跳过
+  const release = await acquireSaveLock(`chat:${pp}`)
   try {
     await ensureDir(pp)
 
@@ -130,17 +147,20 @@ export async function saveChatHistory(
     await withRetry(
       () => writeFile(
         `${pp}/.qmai/conversations.json`,
-        JSON.stringify(conversations, null, 2),
+        JSON.stringify({ conversations, runStates }, null, 2),
       ),
       "saveChatHistory(conversations)",
     )
 
     // Save each conversation's messages separately
-    const byConversation = new Map<string, DisplayMessage[]>()
+    const byConversation = new Map<string, DisplayMessage[]>(
+      conversations.map((conversation) => [conversation.id, []]),
+    )
+    const persistedSnapshotIds = new Set<string>()
     for (const msg of messages) {
-      const list = byConversation.get(msg.conversationId) ?? []
+      const list = byConversation.get(msg.conversationId)
+      if (!list) continue
       list.push(msg)
-      byConversation.set(msg.conversationId, list)
     }
 
     for (const [convId, msgs] of byConversation) {
@@ -153,6 +173,17 @@ export async function saveChatHistory(
         ),
         `saveChatHistory(chat:${convId})`,
       )
+      for (const message of toSave) {
+        if (message.contextHubSnapshot?.surface === "ai-chat") {
+          persistedSnapshotIds.add(message.contextHubSnapshot.id)
+        }
+      }
+    }
+
+    try {
+      await getContextHub(pp).pruneSnapshots("ai-chat", [...persistedSnapshotIds])
+    } catch {
+      // Snapshot cleanup is optional and must not make chat history saving fail.
     }
   } finally {
     release()
@@ -164,7 +195,15 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
   try {
     // Try new format: separate files per conversation
     const convContent = await readFile(`${pp}/.qmai/conversations.json`)
-    const conversations = safeParseArray<Conversation>(convContent, "conversations").map(normalizeConversation)
+    const parsedManifest = JSON.parse(convContent) as Conversation[] | ConversationManifest
+    const rawConversations = Array.isArray(parsedManifest)
+      ? parsedManifest
+      : Array.isArray(parsedManifest?.conversations)
+        ? parsedManifest.conversations
+        : []
+    const conversations = rawConversations.map(normalizeConversation)
+    const rawRunStates = Array.isArray(parsedManifest) ? {} : parsedManifest.runStates
+    const runStates = normalizeConversationRunStates(conversations, rawRunStates)
 
     const allMessages: DisplayMessage[] = []
     for (const conv of conversations) {
@@ -177,7 +216,7 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
       }
     }
 
-    return { conversations, messages: allMessages }
+    return { conversations, messages: allMessages, runStates }
   } catch {
     // Fall back to old format
     try {
@@ -199,23 +238,25 @@ export async function loadChatHistory(projectPath: string): Promise<PersistedCha
           ...m,
           conversationId: "default",
         }))
-        return { conversations: [defaultConv], messages: migratedMessages }
+        return { conversations: [defaultConv], messages: migratedMessages, runStates: {} }
       }
 
       // Old combined format
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const data = parsed as PersistedChatData
+        const conversations = Array.isArray(data.conversations)
+          ? data.conversations.map(normalizeConversation)
+          : []
         return {
-          conversations: Array.isArray(data.conversations)
-            ? data.conversations.map(normalizeConversation)
-            : [],
+          conversations,
           messages: Array.isArray(data.messages) ? data.messages : [],
+          runStates: normalizeConversationRunStates(conversations, data.runStates),
         }
       }
       console.warn("persist: 聊天历史数据格式无效")
-      return { conversations: [], messages: [] }
+      return { conversations: [], messages: [], runStates: {} }
     } catch {
-      return { conversations: [], messages: [] }
+      return { conversations: [], messages: [], runStates: {} }
     }
   }
 }

@@ -4,9 +4,10 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { isTauri, pickDirectory } from "@/lib/platform"
 import { useChatStore } from "@/stores/chat-store"
-import { openProject, fileExists } from "@/commands/fs"
-import { getLastProject, saveLastProject, loadLlmConfig, loadAiChatModel, loadDefaultLlmModel, loadLanguage, loadEmbeddingConfig, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadNovelMode, loadNovelConfig, loadRevisionFeedbackWindowConfig, loadTheme, loadMaxHistoryMessages, loadUiFontFamily, loadVisualStyle, saveLlmConfig, loadLastReadChapter } from "@/lib/project-store"
+import { openProject, fileExists, listDirectory, readFile } from "@/commands/fs"
+import { getLastProject, saveLastProject, loadLlmConfig, loadAiChatModel, loadDefaultLlmModel, loadLanguage, loadEmbeddingConfig, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadNovelMode, loadNovelConfig, loadRevisionFeedbackWindowConfig, loadTheme, loadMaxHistoryMessages, loadUiFontFamily, loadVisualStyle, saveLlmConfig, loadLastReadChapter, loadMcpConfig } from "@/lib/project-store"
 import { loadReviewItems, loadChatHistory, saveChatHistory, saveReviewItems } from "@/lib/persist"
+import { initializeAiOutlineModelFromStorage } from "@/lib/ai-outline-model-initialization"
 import { setupAutoSave, teardownAutoSave } from "@/lib/auto-save"
 import { checkForAppUpdate } from "@/lib/app-updater"
 import { initAnalytics } from "@/lib/analytics"
@@ -23,6 +24,9 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme-utils"
 import { applyUiFontFamily } from "@/lib/font-settings"
 import { applyVisualStyle } from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
+import { countChapterBodyWords } from "@/lib/chapter-word-count"
+import { flattenMdFiles } from "@/lib/novel/chapter-utils"
+import { runUserMemoryMaintenance } from "@/lib/user-memory/maintenance"
 
 function App() {
   const project = useWikiStore((s) => s.project)
@@ -35,8 +39,14 @@ function App() {
   const visualStyle = useWikiStore((s) => s.visualStyle)
   const communitySummaryError = useWikiStore((s) => s.communitySummaryError)
   const setCommunitySummaryError = useWikiStore((s) => s.setCommunitySummaryError)
+  const dataVersion = useWikiStore((s) => s.dataVersion)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [appTitleTotalWordCount, setAppTitleTotalWordCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    runUserMemoryMaintenance()
+  }, [])
 
   function isCurrentProject(proj: WikiProject): boolean {
     const current = useWikiStore.getState().project
@@ -57,6 +67,7 @@ function App() {
     try {
       const savedChat = await loadChatHistory(proj.path)
       if (!isCurrentProject(proj)) return
+      useChatStore.getState().setLoadedRunStates(savedChat.runStates)
       if (savedChat.conversations.length > 0) {
         useChatStore.getState().setConversations(savedChat.conversations)
         useChatStore.getState().setMessages(savedChat.messages)
@@ -193,6 +204,7 @@ function App() {
                 chatState.conversations,
                 chatState.messages,
                 chatState.maxHistoryMessages,
+                chatState.runStates,
               ).catch((err) => console.error("关闭前保存聊天历史失败:", err))
             }
             const reviewState = useReviewStore.getState()
@@ -243,6 +255,7 @@ function App() {
         if (savedAiChatModel) {
           useWikiStore.getState().setAiChatModel(savedAiChatModel)
         }
+        await initializeAiOutlineModelFromStorage()
         const savedDefaultLlmModel = await loadDefaultLlmModel()
         if (savedDefaultLlmModel) {
           useWikiStore.getState().setDefaultLlmModel(savedDefaultLlmModel)
@@ -274,6 +287,8 @@ function App() {
         if (savedEmbeddingConfig) {
           useWikiStore.getState().setEmbeddingConfig(savedEmbeddingConfig)
         }
+        const savedMcpConfig = await loadMcpConfig()
+        useWikiStore.getState().setMcpConfig(savedMcpConfig)
         const savedProxy = await loadProxyConfig()
         if (savedProxy) {
           useWikiStore.getState().setProxyConfig(savedProxy)
@@ -327,14 +342,46 @@ function App() {
   }, [theme])
 
   useEffect(() => {
-    const title = formatAppTitle(project?.name)
+    if (!project?.path) {
+      setAppTitleTotalWordCount(null)
+      return
+    }
+
+    let cancelled = false
+
+    const loadAppTitleTotalWordCount = async () => {
+      try {
+        const chapterNodes = await listDirectory(`${normalizePath(project.path)}/wiki/chapters`)
+        const files = flattenMdFiles(chapterNodes)
+        const contents = await Promise.all(
+          files.map((file) => readFile(file.path).catch(() => "")),
+        )
+        const total = contents.reduce(
+          (sum, markdown) => sum + countChapterBodyWords(markdown),
+          0,
+        )
+        if (!cancelled) setAppTitleTotalWordCount(total)
+      } catch {
+        if (!cancelled) setAppTitleTotalWordCount(null)
+      }
+    }
+
+    void loadAppTitleTotalWordCount()
+
+    return () => {
+      cancelled = true
+    }
+  }, [dataVersion, project?.path])
+
+  useEffect(() => {
+    const title = formatAppTitle(project?.name, appTitleTotalWordCount)
     document.title = title
     if (isTauri()) {
       import("@tauri-apps/api/window")
         .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
         .catch(() => {})
     }
-  }, [project?.name])
+  }, [appTitleTotalWordCount, project?.name])
 
   async function handleProjectOpened(proj: WikiProject) {
     await resetProjectState()

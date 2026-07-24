@@ -114,6 +114,9 @@ describe("SkillLibraryView", () => {
     expect(container.querySelector('[data-testid="skill-library-view"]')).not.toBeNull()
     expect(container.textContent).toContain("综合去AI味")
     expect(container.querySelector<HTMLInputElement>('[data-testid="skill-name-input"]')?.value).toBe("综合去AI味")
+    expect(container.textContent).toContain("类型：风格")
+    expect(container.textContent).toContain("阶段：改写、输出")
+    expect(container.textContent).toContain("模式：快速、标准、严格")
 
     cleanup(root, container)
   })
@@ -300,7 +303,7 @@ describe("SkillLibraryView", () => {
     cleanup(root, container)
   })
 
-  it("marks modified skills in the list and detail header", async () => {
+  it("does not show modified badges after saving skill changes", async () => {
     const { container, root } = await renderLibrary()
     const nameInput = container.querySelector<HTMLInputElement>('[data-testid="skill-name-input"]')
     const contentInput = container.querySelector<HTMLTextAreaElement>('[data-testid="skill-content-input"]')
@@ -313,8 +316,8 @@ describe("SkillLibraryView", () => {
       container.querySelector<HTMLButtonElement>('[data-testid="skill-save-button"]')?.click()
     })
 
-    expect(container.querySelectorAll('[data-testid="skill-modified-badge"]').length).toBeGreaterThanOrEqual(2)
-    expect(container.textContent).toContain("已修改")
+    expect(container.querySelectorAll('[data-testid="skill-modified-badge"]').length).toBe(0)
+    expect(container.textContent).not.toContain("已修改")
 
     cleanup(root, container)
   })

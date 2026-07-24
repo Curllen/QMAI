@@ -1,7 +1,7 @@
 import { create } from "zustand"
 
-export type OutlineTaskStatus = "generating" | "generated" | "ingesting" | "done" | "error"
-export type OutlineTaskKind = "outline" | "refine" | "ingest"
+export type OutlineTaskStatus = "ingesting" | "done" | "error" | "generated"
+export type OutlineTaskKind = "ingest" | "generate" | "refine"
 
 export interface OutlineGenerationTask {
   id: string
@@ -66,7 +66,7 @@ let counter = 0
 
 export const useOutlineGenerationStore = create<OutlineGenerationState>((set) => ({
   tasks: [],
-  panelOpen: false,
+  panelOpen: true,
   setPanelOpen: (open) => set({ panelOpen: open }),
   createTask: (input) => {
     const id = `outline-task-${++counter}`
@@ -76,7 +76,7 @@ export const useOutlineGenerationStore = create<OutlineGenerationState>((set) =>
         {
           id,
           ...input,
-          kind: input.kind ?? "outline",
+          kind: input.kind ?? "ingest",
           genre: input.genre ?? "",
           scale: input.scale ?? "",
           premise: input.premise ?? "",
@@ -92,7 +92,7 @@ export const useOutlineGenerationStore = create<OutlineGenerationState>((set) =>
           writeMode: input.writeMode ?? null,
           targetPath: input.targetPath ?? null,
           outlinePath: input.outlinePath ?? null,
-          status: input.status ?? "generating",
+          status: input.status ?? "ingesting",
           message: input.message ?? "",
           error: input.error ?? null,
           createdAt: now,

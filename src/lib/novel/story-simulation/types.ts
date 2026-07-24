@@ -68,6 +68,68 @@ export interface TimelineEvent {
   timestamp: string
 }
 
+export interface RumorEvent {
+  id: string
+  round: number
+  nodeIndex: number
+  sourceId: string | null
+  content: string
+  distortion: number
+  observableBy: string[]
+  believedBy: string[]
+  /** 已验证此传闻的角色 ID 列表 */
+  verifiedBy: string[]
+  timestamp: string
+  /** 父传闻 ID */
+  parentId?: string
+  /** 传播者角色 ID */
+  spreadBy?: string
+  /** 传播发生的轮次 */
+  spreadRound?: number
+  /** 传播代数，原始传闻为 0 */
+  generation: number
+}
+
+export interface SimulationDebugVisibleEvent {
+  id: string
+  actorName: string
+  actionType: AgentActionType
+  content: string
+  round: number
+  nodeIndex: number
+}
+
+export interface SimulationDebugAgent {
+  agentId: string
+  agentName: string
+  visibleEventCount?: number
+  recentEvents?: SimulationDebugVisibleEvent[]
+  reason?: string
+}
+
+export interface SimulationDebugTrace {
+  id: string
+  type: "round-plan" | "event-recorded"
+  nodeIndex: number
+  nodeTitle: string
+  round: number
+  strategy?: "all-agents" | "subset" | "none"
+  candidateAgents: SimulationDebugAgent[]
+  selectedAgents: SimulationDebugAgent[]
+  blackboard: {
+    allAgentCount: number
+    activeAgentCount: number
+    totalEventCount: number
+    publicEventCount: number
+    rumorCount: number
+  }
+  visibilityByAgent: SimulationDebugAgent[]
+  latestEvent?: SimulationDebugVisibleEvent
+  rumors: RumorEvent[]
+  activeAgents: Map<string, NovelAgent>
+  timestamp: string
+}
+
 // ── Agent 记忆 ──
 export interface AgentMemory {
   /** 已观察到的事件 ID 列表 */
@@ -78,6 +140,8 @@ export interface AgentMemory {
   sentiments: Map<string, number>
   /** 最近决策记录 */
   recentDecisions: string[]
+  /** 传闻可信度，范围 0-1，默认 0.5 */
+  rumorCredibility: number
 }
 
 // ── Agent ──
@@ -112,11 +176,26 @@ export interface AgentRelation {
 }
 
 // ── 仿真状态（新引擎核心状态） ──
+export interface StagedEvent {
+  id: string
+  text: string
+  stage: "setup" | "rising" | "climax" | "resolution"
+}
+
+export interface StagedEventPool {
+  byStage: Record<"setup" | "rising" | "climax" | "resolution", StagedEvent[]>
+  all: StagedEvent[]
+}
+
 export interface SimulationState {
   currentRound: number
   timelineEvents: TimelineEvent[]
   activeAgents: Map<string, NovelAgent>
   worldState: Record<string, unknown>
+  dynamicEventPool?: string[]
+  usedEventIndices?: Set<number>
+  directorEnabled: boolean
+  nextNodeInjectionMap: Map<number, string>
 }
 
 // ── Agent 对话（采访/私聊） ──
@@ -225,6 +304,14 @@ export interface SimulationReport {
   createdAt: string
 }
 
+export type SimulationResultStatus = "complete" | "partial" | "cancelled"
+
+export interface SimulationResumePoint {
+  nextNodeIndex: number
+  nextRound: number
+  timelineEvents: TimelineEvent[]
+}
+
 export interface CharacterAnalysis {
   characterId: string
   name: string
@@ -287,6 +374,10 @@ export interface SimulationInput {
   injectionEvent?: string
   /** 每个节点的仿真轮数，不传则根据字数自动计算 */
   maxRoundsPerNode?: number
+  /** LLM 预生成的动态事件池（支持字符串数组或分阶段池） */
+  dynamicEventPool?: string[] | StagedEventPool
+  /** 从中断位置继续推演 */
+  resume?: SimulationResumePoint
 }
 
 // ── 仿真配置 ──
@@ -323,6 +414,8 @@ export interface ModeConfig {
   agentSubsetRatio: number
   /** 是否强制按节点目标推进 */
   strictNodeProgression: boolean
+  /** 是否启用导演 Agent */
+  directorEnabled?: boolean
 }
 
 const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
@@ -333,6 +426,7 @@ const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
     randomEventChance: 0.1,
     agentSubsetRatio: 1,
     strictNodeProgression: true,
+    directorEnabled: false,
   },
   "free-emergence": {
     roundsMultiplier: 1.5,
@@ -341,6 +435,7 @@ const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
     randomEventChance: 0.25,
     agentSubsetRatio: 0.7,
     strictNodeProgression: false,
+    directorEnabled: false,
   },
   "decision-tree": {
     roundsMultiplier: 1.0,
@@ -349,6 +444,7 @@ const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
     randomEventChance: 0.15,
     agentSubsetRatio: 0.5,
     strictNodeProgression: true,
+    directorEnabled: false,
   },
   hybrid: {
     roundsMultiplier: 1.2,
@@ -357,6 +453,7 @@ const MODE_CONFIGS: Record<SimulationMode, ModeConfig> = {
     randomEventChance: 0.2,
     agentSubsetRatio: 0.85,
     strictNodeProgression: false,
+    directorEnabled: false,
   },
 }
 
@@ -389,6 +486,63 @@ export interface ModeVisualInfo {
   color: string
   /** emoji图标 */
   icon: string
+}
+
+// ── 导演评价 ──
+
+export interface DirectorScore {
+  tension: number
+  pace: number
+  characterUtilization: number
+  characterArc: number
+  infoDensity: number
+  emotionalResonance: number
+  logicConsistency: number
+}
+
+export interface DirectorEvaluation {
+  scores: DirectorScore
+  totalScore: number
+  highlights: string[]
+  issues: string[]
+  suggestion: string
+  shouldInjectEvent: boolean
+  injectEvent?: string
+}
+
+// ── 仿真分支 ──
+
+export interface SimulationHistoryEntry {
+  round: number
+  nodeIndex: number
+  nodeTitle: string
+  agentStates: Record<string, {
+    name: string
+    sentiments: [string, number][]
+    knownSecrets: string[]
+    observedEvents: string[]
+  }>
+  eventCount: number
+  rumorCount: number
+}
+
+export interface SimulationBranch {
+  id: string
+  name: string
+  frameworkId: string
+  mode: SimulationMode
+  createdAt: string
+  timelineEvents: TimelineEvent[]
+  rumors: RumorEvent[]
+  finalAgentSnapshots: { agentId: string; name: string; knownSecrets: string[]; sentiments: [string, number][] }[]
+  directorEvaluations: DirectorEvaluation[]
+  overallScore: number
+  scoreDetails: {
+    avgDirectorScore: number
+    eventCount: number
+    characterDiversity: number
+    plotProgression: number
+  }
 }
 
 export const MODE_VISUAL_INFO: Record<SimulationMode, ModeVisualInfo> = {

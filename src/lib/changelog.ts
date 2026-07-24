@@ -7,6 +7,136 @@ export interface ChangelogEntry {
   };
 }
 
+const THREE_POINT_ZERO_ONE_CHANGELOG: ChangelogEntry = {
+  version: "3.0.1",
+  date: "2026-07-23",
+  highlights: {
+    en: [],
+    zh: [
+      "【模型选择修复】修复 AI 对话框、AI 大纲和设置中无法选择模型的问题，恢复正常使用。",
+      "【下拉框定位修复】修复模型选择下拉框位置偏移的问题，改为精准定位、自动判断上下翻转，滚动时同步更新位置。",
+      "【AI 大纲修改对比】新增共享差异工作区，支持源码对比、渲染预览、行数统计和候选稿编辑；单次选区去 AI 味与批量/章节去 AI 味审核统一接入。",
+      "【去 AI 味升级】编辑后的候选稿支持替换正文、另存草稿和批量确认写回，操作更灵活。",
+      "【大纲保存修复】修复 AI 大纲保存后内容包含格式错误（JSON 格式块）的问题，保存内容更加干净。",
+      "【大纲保存修复】修复 AI 大纲保存内容包含前置分析等不相关文本的问题。",
+      "【大纲标题优化】优化大纲标题提取，无需再次调用模型，直接从内容中智能识别并提取标题；支持章纲、卷纲、人物设定等 7 种类型自动识别。",
+      "【大纲保存优化】普通大纲保存改用文件夹确认弹窗，人物小传保留角色勾选确认流程；大纲保存统一使用纯 Markdown 格式。",
+    ],
+  },
+};
+
+const THREE_POINT_ZERO_ZERO_CHANGELOG: ChangelogEntry = {
+  version: "3.0.0",
+  date: "2026-07-22",
+  highlights: {
+    en: [
+      "【AI Chat Overhaul】Real-time streaming with typewriter effect; thinking process is now visible in real-time (no more black box); tool call chain is fully visualized showing what tools AI used and their execution status",
+      "【Plan Mode】AI generates a writing plan (chapter goals, references read, missing info, execution steps) before writing; you can confirm, modify, or skip the plan; AI can only read during planning, no premature writes",
+      "【@Reference System】Type @ in the input box to reference 7 types of content: chapters, memories, outlines, simulations, skills, chat history, and outline history; references appear as colored tags; AI automatically reads referenced content",
+      "【20+ Built-in Tools】AI now has real tool-use capability with 6 categories: read/list/search/write/action/virtual tools; write operations require user confirmation by default; 11 processing stages from task recognition to post-write review",
+      "【AI Outline Rewrite】Rebuilt as a 14-stage multi-agent workflow: intent analysis → info sufficiency check → plan → user confirm → 5 sub-agents (outline/topic/character/setting/foreshadowing) collaborate in parallel → merge → quality check → preview → classified save",
+      "【Outline Quality Loop】Auto quality check after generation: chapter outlines are verified for goals/references/boundaries/scene plans/foreshadowing/acceptance criteria/risk fallback; issues get fix suggestions with one-click repair",
+      "【Smart Save Classification】AI-generated content auto-sorts into 7 folders: outlines/volume outlines/chapter outlines/character profiles/world settings/foreshadowing/organizations; pre-save review panel lets you inspect diffs and choose which files to keep",
+      "【De-AI Upgrade】Batch parallel processing for multiple chapters (1-5 concurrent, default 3); new three-column review panel (chapter list / original / revised); breakpoint resume - task progress persists across app restarts",
+      "【Brand Identity】Complete 'Cangzhu' visual system: signature teal-green color, redesigned welcome page with brand mark, differentiated chat bubbles, refined sidebar with brand-color hover effects, reduced saturation for a premium feel",
+      "【User Memory System】AI learns and remembers your preferences across 8 categories (output style/writing/outline/workflow/interaction/format/constraints/manual) with 3 scopes (global/project/session); auto-extracted from conversations with sensitive info filtering",
+      "【Unified Export Center】Export chapters/outlines/dismantling/simulations/soul works to TXT or DOCX; Word document generation is fully self-implemented with zero external dependencies (no Word install needed); supports Chinese-numeral chapter sorting",
+      "【Story Simulation V2】Multi-agent blackboard collaboration with character perspective isolation (no god-mode knowledge); director agent evaluates plot quality across 7 dimensions (tension/pacing/character utilization/arc/info density/emotion/logic); rumor system for independent information spread",
+      "【External Tools (MCP)】Connect to external tool services to extend AI capabilities; read tools auto-execute, write tools require confirmation, delete tools are disabled by default; one-click connection test in settings",
+      "【Dismantling Library】Reworked analysis pipeline with story framework extraction and management UI; batch import with resume support; improved batch task management and character selection; auto-cleanup after library deletion",
+      "【Chapter Validation】Auto validation after chapter completion: character cognition deviation, state continuity, foreshadowing detection; deviation identification and arbitration mechanism; draft validation skill",
+      "【Other Improvements】ZIP backup with selective restore (partial import without overwriting unselected content); auto-prevent sleep during writing; resume unfinished chapters; improved character recognition supporting various AI output formats",
+    ],
+    zh: [
+      "【AI 对话重大升级】逐字流式输出+打字机效果，不再苦等；思考过程实时可见，AI 不再是黑盒；工具调用链全程可视化——看得到 AI 读了什么、搜了什么、写了什么、每步执行状态",
+      "【计划模式】写正文前 AI 先生成写作计划：本章目标、已读依据、还缺什么资料、执行步骤；你可以确认执行、修改计划或跳过；计划阶段 AI 只能读取资料，不会提前写入",
+      "【@ 引用系统】输入 @ 即可引用 7 类内容：章节正文、记忆库、大纲、剧情推演、技能库、AI 对话历史、AI 大纲历史；引用显示为彩色标签按类型区分；AI 自动读取引用内容，无需复制粘贴",
+      "【20+ 内置工具】AI 具备真正的工具调用能力，分 6 大类：读取类/列表类/搜索类/写入类/动作类/虚拟类；写入操作默认需确认防误改；11 个处理环节从任务识别到写后检查完整覆盖；支持随时取消",
+      "【AI 大纲全面重构】从单次生成升级为 14 阶段多智能体工作流：意图分析→信息检查→生成计划→用户确认→5 个子智能体（大纲/专题/角色/设定/伏笔）并行协作→结果合并→质量检查→预览→分类保存",
+      "【大纲质量检查闭环】生成后自动质检：章纲检查目标/依据/边界/场景计划/伏笔/验收标准/风险兜底是否完整；不通过给出具体问题和修复建议，支持一键按建议修复",
+      "【智能分类保存】旧版本全部存同一目录；新版本 AI 生成内容自动分类保存到 7 个文件夹：大纲/卷纲/章纲/人物小传/设定/伏笔/组织；保存前弹出审核面板，可逐个勾选、查看差异对比",
+      "【去 AI 味大升级】支持批量选择多章节并行去 AI 味（1-5 章并发，默认 3 章）；全新三栏审核面板（左侧章节列表/中间原文/右侧修改后）；断点恢复——任务进度自动保存，重启软件不丢失",
+      "【品牌视觉系统化】注入苍竹品牌视觉：青绿色主色调，欢迎页品牌化（标志+渐变标题+卡片列表），聊天面板品牌色淡底+消息气泡区分，侧栏优化+品牌色悬停，整体降饱和度提升质感",
+      "【用户记忆系统】AI 会记住你的写作偏好：8 类记忆（输出风格/写作偏好/大纲偏好/工作流/交互/格式/约束/手动），3 级作用域（全局/项目/会话）；对话中自动提取偏好，过滤敏感信息，相似记忆自动合并",
+      "【统一导出中心】支持章节/大纲/拆书库/剧情推演/灵魂作品导出为 TXT 或 Word 文档；Word 生成完全自研实现，无需安装 Word 或任何外部依赖；支持中文数字章节排序（如「第二十三章」）",
+      "【剧情推演二期升级】多智能体黑板协作——角色不开上帝视角，只知道自己该知道的信息；导演智能体从紧张感/节奏/角色利用率/角色弧光/信息密度/情感共鸣/逻辑一致性 7 个维度评估剧情；谣言系统让信息在角色间独立传播",
+      "【外部工具连接(MCP)】支持连接外部工具服务扩展 AI 能力；读取类工具自动执行、写入类工具需确认、删除类工具默认禁用；设置页提供一键测试连接状态",
+      "【拆书库重做】拆书分析流水线重做，新增剧情框架提取功能和管理界面；支持批量导入和断点继续；批量任务管理与角色选择优化；删除书库后自动清理相关状态",
+      "【章节自动校验】章节完成后自动校验：角色认知偏差、状态承接、伏笔检测；偏差识别和仲裁机制；草稿校验技能",
+      "【更多体验优化】ZIP 备份支持选择备份内容+部分导入恢复（不覆盖未选内容）；正文生成期间自动防止电脑休眠；支持未完成章节续写；角色识别规则放宽，支持「张三（男主）」等多种 AI 输出格式",
+    ],
+  },
+};
+
+const TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG: ChangelogEntry = {
+  version: "2.2.37",
+  date: "2026-07-15",
+  highlights: {
+    en: [
+      "AI Chat and AI Outline now read real provider cache usage from OpenAI, Anthropic, Gemini, and Responses API results.",
+      "Provider usage is aggregated across Agent tool rounds, retries, and parallel outline agents, then stored in the current context snapshot.",
+      "Cache hit, refresh, and failure values are now labeled as per-request cache events, while estimated Token savings are explicitly identified as context compression estimates.",
+      "Stable context cores now remain reusable whenever their final prefix bytes are unchanged, avoiding false refreshes caused only by unrelated source revisions.",
+      "The interface reports confirmed cache hits only when the provider returns cache details, and otherwise states that a stable prefix was sent for provider-side reuse.",
+    ],
+    zh: [
+      "AI 对话与 AI 大纲现已读取 OpenAI、Anthropic、Gemini 和 Responses API 返回的供应商真实缓存用量。",
+      "Agent 工具轮次、失败重试和大纲多 Agent 调用会统一累计供应商用量，并写入当前上下文快照。",
+      "命中、刷新和失败明确显示为本轮缓存事件；预计节省 Token 明确标注为上下文压缩预计减少。",
+      "稳定核心在最终前缀字节不变时继续复用，避免仅因无关资料修订而错误刷新。",
+      "只有供应商返回缓存明细时才显示确认命中；否则明确提示已发送稳定前缀，最终以供应商返回为准。",
+    ],
+  },
+};
+
+const TWO_POINT_TWO_THIRTY_SIX_CHANGELOG: ChangelogEntry = {
+  version: "2.2.36",
+  date: "2026-07-15",
+  highlights: {
+    en: [
+      "Confirmed chapter plans now participate in context retrieval and de-AI Skill selection, and resume checkpoints preserve both the plan and execution contract.",
+      "Plan and execution repairs are accepted only after meaningful content changes and a successful compliance recheck, preventing false success reports.",
+      "Strict review now reports unavailable review models as failures and cancels sibling chunk requests when one review chunk fails.",
+      "De-AI review tasks stay isolated by project and case-sensitive path, while Save as Draft uses no-overwrite file creation and cannot refresh another project's file tree.",
+      "Overlapping chat and review saves are queued so the newest cleared or updated state is not lost.",
+      "Reduced initial frontend loading by lazy-loading optional views and separating Sigma, graph, language, and editor vendor bundles.",
+    ],
+    zh: [
+      "确认计划现在会参与上下文检索和去 AI 味 Skill 选择，恢复检查点同时保留计划与执行清单。",
+      "计划返修和执行清单返修只有在正文发生有效变化且复检通过后才会采用，避免错误提示返修成功。",
+      "严格审稿会把审稿模型不可用明确报告为失败，并在任一分段失败时取消同批其他审稿请求。",
+      "去 AI 味审查任务按项目和大小写敏感路径隔离；另存草稿采用不覆盖写入，且不会把旧项目文件树写入新项目界面。",
+      "聊天与审查的并发保存改为排队执行，清空或更新后的最新状态不会再被丢弃。",
+      "搜索、技能库等可选页面改为按需加载，并拆分图谱、语言处理和编辑器依赖，降低首次加载开销。",
+    ],
+  },
+};
+
+const TWO_POINT_TWO_THIRTY_FIVE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.35",
+  date: "2026-07-15",
+  highlights: {
+    en: [
+      "Added a project-level context hub shared by AI Chat and AI Outline, with reusable source caches, session summaries, automatic invalidation, and inspectable cache snapshots.",
+      "Restored the full AI chapter workflow so fast, standard, and strict modes again route through confirmed plans, execution contracts, compliance checks, execution reports, and targeted repair.",
+      "Fixed multi-chapter de-AI review so background chapter results are actually written before success is shown, and review tasks stay isolated to the current project.",
+      "De-AI regeneration now reuses the originally selected Skill instead of silently falling back to an empty Skill prompt.",
+      "Improved AI Outline auto-save, plan confirmation, scrolling, and responsive panel sizing.",
+      "Removed inaccurate millisecond duration labels from AI Chat and AI Outline execution details.",
+      "Improved update failure guidance with a direct fallback link to the official download site.",
+    ],
+    zh: [
+      "新增项目级上下文中控：AI 对话与 AI 大纲共享资料缓存和会话摘要，支持自动失效、缓存命中统计与完整快照查看。",
+      "恢复完整 AI 章节工作流：快速、标准、严格模式重新接入确认计划、执行契约、履约检查、执行报告和定向返修。",
+      "修复多章节去 AI 味审查未写盘却提示成功的问题，并将审查任务严格隔离到当前项目。",
+      "去 AI 味重新生成会继续使用首次选择的 Skill，不再退回空 Skill 提示词。",
+      "修复 AI 大纲自动保存、计划确认、滚动定位和面板宽度自适应问题。",
+      "移除 AI 对话与 AI 大纲执行详情中不准确的毫秒耗时显示。",
+      "更新检查失败时增加官网下载安装入口。",
+    ],
+  },
+};
+
 const TWO_POINT_TWO_TEN_CHANGELOG: ChangelogEntry = {
   version: "2.2.10",
   date: "2026-06-09",
@@ -78,6 +208,36 @@ const TWO_POINT_TWO_ELEVEN_CHANGELOG: ChangelogEntry = {
   },
 };
 
+const TWO_POINT_TWO_THIRTY_THREE_CHANGELOG: ChangelogEntry = {
+  version: "2.2.33",
+  date: "2026-07-06",
+  highlights: {
+    en: [
+      "Optimized AI chapter plan execution with a user-facing chapter plan, hidden execution contract, and visible execution report.",
+      "Added execution recheck and targeted repair so generated chapters are validated against the plan before returning results.",
+      "Improved chapter plan confirmation and activity output so planning, execution, and verification are easier to trace.",
+      "Stabilized AI chat and related mock coverage after the plan execution workflow changes.",
+      "Added plot framework extraction for the dismantling library, centered on hook, buildup, payoff, and ending hook.",
+      "The visible Book Dismantling Library now has a Story Framework Extraction entry that lets selected chapters generate reusable plot frameworks.",
+      "Chapter outline generation can now receive the selected plot framework as a hard constraint instead of only writing a framework_id.",
+      "Dismantling runs automatically create a basic reusable plot framework when the four required beats are complete.",
+      "Outline previews now highlight the author handcraft zone even when the heading includes explanatory parentheses.",
+      "Cleaned build blockers caused by stale unused imports and variables.",
+    ],
+    zh: [
+      "优化 AI 会话章节计划执行：新增面向用户的本章策划案、隐藏执行契约和可查看的执行报告。",
+      "新增执行复核与定向修复，生成章节会按计划契约检查后再返回结果。",
+      "优化章节计划确认弹窗和执行动态展示，让计划、执行、复核过程更容易追踪。",
+      "修复计划执行优化后的 AI 会话相关 mock 测试回归，提升当前版本稳定性。",
+      "拆书库新增剧情框架提取能力，围绕「钩子、铺垫、爽点、结尾钩子」形成可复用模板。",
+      "当前可见的拆书库顶部新增「故事框架提取」入口，可选择章节生成可复用剧情框架。",
+      "基于剧情框架创建章纲时，会把完整框架内容作为硬约束交给 AI，不再只是写入 framework_id。",
+      "拆文完成后，如果四段框架完整，会自动生成基础剧情框架并写入框架库。",
+      "章纲预览支持高亮「作者手搓留白」区域，标题带括号说明时也能识别。",
+      "清理阻塞构建的过期未使用导入和变量，恢复 typecheck 验证。",
+    ],
+  },
+};
 const TWO_POINT_TWO_THIRTY_TWO_CHANGELOG: ChangelogEntry = {
   version: "2.2.32",
   date: "2026-07-04",
@@ -766,6 +926,18 @@ export const CHANGELOG: ChangelogEntry[] = [
 ];
 
 export function currentVersionChangelog(version: string): ChangelogEntry[] {
+  if (version === THREE_POINT_ZERO_ONE_CHANGELOG.version)
+    return [THREE_POINT_ZERO_ONE_CHANGELOG];
+  if (version === THREE_POINT_ZERO_ZERO_CHANGELOG.version)
+    return [THREE_POINT_ZERO_ZERO_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_SIX_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_SIX_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_FIVE_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_FIVE_CHANGELOG];
+  if (version === TWO_POINT_TWO_THIRTY_THREE_CHANGELOG.version)
+    return [TWO_POINT_TWO_THIRTY_THREE_CHANGELOG];
   if (version === TWO_POINT_TWO_THIRTY_TWO_CHANGELOG.version)
     return [TWO_POINT_TWO_THIRTY_TWO_CHANGELOG];
   if (version === TWO_POINT_TWO_THIRTY_ONE_CHANGELOG.version)
@@ -829,6 +1001,12 @@ export function currentVersionChangelog(version: string): ChangelogEntry[] {
 
 export function allChangelog(): ChangelogEntry[] {
   return [
+    THREE_POINT_ZERO_ONE_CHANGELOG,
+    THREE_POINT_ZERO_ZERO_CHANGELOG,
+    TWO_POINT_TWO_THIRTY_SEVEN_CHANGELOG,
+    TWO_POINT_TWO_THIRTY_SIX_CHANGELOG,
+    TWO_POINT_TWO_THIRTY_FIVE_CHANGELOG,
+    TWO_POINT_TWO_THIRTY_THREE_CHANGELOG,
     TWO_POINT_TWO_THIRTY_TWO_CHANGELOG,
     TWO_POINT_TWO_THIRTY_ONE_CHANGELOG,
     TWO_POINT_TWO_THIRTY_CHANGELOG,
@@ -859,3 +1037,4 @@ export function allChangelog(): ChangelogEntry[] {
     ...CHANGELOG.filter((entry) => !isMergedOnePointRelease(entry.version)),
   ];
 }
+

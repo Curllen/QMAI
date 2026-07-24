@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+﻿import { useEffect, useState } from "react"
 import { X, MessageCircle, Trash2, Clock, User, ChevronRight, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
@@ -19,6 +19,7 @@ export function InterviewHistoryView() {
   const setSavedInterviews = useStorySimulationStore((s) => s.setSavedInterviews)
   const setViewingInterview = useStorySimulationStore((s) => s.setViewingInterview)
   const setError = useStorySimulationStore((s) => s.setError)
+  const setInfoMessage = useStorySimulationStore((s) => s.setInfoMessage)
   const setContinuingInterviewId = useStorySimulationStore((s) => s.setContinuingInterviewId)
   const setActiveChatAgent = useStorySimulationStore((s) => s.setActiveChatAgent)
   const setAgentChatMessages = useStorySimulationStore((s) => s.setAgentChatMessages)
@@ -68,8 +69,8 @@ export function InterviewHistoryView() {
       if (viewingInterview?.id === interview.id) {
         setViewingInterview(null)
       }
-      setError("采访已删除")
-      setTimeout(() => setError(null), 2000)
+      setInfoMessage("采访已删除")
+      setTimeout(() => setInfoMessage(null), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "删除失败")
       setTimeout(() => setError(null), 3000)
@@ -83,8 +84,8 @@ export function InterviewHistoryView() {
     setExporting(interview.id)
     try {
       const filePath = await exportInterview(projectPath, interview)
-      setError(`采访已导出到：${filePath}`)
-      setTimeout(() => setError(null), 5000)
+      setInfoMessage(`采访已导出到：${filePath}`)
+      setTimeout(() => setInfoMessage(null), 5000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "导出失败")
       setTimeout(() => setError(null), 3000)
@@ -139,8 +140,8 @@ export function InterviewHistoryView() {
       setContinuingInterviewId(interview.id)
       setShowInterviewHistory(false)
       setViewingInterview(null)
-      setError("已恢复采访，可继续对话")
-      setTimeout(() => setError(null), 2000)
+      setInfoMessage("已恢复采访，可继续对话")
+      setTimeout(() => setInfoMessage(null), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "恢复失败")
       setTimeout(() => setError(null), 3000)
@@ -194,7 +195,7 @@ export function InterviewHistoryView() {
         </div>
 
         {/* 内容区 */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {viewingInterview ? (
             // 对话详情视图
             <div className="flex flex-1 flex-col">
@@ -245,7 +246,7 @@ export function InterviewHistoryView() {
               </div>
 
               {/* 对话消息 */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
                 <div className="mx-auto max-w-2xl space-y-4">
                   {viewingInterview.session.messages.map((msg) => (
                     <div
@@ -289,7 +290,7 @@ export function InterviewHistoryView() {
                   <p className="text-xs">在推演报告中与角色对话后点击保存即可</p>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
                   <div className="space-y-2">
                     {savedInterviews.map((interview) => (
                       <div

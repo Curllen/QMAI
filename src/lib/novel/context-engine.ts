@@ -1,3 +1,4 @@
+import { resolveContextPackTokenBudget } from "@/lib/context-budget"
 import { listDirectory, readFile } from "@/commands/fs"
 import i18n from "@/i18n"
 import { searchWiki, tokenizeQuery } from "@/lib/search"
@@ -7,33 +8,61 @@ import { parseChapterMeta } from "./chapter-meta"
 import { parseFrontmatter } from "@/lib/frontmatter"
 import { listSnapshots, loadSnapshot, type ChapterSnapshot } from "./chapter-ingest"
 import { buildRevisionDirectives } from "./revision-feedback"
+import { extractChapterOutlineStatus } from "./outline-quality-check"
 import { loadCognitionState, cognitionToContextText } from "./character-cognition"
 import { getChapterVolumes } from "./volume"
-import { buildCharacterAuraContext } from "./character-aura"
 import { isAuthoritativeGenerationPath, isHistoricalProjectionSnippet, novelMixedSearch } from "./search-adapter"
 import { rerankCandidates } from "@/lib/rerank"
 import type { FileNode } from "@/types/wiki"
-import { DataSourceRegistry, type ContextLoadContext } from "./context-data-source"
-import { getAllDataSources } from "./context-data-sources"
+import {
+  DataSourceRegistry,
+  type ContextLoadContext,
+  type DataSourceLoadAdapter,
+} from "./context-data-source"
+import { getAllDataSources, getDataSourcesForCategories } from "./context-data-sources"
+import type { DataSourceCategory } from "./classification"
+import {
+  buildNovelVectorSnippet,
+  selectRelevantNovelVectorResults,
+} from "./vector-relevance"
+import { stripOutlineFrontmatter } from "./outline-markdown"
 
-const SECTION_PRIORITY: Record<string, number> = {
-  "当前任务": 1,
-  "当前章节目标": 2,
-  "项目灵魂": 3,
-  "大纲要求": 4,
-  "禁止违背": 5,
-  "最近剧情摘要": 6,
-  "上一章结尾": 7,
-  "当前人物状态": 8,
-  "角色灵魂": 9,
-  "当前伏笔状态": 10,
-  "时间线": 11,
-  "角色认知状态": 12,
-  "相关地点/组织/物品": 13,
-  "相关记忆检索": 14,
-  "修改反馈": 15,
-  "下一章推进建议": 16,
-  "写作风格": 17,
+const FIELD_PRIORITY: Record<string, number> = {
+  sectionBriefing: 0,
+  task: 1,
+  chapterGoal: 2,
+  mustDo: 3,
+  mustAvoid: 4,
+  soulDoc: 5,
+  outline: 6,
+  recentSummaries: 7,
+  previousChapterEnding: 8,
+  characterStates: 9,
+  characterAuras: 10,
+  foreshadowingStates: 11,
+  recentChapterContents: 12,
+  revisionDirectives: 13,
+  cognitionStates: 14,
+  timeline: 15,
+  relatedSettings: 16,
+  canonRules: 17,
+  nextChapterAdvice: 18,
+  writingStyle: 19,
+  searchResults: 20,
+  graphSearchResults: 21,
+}
+
+export interface TrimResult {
+  prompt: string
+  trimmedFields: string[]
+  partiallyTrimmedField?: {
+    fieldKey: string
+    originalChars: number
+    keptChars: number
+  }
+  trimmedChars: number
+  originalChars: number
+  finalChars: number
 }
 
 export interface ContextPack {
@@ -48,6 +77,7 @@ export interface ContextPack {
   characterAuras: string
   cognitionStates: string
   foreshadowingStates: string
+  sectionBriefing?: string
   timeline: string
   relatedSettings: string
   canonRules: string
@@ -64,6 +94,7 @@ export async function buildContextPack(
   projectPath: string,
   task: string,
   chapterNumber?: number,
+  options?: { categories?: DataSourceCategory[]; loadAdapter?: DataSourceLoadAdapter },
 ): Promise<ContextPack> {
   const pp = normalizePath(projectPath)
   const novelMode = useWikiStore.getState().novelMode
@@ -75,7 +106,7 @@ export async function buildContextPack(
   const context = buildLoadContext(pp, task, chapterNumber)
   
   // 创建数据源注册器并加载所有数据
-  const registry = createDataSourceRegistry()
+  const registry = createDataSourceRegistry(options?.categories, options?.loadAdapter)
   const rawData = await registry.loadAll(context)
   
   // 从原始数据构建上下文包
@@ -109,9 +140,12 @@ function buildLoadContext(
 /**
  * 创建并配置数据源注册器
  */
-function createDataSourceRegistry(): DataSourceRegistry {
-  const registry = new DataSourceRegistry()
-  registry.registerAll(getAllDataSources())
+function createDataSourceRegistry(
+  categories?: DataSourceCategory[],
+  loadAdapter?: DataSourceLoadAdapter,
+): DataSourceRegistry {
+  const registry = new DataSourceRegistry({ loadAdapter })
+  registry.registerAll(categories?.length ? getDataSourcesForCategories(categories) : getAllDataSources())
   
   return registry
 }
@@ -123,11 +157,20 @@ async function buildContextPackFromRawData(
   rawData: Record<string, any>,
   context: ContextLoadContext,
 ): Promise<ContextPack> {
-  // 合并快照数据和降级数据
+  const searchResults = joinNonEmpty([
+    rawData.searchResults || "",
+    rawData.bookAnalysisReferences || "",
+  ], "\n\n")
+  // 合并快照数据和降级数据，优先使用 retrieval 索引
+  const retrievalRecentSummaries = Array.isArray(rawData.retrieval?.recentSummaries)
+    ? rawData.retrieval.recentSummaries
+    : []
   const snapshotRecentSummaries = Array.isArray(rawData.snapshots?.recentSummaries)
     ? rawData.snapshots.recentSummaries
     : []
-  const recentSummaries = snapshotRecentSummaries.length > 0 
+  const recentSummaries = retrievalRecentSummaries.length > 0
+    ? retrievalRecentSummaries
+    : snapshotRecentSummaries.length > 0 
     ? snapshotRecentSummaries 
     : rawData.fallbackRecentSummaries
   const recentChapterContents = Array.isArray(rawData.recentChapterContents)
@@ -137,24 +180,36 @@ async function buildContextPackFromRawData(
   const previousChapterEnding = rawData.snapshots.previousChapterEnding 
     || rawData.fallbackPreviousEnding
   
+  const retrievalCharacterStates = rawData.retrieval?.characterStates || ""
+  const snapshotCharacterStates = rawData.snapshots?.characterStates || ""
   const characterStates = joinNonEmpty([
-    rawData.snapshots.characterStates, 
+    retrievalCharacterStates,
+    snapshotCharacterStates, 
     rawData.fallbackCharacterStates
   ], "\n\n")
   
+  const retrievalTimeline = rawData.retrieval?.timeline || ""
+  const snapshotTimeline = rawData.snapshots?.timeline || ""
   const timeline = joinNonEmpty([
-    rawData.snapshots.timeline, 
+    retrievalTimeline,
+    snapshotTimeline, 
     rawData.fallbackTimeline
   ], "\n\n")
   
+  const retrievalForeshadowingSignals = Array.isArray(rawData.retrieval?.foreshadowingSignals)
+    ? rawData.retrieval.foreshadowingSignals
+    : []
   const snapshotForeshadowingSignals = Array.isArray(rawData.snapshots?.foreshadowingSignals)
     ? rawData.snapshots.foreshadowingSignals
     : []
+  const foreshadowingSignals = retrievalForeshadowingSignals.length > 0
+    ? retrievalForeshadowingSignals
+    : snapshotForeshadowingSignals
   const foreshadowingStates = mergeForeshadowingSignals(
-    snapshotForeshadowingSignals.length > 0 
-      ? snapshotForeshadowingSignals 
+    foreshadowingSignals.length > 0 
+      ? foreshadowingSignals 
       : [rawData.fallbackForeshadowingStates].filter(Boolean),
-    rawData.searchResults,
+    searchResults,
   )
   
   // 构建章节目标
@@ -175,6 +230,7 @@ async function buildContextPackFromRawData(
   const revisionDirectives = buildRevisionDirectives(rawData.revisionFeedback)
   
   // 构建角色氛围上下文（依赖其他数据）
+  const { buildCharacterAuraContext } = await import("./character-aura")
   const characterAuras = await buildCharacterAuraContext(context.projectPath, context.task, {
     matchingText: joinNonEmpty([
       chapterGoal,
@@ -194,6 +250,7 @@ async function buildContextPackFromRawData(
     previousChapterEnding,
     characterStates,
     soulDoc: rawData.soulDoc,
+    sectionBriefing: rawData.sectionBriefing || "",
     characterAuras,
     cognitionStates: rawData.cognitionText,
     foreshadowingStates,
@@ -201,7 +258,7 @@ async function buildContextPackFromRawData(
     relatedSettings: rawData.relatedSettings,
     canonRules: rawData.canonRules,
     writingStyle: rawData.writingStyle,
-    searchResults: rawData.searchResults,
+    searchResults,
     graphSearchResults: rawData.graphSearchResults,
     mustDo: buildMustDo(chapterGoal, previousChapterEnding, foreshadowingStates),
     mustAvoid: buildMustAvoid(rawData.canonRules, timeline, characterStates),
@@ -211,7 +268,7 @@ async function buildContextPackFromRawData(
       previousChapterEnding,
       foreshadowingStates,
       timeline,
-      searchResults: rawData.searchResults,
+      searchResults,
     }),
     revisionDirectives,
   }
@@ -346,6 +403,7 @@ function emptyPack(task: string): ContextPack {
     characterAuras: "",
     cognitionStates: "",
     foreshadowingStates: "",
+    sectionBriefing: "",
     timeline: "",
     relatedSettings: "",
     canonRules: "",
@@ -366,14 +424,22 @@ export async function readOutlineContent(pp: string): Promise<string> {
       const contents = await Promise.all(
         results.map(async (result) => {
           try {
-            return await readFile(result.path)
+            return stripOutlineFrontmatter(await readFile(result.path))
           } catch {
             return ""
           }
         }),
       )
-      return joinNonEmpty(contents, "\n\n---\n\n")
+      return joinNonEmpty(contents, "\n\n")
     }
+  } catch {}
+  try {
+    const tree = await listDirectory(`${pp}/wiki/outlines`)
+    const files = flattenOutlineMarkdownFiles(tree).slice(0, 80)
+    const contents = await Promise.all(
+      files.map(async (file) => stripOutlineFrontmatter(await readFile(file.path)).trim()),
+    )
+    return joinNonEmpty(contents, "\n\n")
   } catch {}
   return ""
 }
@@ -465,7 +531,7 @@ async function readChapterOutlineDirect(pp: string, chapterNumber: number): Prom
 export async function readChapterOutlineContent(pp: string, chapterNumber?: number): Promise<string> {
   if (!chapterNumber) return ""
   const direct = await readChapterOutlineDirect(pp, chapterNumber)
-  if (direct.trim()) return direct
+  if (direct.trim()) return annotateChapterOutlineStatus(direct)
   const queries = [
     `第${chapterNumber}章细纲 outline`,
     `chapter ${chapterNumber} outline`,
@@ -475,11 +541,22 @@ export async function readChapterOutlineContent(pp: string, chapterNumber?: numb
     try {
       const results = await searchWiki(pp, query)
       if (results.length > 0) {
-        return (await readFile(results[0].path)).slice(0, 3000)
+        return annotateChapterOutlineStatus(await readFile(results[0].path)).slice(0, 3000)
       }
     } catch {}
   }
   return ""
+}
+
+export function annotateChapterOutlineStatus(content: string): string {
+  const status = extractChapterOutlineStatus(content)
+  if (status === "已确认") return content
+  const label = status === "未知" ? "未标明当前状态" : `当前状态为「${status}」`
+  return [
+    `【章纲状态提示】该章纲${label}，普通 AI 会话生成正文前应提醒用户确认是否继续使用；不得自行补写或改写章纲。`,
+    "",
+    content,
+  ].join("\n")
 }
 
 // 以下函数已被数据源模式使用，但通过动态导入，TypeScript 无法检测到
@@ -764,7 +841,7 @@ export async function searchRelevantContentUnified(
   }
   const query = queryParts.join(" ")
 
-  const [semanticResults, indexResults, vectorResults] = await Promise.all([
+  const [semanticResults, indexResults] = await Promise.all([
     novelMixedSearch({
       projectPath: pp,
       query,
@@ -778,11 +855,11 @@ export async function searchRelevantContentUnified(
       includeCanon: true,
     }).catch(() => []),
     searchWiki(pp, `关键词索引 向量索引 ${task}`, {
+      includeVector: false,
       rerank: true,
       topK: Math.max(limit, 4),
       rerankPurpose: "用于补充剧情上下文中的索引和记忆条目。",
     }).catch(() => []),
-    runVectorSearchForContext(pp, query, limit).catch(() => []),
   ])
 
   const candidates = [
@@ -800,13 +877,6 @@ export async function searchRelevantContentUnified(
       snippet: result.snippet ?? "",
       source: "index",
     })),
-    ...vectorResults.map((result, index) => ({
-      id: `vector-context:${index}:${result.title}`,
-      path: result.path,
-      title: result.title,
-      snippet: result.snippet,
-      source: "vector_context",
-    })),
   ].filter((item) => {
     const path = typeof (item as { path?: unknown }).path === "string"
       ? (item as { path?: string }).path ?? ""
@@ -816,15 +886,25 @@ export async function searchRelevantContentUnified(
     return isAuthoritativeGenerationPath(path)
   })
 
-  const reranked = await rerankCandidates(query, candidates, {
+  const deduplicatedCandidates = candidates.filter((item, index, all) => {
+    const path = typeof item.path === "string" ? normalizePath(item.path) : ""
+    if (!path) return all.findIndex((candidate) => candidate.id === item.id) === index
+    return all.findIndex((candidate) => (
+      typeof candidate.path === "string" && normalizePath(candidate.path) === path
+    )) === index
+  })
+
+  const reranked = await rerankCandidates(query, deduplicatedCandidates, {
     topK: Math.max(limit * 2, limit),
     purpose: "用于构建小说写作上下文，优先保留最能支撑当前章节任务的记忆、设定、伏笔和正史约束。",
-  }).catch(() => candidates)
+  }).catch(() => deduplicatedCandidates)
 
   const merged: string[] = []
   const seen = new Set<string>()
   for (const result of reranked) {
-    const key = `${result.title}|${result.snippet.slice(0, 50)}`
+    const key = result.path
+      ? normalizePath(result.path)
+      : `${result.title}|${result.snippet.slice(0, 50)}`
     if (seen.has(key)) continue
     seen.add(key)
     merged.push(`- ${result.title}: ${result.snippet}`)
@@ -844,12 +924,13 @@ async function runVectorSearchForContext(
   try {
     const { searchByEmbedding } = await import("@/lib/embedding")
     const vectorResults = await searchByEmbedding(pp, query, embCfg, Math.max(limit * 2, 10))
-    if (vectorResults.length === 0) return []
+    const relevantResults = selectRelevantNovelVectorResults(vectorResults, limit)
+    if (relevantResults.length === 0) return []
 
     const items: { title: string; snippet: string; path: string }[] = []
     const dirs = ["entities", "concepts", "sources", "synthesis", "comparison", "queries"]
 
-    for (const vr of vectorResults.slice(0, limit)) {
+    for (const vr of relevantResults) {
       let found = false
       for (const dir of dirs) {
         const tryPath = `${pp}/wiki/${dir}/${vr.id}.md`
@@ -858,7 +939,12 @@ async function runVectorSearchForContext(
           const title = content.match(/^#\s+(.+)/m)?.[1]?.trim()
             ?? content.match(/^---\ntitle:\s*(.+)/m)?.[1]?.trim()
             ?? vr.id
-          items.push({ title, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
+          const matchedSnippet = buildNovelVectorSnippet(vr)
+          items.push({
+            title,
+            snippet: matchedSnippet || content.slice(0, 300).replace(/\n/g, " "),
+            path: tryPath,
+          })
           found = true
           break
         } catch {}
@@ -867,7 +953,12 @@ async function runVectorSearchForContext(
         const tryPath = `${pp}/wiki/${vr.id}.md`
         try {
           const content = await readFile(tryPath)
-          items.push({ title: vr.id, snippet: content.slice(0, 300).replace(/\n/g, " "), path: tryPath })
+          const matchedSnippet = buildNovelVectorSnippet(vr)
+          items.push({
+            title: vr.id,
+            snippet: matchedSnippet || content.slice(0, 300).replace(/\n/g, " "),
+            path: tryPath,
+          })
         } catch {}
       }
     }
@@ -1000,6 +1091,7 @@ interface FieldConfig {
 }
 
 const FIELD_CONFIGS: FieldConfig[] = [
+  { titleKey: "novel.contextPack.sectionBriefing", fieldKey: "sectionBriefing" },
   { titleKey: "novel.contextPack.currentChapterGoal", fieldKey: "chapterGoal" },
   { titleKey: "novel.contextPack.mustDo.title", fieldKey: "mustDo" },
   { titleKey: "novel.contextPack.mustAvoid.title", fieldKey: "mustAvoid" },
@@ -1022,7 +1114,48 @@ const FIELD_CONFIGS: FieldConfig[] = [
   { titleKey: "novel.contextPack.graphSearchResults", fieldKey: "graphSearchResults" },
 ]
 
-export function contextPackToPrompt(pack: ContextPack, tokenBudget?: number, options?: { excludeOutline?: boolean }): string {
+export function contextPackToPrompt(
+  pack: ContextPack,
+  tokenBudget?: number,
+  options?: { excludeOutline?: boolean; maxContextSize?: number },
+): string {
+  const result = trimContextPack(pack, tokenBudget, options)
+  return result.prompt
+}
+
+function trimFieldContent(content: string | string[], maxChars: number): string | string[] {
+  if (Array.isArray(content)) {
+    if (content.length === 0) return content
+    const result: string[] = []
+    let total = 0
+    for (let i = content.length - 1; i >= 0; i--) {
+      const item = content[i]
+      if (total + item.length <= maxChars) {
+        result.unshift(item)
+        total += item.length
+      } else {
+        break
+      }
+    }
+    if (result.length === 0 && content.length > 0) {
+      const last = content[content.length - 1]
+      return [last.slice(0, maxChars) + "..."]
+    }
+    return result
+  } else {
+    if (content.length <= maxChars) return content
+    if (maxChars < 50) return content.slice(0, maxChars) + "..."
+    const headChars = Math.floor(maxChars * 0.4)
+    const tailChars = maxChars - headChars - 5
+    return content.slice(0, headChars) + "\n...\n" + content.slice(-tailChars)
+  }
+}
+
+export function trimContextPack(
+  pack: ContextPack,
+  tokenBudget?: number,
+  options?: { excludeOutline?: boolean; maxContextSize?: number }
+): TrimResult {
   const sections: string[] = []
 
   sections.push(i18n.t("novel.contextPack.title"))
@@ -1031,28 +1164,114 @@ export function contextPackToPrompt(pack: ContextPack, tokenBudget?: number, opt
   sections.push(pack.task)
   sections.push("")
 
-  const fieldSections: { title: string; content: string | string[] }[] = []
+  const fieldData: { fieldKey: string; title: string; content: string | string[]; priority: number; charCount: number }[] = []
   for (const config of FIELD_CONFIGS) {
-    // 如果设置了 excludeOutline，跳过大纲字段
     if (options?.excludeOutline && config.fieldKey === "outline") {
       continue
     }
 
-    const content = pack[config.fieldKey] as string | string[]
+    const rawContent = pack[config.fieldKey as keyof ContextPack] as string | string[] | undefined
+    const content = Array.isArray(rawContent) ? rawContent : rawContent ?? ""
     const hasContent = Array.isArray(content) ? content.length > 0 : Boolean(content)
     if (!hasContent) continue
-    fieldSections.push({ title: i18n.t(config.titleKey), content })
+
+    const charCount = Array.isArray(content)
+      ? content.reduce((sum, item) => sum + item.length, 0)
+      : content.length
+
+    fieldData.push({
+      fieldKey: config.fieldKey,
+      title: i18n.t(config.titleKey),
+      content,
+      priority: FIELD_PRIORITY[config.fieldKey] ?? 999,
+      charCount,
+    })
   }
 
-  fieldSections.sort((a, b) => {
-    const keyA = a.title.replace(/^##\s*/, "")
-    const keyB = b.title.replace(/^##\s*/, "")
-    const priorityA = SECTION_PRIORITY[keyA] ?? 999
-    const priorityB = SECTION_PRIORITY[keyB] ?? 999
-    return priorityA - priorityB
-  })
+  fieldData.sort((a, b) => a.priority - b.priority)
 
-  for (const { title, content } of fieldSections) {
+  const headerChars = sections.join("\n").length + 2
+  let totalChars = headerChars + fieldData.reduce((sum, f) => sum + f.charCount + f.title.length + 3, 0)
+  const originalChars = totalChars
+  const trimmedFields: string[] = []
+
+  const resolvedTokenBudget = tokenBudget && tokenBudget > 0
+    ? tokenBudget
+    : resolveContextPackTokenBudget({ maxContextSize: options?.maxContextSize })
+  const targetChars = resolvedTokenBudget * 4
+
+  if (totalChars <= targetChars) {
+    for (const { title, content } of fieldData) {
+      sections.push(title)
+      if (Array.isArray(content)) {
+        content.forEach(item => sections.push(item))
+      } else {
+        sections.push(content)
+      }
+      sections.push("")
+    }
+    return {
+      prompt: sections.join("\n"),
+      trimmedFields: [],
+      trimmedChars: 0,
+      originalChars,
+      finalChars: originalChars,
+    }
+  }
+
+  const sortedByPriorityAsc = [...fieldData].sort((a, b) => a.priority - b.priority)
+  let accumulatedChars = headerChars
+  let keepCount = 0
+  for (let i = 0; i < sortedByPriorityAsc.length; i++) {
+    const field = sortedByPriorityAsc[i]
+    const fieldTotalChars = field.charCount + field.title.length + 3
+    if (accumulatedChars + fieldTotalChars <= targetChars) {
+      accumulatedChars += fieldTotalChars
+      keepCount = i + 1
+    } else {
+      break
+    }
+  }
+
+  for (let i = keepCount; i < sortedByPriorityAsc.length; i++) {
+    trimmedFields.push(sortedByPriorityAsc[i].fieldKey)
+    totalChars -= sortedByPriorityAsc[i].charCount + sortedByPriorityAsc[i].title.length + 3
+  }
+
+  let partiallyTrimmed: { fieldKey: string; originalChars: number; keptChars: number } | null = null
+
+  if (keepCount < sortedByPriorityAsc.length) {
+    const nextField = sortedByPriorityAsc[keepCount]
+    const remainingBudget = targetChars - accumulatedChars
+    const minKeepChars = 100
+    const targetContentChars = remainingBudget - nextField.title.length - 3
+    const originalFieldChars = nextField.charCount
+    
+    if (targetContentChars > minKeepChars && nextField.charCount > targetContentChars) {
+      const trimmedContent = trimFieldContent(nextField.content, targetContentChars)
+      const keptContentChars = Array.isArray(trimmedContent)
+        ? trimmedContent.reduce((sum, item) => sum + item.length, 0)
+        : trimmedContent.length
+      
+      if (keptContentChars > 0) {
+        nextField.content = trimmedContent
+        nextField.charCount = keptContentChars
+        totalChars = accumulatedChars + keptContentChars + nextField.title.length + 3
+        partiallyTrimmed = {
+          fieldKey: nextField.fieldKey,
+          originalChars: originalFieldChars,
+          keptChars: keptContentChars,
+        }
+        const idx = trimmedFields.indexOf(nextField.fieldKey)
+        if (idx > -1) trimmedFields.splice(idx, 1)
+        keepCount++
+      }
+    }
+  }
+
+  const keptFields = sortedByPriorityAsc.slice(0, keepCount)
+
+  for (const { title, content } of keptFields) {
     sections.push(title)
     if (Array.isArray(content)) {
       content.forEach(item => sections.push(item))
@@ -1062,16 +1281,19 @@ export function contextPackToPrompt(pack: ContextPack, tokenBudget?: number, opt
     sections.push("")
   }
 
-  const fullPrompt = sections.join("\n")
+  const trimmedChars = originalChars - totalChars
 
-  if (tokenBudget && tokenBudget > 0 && fullPrompt.length > tokenBudget) {
-    const estimatedTokens = Math.ceil(fullPrompt.length / 4)
-    if (estimatedTokens <= tokenBudget) return fullPrompt
-    const targetChars = tokenBudget * 4
-    const headChars = Math.floor(targetChars * 0.4)
-    const tailChars = targetChars - headChars
-    return fullPrompt.slice(0, headChars) + "\n\n[...上下文已按Token预算裁剪...]\n\n" + fullPrompt.slice(-tailChars)
+  if (trimmedFields.length > 0) {
+    sections.push(`[...已裁剪 ${trimmedFields.length} 个低优先级上下文字段，约 ${trimmedChars} 字符...]`)
+    sections.push("")
   }
 
-  return fullPrompt
+  return {
+    prompt: sections.join("\n"),
+    trimmedFields,
+    partiallyTrimmedField: partiallyTrimmed ?? undefined,
+    trimmedChars,
+    originalChars,
+    finalChars: totalChars,
+  }
 }

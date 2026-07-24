@@ -40,12 +40,17 @@ pub fn run() {
             }
             app.manage(commands::claude_cli::ClaudeCliState::default());
             app.manage(commands::codex_cli::CodexCliState::default());
+            app.manage(commands::cursor_cli::CursorProxyState::default());
             app.manage(commands::file_sync::FileSyncState::default());
+            app.manage(commands::mcp_stdio::McpStdioState::default());
+            app.manage(commands::writing_wake_lock::WritingWakeLockManager::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::fs::read_file,
             commands::fs::write_file,
+            commands::fs::write_file_if_absent,
+            commands::fs::write_export_file,
             commands::fs::write_file_atomic,
             commands::fs::list_directory,
             commands::fs::copy_file,
@@ -81,6 +86,10 @@ pub fn run() {
             commands::codex_cli::codex_cli_detect,
             commands::codex_cli::codex_cli_spawn,
             commands::codex_cli::codex_cli_kill,
+            commands::cursor_cli::cursor_cli_detect,
+            commands::cursor_cli::cursor_proxy_status,
+            commands::cursor_cli::cursor_proxy_ensure,
+            commands::cursor_cli::cursor_proxy_stop,
             commands::extract_images::extract_pdf_images_cmd,
             commands::extract_images::extract_office_images_cmd,
             commands::extract_images::extract_and_save_pdf_images_cmd,
@@ -91,9 +100,15 @@ pub fn run() {
             commands::file_sync::get_file_change_queue,
             commands::file_sync::retry_file_change_task,
             commands::file_sync::ignore_file_change_task,
+            commands::mcp_stdio::mcp_stdio_spawn,
+            commands::mcp_stdio::mcp_stdio_write,
+            commands::mcp_stdio::mcp_stdio_read,
+            commands::mcp_stdio::mcp_stdio_kill,
             commands::backup::export_backup,
             commands::backup::import_backup,
             commands::backup::read_backup_manifest,
+            commands::writing_wake_lock::acquire_writing_wake_lock,
+            commands::writing_wake_lock::release_writing_wake_lock,
             set_proxy_env,
         ])
         .on_window_event(|window, event| {

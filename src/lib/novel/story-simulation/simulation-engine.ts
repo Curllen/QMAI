@@ -1,10 +1,28 @@
 import type { ChatMessage } from "@/lib/llm-client"
 import { streamChat } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
+import { cosineSimilarity, embed } from "@/lib/embedding-client"
+import { buildAgentContext } from "@/lib/novel/story-simulation/agent-profile-builder"
+import { AgentRunner, ModelDoesNotSupportToolsError } from "@/lib/agent/runner"
+import type { AgentConfig, AgentMessage, AgentRunCallbacks } from "@/lib/agent/types"
+import { createSimAgentTools } from "@/lib/novel/story-simulation/sim-agent-tools"
 import {
-  buildAgentContext,
-  getVisibleEvents,
-} from "@/lib/novel/story-simulation/agent-profile-builder"
+  createBlackboardDebugTrace,
+  createSimulationBlackboard,
+  getBlackboardVisibleEvents,
+  getBlackboardVisibleRumors,
+  planMultiAgentRound,
+  recordBlackboardEvent,
+  recordRumorEvent,
+  selectNodeAgentCandidates,
+  type SimulationBlackboard,
+} from "@/lib/novel/story-simulation/multi-agent-orchestrator"
+import { directorEvaluate, shouldInjectEvent } from "./director-agent"
+import {
+  pickStagedEvent,
+  stringArrayToStagedPool,
+} from "./event-pool-generator"
+import type { StagedEventPool } from "./event-pool-generator"
 import type {
   ActionVisibility,
   AgentAction,
@@ -12,9 +30,12 @@ import type {
   EventImpact,
   ExtractionResult,
   NovelAgent,
+  RumorEvent,
+  SimulationDebugTrace,
   SimulationEvent,
   SimulationInput,
   SimulationState,
+  StoryFramework,
   StoryNode,
   TimelineEvent,
 } from "@/lib/novel/story-simulation/types"
@@ -30,6 +51,8 @@ export interface SimulationCallbacks {
   onError: (error: Error) => void
   /** 新引擎时间线事件回调 */
   onTimelineEvent?: (event: TimelineEvent) => void
+  /** 推演过程观察回调：用于 UI 展示 Agent 调度和 blackboard 状态 */
+  onDebugTrace?: (trace: SimulationDebugTrace) => void
 }
 
 // ── 常量 ──
@@ -83,6 +106,7 @@ function cloneAgent(agent: NovelAgent): NovelAgent {
       knownSecrets: new Set(agent.memory.knownSecrets),
       sentiments: new Map(agent.memory.sentiments),
       recentDecisions: [...agent.memory.recentDecisions],
+      rumorCredibility: agent.memory.rumorCredibility,
     },
     knowledgeScope: [...agent.knowledgeScope],
     personality: [...agent.personality],
@@ -103,6 +127,20 @@ let eventCounter = 0
 function nextEventId(): string {
   eventCounter++
   return `evt_${Date.now()}_${eventCounter}`
+}
+
+function timelineEventToResumeSimulationEvent(
+  event: TimelineEvent,
+  framework: StoryFramework,
+): SimulationEvent {
+  const node = framework.nodes.find((item) => item.index === event.nodeIndex)
+  return {
+    type: "info",
+    node,
+    timestamp: event.timestamp,
+    message: `[已保存] 节点${event.nodeIndex + 1} 第${event.round + 1}轮 ${event.actorName}：${event.content}`,
+    timelineEvent: event,
+  }
 }
 
 // ── 内部辅助：构建 Agent 系统提示词 ──
@@ -645,12 +683,76 @@ const RANDOM_EVENTS = [
   "环境的微妙变化让角色们重新审视当前局势。",
 ]
 
-function generateRandomEvent(): SimulationEvent | null {
-  const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+function generateRandomEvent(
+  dynamicPool?: string[] | StagedEventPool,
+  usedIndices?: Set<number> | Set<string>,
+  nodeIndex?: number,
+  totalNodes?: number,
+): { event: SimulationEvent | null; usedIndex?: number; usedEventId?: string } {
+  let eventText: string
+  let usedIndex: number | undefined
+  let usedEventId: string | undefined
+
+  if (dynamicPool) {
+    const isStagedPool =
+      typeof dynamicPool === "object" &&
+      dynamicPool !== null &&
+      "byStage" in dynamicPool &&
+      "all" in dynamicPool
+
+    if (isStagedPool && nodeIndex !== undefined && totalNodes !== undefined) {
+      const stagedPool = dynamicPool as StagedEventPool
+      const usedIds = (usedIndices as Set<string>) || new Set<string>()
+      const picked = pickStagedEvent(stagedPool, usedIds, nodeIndex, totalNodes)
+
+      if (picked) {
+        eventText = picked.text
+        usedEventId = picked.id
+      } else {
+        const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+        eventText = RANDOM_EVENTS[idx]
+      }
+    } else {
+      const poolArray = isStagedPool
+        ? (dynamicPool as StagedEventPool).all.map((e) => e.text)
+        : (dynamicPool as string[])
+
+      if (poolArray.length > 0) {
+        const availableIndices: number[] = []
+        const usedNumSet = usedIndices as Set<number> | undefined
+        for (let i = 0; i < poolArray.length; i++) {
+          if (!usedNumSet || !usedNumSet.has(i)) {
+            availableIndices.push(i)
+          }
+        }
+
+        if (availableIndices.length > 0) {
+          const randomIdx = Math.floor(Math.random() * availableIndices.length)
+          const poolIdx = availableIndices[randomIdx]
+          eventText = poolArray[poolIdx]
+          usedIndex = poolIdx
+        } else {
+          const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+          eventText = RANDOM_EVENTS[idx]
+        }
+      } else {
+        const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+        eventText = RANDOM_EVENTS[idx]
+      }
+    }
+  } else {
+    const idx = Math.floor(Math.random() * RANDOM_EVENTS.length)
+    eventText = RANDOM_EVENTS[idx]
+  }
+
   return {
-    type: "info",
-    timestamp: new Date().toISOString(),
-    message: `【随机事件】${RANDOM_EVENTS[idx]}`,
+    event: {
+      type: "info",
+      timestamp: new Date().toISOString(),
+      message: `【随机事件】${eventText}`,
+    },
+    usedIndex,
+    usedEventId,
   }
 }
 
@@ -678,6 +780,114 @@ function isNodeGoalReached(
   return false
 }
 
+const EMBEDDING_SIMILARITY_THRESHOLD = 0.75
+
+export async function isNodeGoalReachedWithEmbedding(
+  node: StoryNode,
+  nodeTimelineEvents: TimelineEvent[],
+  maxRounds: number,
+  currentRound: number,
+  llmConfig: LlmConfig,
+): Promise<boolean> {
+  if (currentRound >= maxRounds - 1) {
+    return true
+  }
+
+  const expectedOutcome = node.expectedOutcome?.trim()
+  if (!expectedOutcome) {
+    return isNodeGoalReached(node, nodeTimelineEvents, maxRounds, currentRound)
+  }
+
+  if (nodeTimelineEvents.length === 0) {
+    return false
+  }
+
+  try {
+    const eventsText = nodeTimelineEvents
+      .map((e) => `${e.actorName}：${e.content}`)
+      .join("\n")
+
+    const expectedEmbedding = await embed(expectedOutcome, llmConfig)
+    const eventsEmbedding = await embed(eventsText, llmConfig)
+
+    const similarity = cosineSimilarity(expectedEmbedding, eventsEmbedding)
+    return similarity >= EMBEDDING_SIMILARITY_THRESHOLD
+  } catch (err) {
+    console.warn("[simulation] embedding 判定失败，降级为启发式判定：", err)
+    return isNodeGoalReached(node, nodeTimelineEvents, maxRounds, currentRound)
+  }
+}
+
+// ── 内部辅助：从事件衍生传闻 ──
+
+let rumorCounter = 0
+function nextRumorId(): string {
+  rumorCounter++
+  return `rumor_${Date.now()}_${rumorCounter}`
+}
+
+function maybeDeriveRumor(
+  event: TimelineEvent,
+  blackboard: SimulationBlackboard,
+  activeAgentIds: string[],
+  random: () => number = Math.random,
+): RumorEvent | null {
+  const totalActive = activeAgentIds.length
+  if (totalActive === 0) return null
+
+  if (event.observableBy.length >= totalActive) {
+    return null
+  }
+
+  if (random() >= 0.2) {
+    return null
+  }
+
+  const actorId = event.actorId
+  const targetId = event.targetId
+  const excludedIds = new Set<string>()
+  if (actorId) excludedIds.add(actorId)
+  if (targetId) excludedIds.add(targetId)
+  for (const id of event.observableBy) {
+    excludedIds.add(id)
+  }
+
+  const eligibleAgents = activeAgentIds.filter((id) => !excludedIds.has(id))
+  if (eligibleAgents.length === 0) return null
+
+  const minCount = Math.min(2, eligibleAgents.length)
+  const maxCount = Math.min(4, eligibleAgents.length)
+  const count = Math.floor(random() * (maxCount - minCount + 1)) + minCount
+
+  const shuffled = [...eligibleAgents]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    const tmp = shuffled[i]
+    shuffled[i] = shuffled[j]
+    shuffled[j] = tmp
+  }
+  const observableBy = shuffled.slice(0, count)
+
+  const distortion = 0.3 + random() * 0.4
+
+  const rumor: RumorEvent = {
+    id: nextRumorId(),
+    round: event.round,
+    nodeIndex: event.nodeIndex,
+    sourceId: actorId ?? null,
+    content: `据说${event.content}`,
+    distortion,
+    observableBy,
+    believedBy: [],
+    verifiedBy: [],
+    timestamp: new Date().toISOString(),
+    generation: 0,
+  }
+
+  recordRumorEvent(blackboard, rumor)
+  return rumor
+}
+
 // ── 内部辅助：单个 Agent 决策并产生事件 ──
 
 async function agentDecideAndAct(
@@ -688,15 +898,13 @@ async function agentDecideAndAct(
   extraction: ExtractionResult,
   recentEventDescs: string[],
   injectionEvent: string | undefined,
+  blackboard: SimulationBlackboard,
   signal?: AbortSignal,
   modeHint?: string,
 ): Promise<{ parsed: ParsedAction; tlEvent: TimelineEvent; simEvent: SimulationEvent } | null> {
-  // 1. 观察：筛选该 Agent 可见的时间线事件
-  const visibleEvents = getVisibleEvents(
-    agent.characterId,
-    state.timelineEvents,
-    10,
-  )
+  // 1. 观察：筛选该 Agent 可见的时间线事件和传闻
+  const visibleEvents = getBlackboardVisibleEvents(blackboard, agent.characterId, 10)
+  const visibleRumors = getBlackboardVisibleRumors(blackboard, agent.characterId, 5)
 
   // 2. 构建上下文（基于认知边界）
   const context = buildAgentContext(
@@ -705,6 +913,7 @@ async function agentDecideAndAct(
     recentEventDescs.slice(-8),
     extraction.worldRules,
     visibleEvents,
+    visibleRumors,
   )
 
   // 3. 构建 LLM 消息
@@ -759,6 +968,198 @@ async function agentDecideAndAct(
   return { parsed, tlEvent, simEvent }
 }
 
+// ── ReAct 路径：使用 AgentRunner 进行工具调用循环 ──
+
+function buildReactSystemPrompt(agent: NovelAgent): string {
+  const personalityLine =
+    agent.personality.length > 0
+      ? `你的性格关键词：${agent.personality.join("、")}`
+      : ""
+  const styleLine = agent.speakingStyle
+    ? `你的说话风格：${agent.speakingStyle}`
+    : ""
+
+  return [
+    `你正在扮演小说中的真实角色「${agent.name}」。你不是AI助手，你就是这个角色本人。`,
+    "",
+    "【核心原则 - 必须严格遵守】",
+    "1. 你是小说中的真实角色，只能基于你知道的信息行动，绝不能使用你不知道的信息。",
+    "2. 绝对禁止全知视角：你不知道其他角色的内心想法，不知道没有发生在你面前的事情，不知道剧情走向。",
+    "3. 严格遵循你的性格特征、说话风格和行为逻辑，不要跳出角色。",
+    "4. 你的每个行为都应该有合理的动机，符合角色设定。",
+    "",
+    personalityLine,
+    styleLine,
+    "",
+    "【可用工具】",
+    "你可以使用以下工具来帮助你做出决策：",
+    "- recall：回忆历史上你亲眼所见的事件",
+    "- observe：观察当前轮次其他角色的公开行为",
+    "- inquire：向另一个角色提出问题（对方下一轮可见）",
+    "- introspect：审视自己的内心状态（情绪、目标、性格等）",
+    "",
+    "【决策流程】",
+    "1. 你可以先使用工具收集信息（回忆、观察、提问、内省）",
+    "2. 收集足够信息后，输出你的最终行为决策",
+    "",
+    "【行为类型说明】你只能选择以下一种行为类型：",
+    "- evaluate：评价某人或某事，表达你的看法和判断",
+    "- pushPlot：主动采取推动剧情发展的关键行动",
+    "- observe：观察周围环境、人物或事态（不改变现状，只是获取信息）",
+    "- react：对其他角色刚做出的行为做出即时反应",
+    "- speak：与其他角色对话（说出台词）",
+    "- ally：寻求结盟、合作、示好",
+    "- confront：对抗、质疑、挑衅",
+    "- conceal：隐瞒信息、假装不知道、掩饰真实想法",
+    "- investigate：调查、探索、打听消息",
+    "",
+    "【输出格式】当你决定好最终行为后，必须输出一个严格的JSON对象，不要输出任何其他文字，不要使用markdown代码块：",
+    "{",
+    '  "type": "行为类型(从上面列表选一个)",',
+    '  "content": "行为的具体内容/说的话/内心想法",',
+    '  "target": "目标角色名（可选，没有目标就不填）",',
+    '  "visibility": "all(所有人可见) 或 target_only(仅目标可见) 或 self(仅自己可见/内心活动)",',
+    '  "motivation": "你为什么做出这个行为的内心动机",',
+    '  "plot_push": "这个行为如何推动剧情向节点目标发展"',
+    "}",
+    "",
+    "【可见性规则】",
+    "- 公开的言行(speak/ally/confront/pushPlot的公开部分)用 all",
+    "- 私下对话(speak带target)用 target_only",
+    "- 内心想法(evaluate/observe的心理活动/conceal)用 self",
+    "",
+    "只输出JSON对象，不要输出任何其他文字。",
+  ]
+    .filter((line) => line !== null && line !== undefined)
+    .join("\n")
+}
+
+export async function agentDecideAndActWithReact(
+  agent: NovelAgent,
+  node: StoryNode,
+  state: SimulationState,
+  llmConfig: LlmConfig,
+  extraction: ExtractionResult,
+  recentEventDescs: string[],
+  injectionEvent: string | undefined,
+  blackboard: SimulationBlackboard,
+  signal?: AbortSignal,
+  modeHint?: string,
+): Promise<{ parsed: ParsedAction; tlEvent: TimelineEvent; simEvent: SimulationEvent } | null> {
+  const visibleEvents = getBlackboardVisibleEvents(blackboard, agent.characterId, 10)
+  const visibleRumors = getBlackboardVisibleRumors(blackboard, agent.characterId, 5)
+
+  const context = buildAgentContext(
+    agent,
+    node,
+    recentEventDescs.slice(-8),
+    extraction.worldRules,
+    visibleEvents,
+    visibleRumors,
+  )
+
+  const userMessageParts: string[] = [context]
+  if (modeHint) {
+    userMessageParts.push("")
+    userMessageParts.push("【行为倾向】")
+    userMessageParts.push(modeHint)
+  }
+  if (injectionEvent) {
+    userMessageParts.push("")
+    userMessageParts.push("【突发事件】")
+    userMessageParts.push(injectionEvent)
+  }
+  userMessageParts.push("")
+  userMessageParts.push(
+    `当前是节点「${node.title}」，节点目标是：${node.goal}。请根据以上信息，以「${agent.name}」的视角决定你接下来要做的一个行为。你可以先使用工具收集信息，然后输出最终的JSON行为决策。`,
+  )
+  const userMessageText = userMessageParts.join("\n")
+
+  const registry = createSimAgentTools(agent, blackboard)
+  const tools = registry.list()
+
+  const config: AgentConfig = {
+    maxRounds: 3,
+    tools,
+    systemPrompt: buildReactSystemPrompt(agent),
+    llmConfig,
+  }
+
+  const messages: AgentMessage[] = [
+    { role: "system", content: buildReactSystemPrompt(agent) },
+    { role: "user", content: userMessageText },
+  ]
+
+  let finalText = ""
+
+  const callbacks: AgentRunCallbacks = {
+    onText: (chunk) => {
+      finalText += chunk
+    },
+    onToolCall: () => {},
+    onToolResult: () => {},
+    onToolError: () => {},
+    onDone: () => {},
+    onError: (err) => {
+      if (err instanceof ModelDoesNotSupportToolsError) {
+        throw err
+      }
+    },
+  }
+
+  const runner = new AgentRunner()
+
+  try {
+    const record = await runner.run(config, registry, messages, callbacks, signal)
+    if (signal?.aborted) return null
+
+    if (record.finalText) {
+      finalText = record.finalText
+    }
+  } catch (err) {
+    if (err instanceof ModelDoesNotSupportToolsError) {
+      throw err
+    }
+    if (!finalText) {
+      throw err
+    }
+  }
+
+  if (!finalText.trim()) {
+    return null
+  }
+
+  const parsed = parseAgentAction(finalText)
+  const target = resolveTarget(parsed.action.target, state.activeAgents)
+  const tlEvent = createTimelineEvent(
+    agent,
+    parsed,
+    target,
+    state.currentRound,
+    node.index,
+    state.activeAgents,
+  )
+
+  for (const id of tlEvent.observableBy) {
+    const observer = state.activeAgents.get(id)
+    if (observer) {
+      applyEventToMemory(observer, tlEvent)
+    }
+  }
+
+  state.timelineEvents.push(tlEvent)
+
+  const simEvent = timelineEventToSimulationEvent(
+    tlEvent,
+    agent,
+    parsed,
+    node,
+    state.currentRound,
+  )
+
+  return { parsed, tlEvent, simEvent }
+}
+
 // ── 主入口：运行仿真（多智能体，基于认知边界） ──
 
 export async function runSimulation(
@@ -768,7 +1169,7 @@ export async function runSimulation(
   signal?: AbortSignal,
 ): Promise<SimulationEvent[]> {
   const events: SimulationEvent[] = []
-  const { agents, framework, wordBudget, llmConfig, injectionEvent, maxRoundsPerNode } = input
+  const { agents, framework, wordBudget, llmConfig, injectionEvent, maxRoundsPerNode, dynamicEventPool, resume } = input
   const mode = input.mode || framework.simulationMode || "hybrid"
   const modeConfig: ModeConfig = getModeConfig(mode)
   const totalNodes = framework.nodes.length
@@ -777,40 +1178,70 @@ export async function runSimulation(
   const baseRounds = Math.max(1, maxRoundsPerNode ?? calculatedRounds)
   const maxRounds = Math.max(1, Math.round(baseRounds * modeConfig.roundsMultiplier))
   let aborted = false
+  const resumeTimelineEvents = resume?.timelineEvents ?? []
+  const normalizedResumeNodeIndex = Math.max(0, Math.min(totalNodes - 1, resume?.nextNodeIndex ?? 0))
+  const normalizedResumeRound = Math.max(0, resume?.nextRound ?? 0)
+
+  const isStagedPool =
+    dynamicEventPool &&
+    typeof dynamicEventPool === "object" &&
+    !Array.isArray(dynamicEventPool) &&
+    "byStage" in dynamicEventPool &&
+    "all" in dynamicEventPool
+
+  const stagedPool: StagedEventPool | undefined = isStagedPool
+    ? (dynamicEventPool as StagedEventPool)
+    : dynamicEventPool && Array.isArray(dynamicEventPool) && dynamicEventPool.length > 0
+      ? stringArrayToStagedPool(dynamicEventPool)
+      : undefined
+
+  const stringPool: string[] | undefined = dynamicEventPool
+    ? (Array.isArray(dynamicEventPool)
+        ? dynamicEventPool
+        : (dynamicEventPool as StagedEventPool).all.map((e) => e.text))
+    : undefined
+
+  const usedEventIds: Set<string> | undefined = stagedPool ? new Set() : undefined
 
   // 初始化仿真状态
   const state: SimulationState = {
     currentRound: 0,
-    timelineEvents: [],
+    timelineEvents: [...resumeTimelineEvents],
     activeAgents: cloneAgentsToMap(agents),
     worldState: {},
+    dynamicEventPool: stringPool && stringPool.length > 0 ? stringPool : undefined,
+    usedEventIndices: stringPool && stringPool.length > 0 ? new Set() : undefined,
+    directorEnabled: modeConfig.directorEnabled ?? false,
+    nextNodeInjectionMap: new Map(),
   }
+  const blackboard = createSimulationBlackboard({
+    agents: Array.from(state.activeAgents.values()),
+    timelineEvents: resumeTimelineEvents,
+  })
 
   try {
-    for (let ni = 0; ni < totalNodes; ni++) {
+    for (const event of resumeTimelineEvents) {
+      callbacks.onTimelineEvent?.(event)
+      events.push(timelineEventToResumeSimulationEvent(event, framework))
+    }
+
+    let startNodeIndex = resume ? normalizedResumeNodeIndex : 0
+    let firstNodeStartRound = resume ? normalizedResumeRound : 0
+    if (firstNodeStartRound >= maxRounds) {
+      startNodeIndex += 1
+      firstNodeStartRound = 0
+    }
+
+    for (let ni = startNodeIndex; ni < totalNodes; ni++) {
       if (signal?.aborted) {
         aborted = true
         break
       }
 
       const node = framework.nodes[ni]
+      const isResumingInsideNode = !!resume && ni === startNodeIndex && firstNodeStartRound > 0
 
-      // 确定参与角色：从 involvedCharacters（角色名）过滤 agents
-      const nodeAgentIds = new Set<string>()
-      for (const a of agents) {
-        if (node.involvedCharacters.includes(a.name)) {
-          nodeAgentIds.add(a.characterId)
-        }
-      }
-      // 防御：若过滤结果为空，使用全部 agents
-      let nodeAgentList: NovelAgent[]
-      if (nodeAgentIds.size === 0) {
-        nodeAgentList = Array.from(state.activeAgents.values())
-      } else {
-        nodeAgentList = Array.from(state.activeAgents.values()).filter((a) =>
-          nodeAgentIds.has(a.characterId),
-        )
-      }
+      const nodeAgentList = selectNodeAgentCandidates(blackboard, node)
 
       // 设置本轮活跃 Agent
       const activeMap = new Map<string, NovelAgent>()
@@ -818,27 +1249,39 @@ export async function runSimulation(
         activeMap.set(a.characterId, a)
       }
       state.activeAgents = activeMap
+      blackboard.activeAgents = activeMap
 
-      // 产出 node-start 事件
-      const startEvent: SimulationEvent = {
-        type: "node-start",
-        node,
-        timestamp: new Date().toISOString(),
+      if (!isResumingInsideNode) {
+        // 产出 node-start 事件
+        const startEvent: SimulationEvent = {
+          type: "node-start",
+          node,
+          timestamp: new Date().toISOString(),
+        }
+        events.push(startEvent)
+        callbacks.onEvent(startEvent)
       }
-      events.push(startEvent)
-      callbacks.onEvent(startEvent)
 
       callbacks.onProgress(
         Math.round((ni / totalNodes) * 100),
         `开始节点 ${ni + 1}/${totalNodes}：${node.title}`,
       )
 
+      // 当前节点的注入事件：优先从导演注入映射取，其次用初始注入事件（仅第一个节点）
+      const directorInjection = state.nextNodeInjectionMap.get(node.index)
+      const initialInjection = ni === 0 ? injectionEvent : undefined
+      const nodeInjectionEvent = directorInjection || initialInjection
+
       // 当前节点内的事件描述（供 recentEvents 使用）
-      const recentEventDescs: string[] = []
-      const nodeTimelineEvents: TimelineEvent[] = []
+      const previousNodeEvents = resumeTimelineEvents.filter((event) => event.nodeIndex === node.index)
+      const recentEventDescs: string[] = previousNodeEvents.map(
+        (event) => `[已保存] ${event.actorName}：${event.content}`,
+      )
+      const nodeTimelineEvents: TimelineEvent[] = [...previousNodeEvents]
 
       // 节点内多轮交互
-      for (let round = 0; round < maxRounds; round++) {
+      const roundStart = ni === startNodeIndex ? firstNodeStartRound : 0
+      for (let round = roundStart; round < maxRounds; round++) {
         if (signal?.aborted) {
           aborted = true
           break
@@ -846,14 +1289,26 @@ export async function runSimulation(
 
         state.currentRound = round
 
-        // 根据模式决定本轮活跃 Agent 子集
-        let roundAgentList = nodeAgentList
-        if (modeConfig.agentSubsetRatio < 1 && nodeAgentList.length > 1) {
-          const subsetSize = Math.max(1, Math.ceil(nodeAgentList.length * modeConfig.agentSubsetRatio))
-          // 简单的随机选择：打乱后取前 N 个
-          const shuffled = [...nodeAgentList].sort(() => Math.random() - 0.5)
-          roundAgentList = shuffled.slice(0, subsetSize)
-        }
+        const roundPlan = planMultiAgentRound({
+          node,
+          state,
+          candidateAgents: nodeAgentList,
+          modeConfig,
+          round,
+        })
+        blackboard.roundPlans.push(roundPlan)
+        callbacks.onDebugTrace?.(
+          createBlackboardDebugTrace(blackboard, {
+            type: "round-plan",
+            node,
+            round,
+            candidateAgents: nodeAgentList,
+            plan: roundPlan,
+          }),
+        )
+        const roundAgentList = roundPlan.turns
+          .map((turn) => state.activeAgents.get(turn.agentId))
+          .filter((agent): agent is NovelAgent => !!agent)
 
         // a. 每个活跃 Agent 观察并决策
         for (const agent of roundAgentList) {
@@ -868,19 +1323,45 @@ export async function runSimulation(
 
           let result: Awaited<ReturnType<typeof agentDecideAndAct>> | null = null
           try {
-            result = await agentDecideAndAct(
-              currentAgent,
-              node,
-              state,
-              llmConfig,
-              extraction,
-              recentEventDescs,
-              round === 0 ? injectionEvent : undefined,
-              signal,
-              modeConfig.behaviorHint,
-            )
+            try {
+              result = await agentDecideAndActWithReact(
+                currentAgent,
+                node,
+                state,
+                llmConfig,
+                extraction,
+                recentEventDescs,
+                round === 0 ? nodeInjectionEvent : undefined,
+                blackboard,
+                signal,
+                modeConfig.behaviorHint,
+              )
+            } catch (reactErr) {
+              if (reactErr instanceof ModelDoesNotSupportToolsError) {
+                console.warn(
+                  `[simulation] Agent ${currentAgent.name} ReAct 路径不支持工具调用，降级为普通路径`,
+                )
+                result = await agentDecideAndAct(
+                  currentAgent,
+                  node,
+                  state,
+                  llmConfig,
+                  extraction,
+                  recentEventDescs,
+                  round === 0 ? nodeInjectionEvent : undefined,
+                  blackboard,
+                  signal,
+                  modeConfig.behaviorHint,
+                )
+              } else {
+                throw reactErr
+              }
+            }
           } catch (agentErr) {
-            // 单个 Agent 失败不中断整个推演，记录事件后跳过
+            if (signal?.aborted || (agentErr instanceof Error && agentErr.name === "AbortError")) {
+              aborted = true
+              break
+            }
             console.warn(`[simulation] Agent ${currentAgent.name} 决策失败，跳过本轮：`, agentErr)
             const warnEvent: SimulationEvent = {
               type: "info",
@@ -904,8 +1385,20 @@ export async function runSimulation(
           const { parsed, tlEvent, simEvent } = result
 
           events.push(simEvent)
+          recordBlackboardEvent(blackboard, tlEvent)
+          maybeDeriveRumor(tlEvent, blackboard, Array.from(state.activeAgents.keys()))
           callbacks.onEvent(simEvent)
           callbacks.onTimelineEvent?.(tlEvent)
+          callbacks.onDebugTrace?.(
+            createBlackboardDebugTrace(blackboard, {
+              type: "event-recorded",
+              node,
+              round,
+              candidateAgents: nodeAgentList,
+              plan: roundPlan,
+              latestEvent: tlEvent,
+            }),
+          )
 
           recentEventDescs.push(
             formatActionDescription(parsed.action, currentAgent.name),
@@ -932,8 +1425,13 @@ export async function runSimulation(
                 events,
                 callbacks,
                 nodeTimelineEvents,
+                blackboard,
                 signal,
               )
+              if (signal?.aborted) {
+                aborted = true
+                break
+              }
             }
           }
         }
@@ -942,8 +1440,19 @@ export async function runSimulation(
 
         // e. 随机事件（根据模式概率触发）
         if (modeConfig.randomEventChance > 0 && Math.random() < modeConfig.randomEventChance) {
-          const randomEvent = generateRandomEvent()
+          const { event: randomEvent, usedIndex, usedEventId } = generateRandomEvent(
+            stagedPool ?? state.dynamicEventPool,
+            usedEventIds ?? state.usedEventIndices,
+            node.index,
+            totalNodes,
+          )
           if (randomEvent) {
+            if (usedEventId !== undefined && usedEventIds) {
+              usedEventIds.add(usedEventId)
+            }
+            if (usedIndex !== undefined && state.usedEventIndices) {
+              state.usedEventIndices.add(usedIndex)
+            }
             events.push(randomEvent)
             callbacks.onEvent(randomEvent)
             const tlEvent: TimelineEvent = {
@@ -961,19 +1470,62 @@ export async function runSimulation(
               targetName: undefined,
             }
             state.timelineEvents.push(tlEvent)
+            recordBlackboardEvent(blackboard, tlEvent)
             nodeTimelineEvents.push(tlEvent)
             callbacks.onTimelineEvent?.(tlEvent)
+            callbacks.onDebugTrace?.(
+              createBlackboardDebugTrace(blackboard, {
+                type: "event-recorded",
+                node,
+                round,
+                candidateAgents: nodeAgentList,
+                plan: roundPlan,
+                latestEvent: tlEvent,
+              }),
+            )
             recentEventDescs.push(`[系统事件] ${randomEvent.message}`)
           }
         }
 
+        if (signal?.aborted) {
+          aborted = true
+          break
+        }
+
         // f. 检查节点目标是否达成
-        if (isNodeGoalReached(node, nodeTimelineEvents, maxRounds, round)) {
+        const goalReached = await isNodeGoalReachedWithEmbedding(
+          node,
+          nodeTimelineEvents,
+          maxRounds,
+          round,
+          llmConfig,
+        )
+        if (goalReached) {
           break
         }
       }
 
       if (aborted) break
+
+      // 导演 Agent 评估（仅在启用时）
+      if (state.directorEnabled && ni < totalNodes - 1) {
+        try {
+          const directorEval = await directorEvaluate({
+            node,
+            nodeTimelineEvents,
+            worldRules: extraction.worldRules,
+            llmConfig,
+            signal,
+          })
+
+          if (shouldInjectEvent(directorEval) && directorEval.injectEvent) {
+            const nextNodeIndex = ni + 1
+            state.nextNodeInjectionMap.set(nextNodeIndex, directorEval.injectEvent)
+          }
+        } catch (directorErr) {
+          console.warn("[simulation] 导演 Agent 评估失败，继续推演：", directorErr)
+        }
+      }
 
       // 产出 node-complete 事件
       const completeEvent: SimulationEvent = {
@@ -1034,15 +1586,21 @@ async function triggerReaction(
   events: SimulationEvent[],
   callbacks: SimulationCallbacks,
   nodeTimelineEvents: TimelineEvent[],
+  blackboard: SimulationBlackboard,
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) return
 
   // 构建反应专用上下文：强调对刚才事件的反应
-  const visibleEvents = getVisibleEvents(
+  const visibleEvents = getBlackboardVisibleEvents(
+    blackboard,
     targetAgent.characterId,
-    state.timelineEvents,
     10,
+  )
+  const visibleRumors = getBlackboardVisibleRumors(
+    blackboard,
+    targetAgent.characterId,
+    5,
   )
 
   const reactionNote = `\n\n【刚才发生的事情】\n${actor.name}刚刚对你做出了行为：[${triggerEvent.actionType}] ${triggerEvent.content}\n请你立即对此做出反应（react类型行为）。`
@@ -1053,6 +1611,7 @@ async function triggerReaction(
     recentEventDescs.slice(-8),
     extraction.worldRules,
     visibleEvents,
+    visibleRumors,
   )
 
   const context = baseContext + reactionNote
@@ -1094,7 +1653,17 @@ async function triggerReaction(
     }
 
     state.timelineEvents.push(tlEvent)
+    recordBlackboardEvent(blackboard, tlEvent)
+    maybeDeriveRumor(tlEvent, blackboard, Array.from(state.activeAgents.keys()))
     nodeTimelineEvents.push(tlEvent)
+    callbacks.onDebugTrace?.(
+      createBlackboardDebugTrace(blackboard, {
+        type: "event-recorded",
+        node,
+        round: state.currentRound,
+        latestEvent: tlEvent,
+      }),
+    )
 
     const simEvent = timelineEventToSimulationEvent(
       tlEvent,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+﻿import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Check, Copy, Download, FileText, BookOpen, Pencil, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,7 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
   const draft = useStorySimulationStore((s) => s.currentDraft)
   const setCurrentDraft = useStorySimulationStore((s) => s.setCurrentDraft)
   const setError = useStorySimulationStore((s) => s.setError)
+  const setInfoMessage = useStorySimulationStore((s) => s.setInfoMessage)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const [copied, setCopied] = useState(false)
@@ -90,8 +91,8 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
     setExporting(true)
     try {
       const filePath = await exportDraft(projectPath, currentFramework, draft)
-      setError(`草稿已导出到：${filePath}`)
-      setTimeout(() => setError(null), 5000)
+      setInfoMessage(`草稿已导出到：${filePath}`)
+      setTimeout(() => setInfoMessage(null), 5000)
     } catch (err) {
       setError(err instanceof Error ? err.message : "导出失败")
       setTimeout(() => setError(null), 5000)
@@ -241,7 +242,7 @@ export function StoryDraftView({ onBack }: StoryDraftViewProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mx-auto max-w-3xl space-y-4">
           <div className="text-xs text-muted-foreground">
             {t("storySimulation.totalWords")}: {draft.totalWords}

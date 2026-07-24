@@ -2,9 +2,16 @@ import { getStore } from "@/lib/web-store"
 import type { WikiProject } from "@/types/wiki"
 import type { LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProviderConfigs, ProxyConfig, ScheduledImportConfig, SourceWatchConfig, NovelConfig, RerankConfig } from "@/stores/wiki-store"
 import { DEFAULT_NOVEL_CONFIG, DEFAULT_RERANK_CONFIG } from "@/stores/wiki-store"
+import type { McpConfig } from "@/lib/mcp/config"
+import { normalizeMcpConfig } from "@/lib/mcp/config"
 import { normalizeSourceWatchConfig } from "@/lib/source-watch-config"
 import { normalizeUiFontFamily, type UiFontFamily } from "@/lib/font-settings"
-import { normalizeVisualStyle, type VisualStyle } from "@/lib/visual-style-settings"
+import {
+  VISUAL_STYLE_STORAGE_VERSION,
+  normalizeVisualStyle,
+  resolveStoredVisualStyle,
+  type VisualStyle,
+} from "@/lib/visual-style-settings"
 import { normalizePath } from "@/lib/path-utils"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 
@@ -41,6 +48,9 @@ export async function addToRecentProjects(
 
 const LLM_CONFIG_KEY = "llmConfig"
 const AI_CHAT_MODEL_KEY = "aiChatModel"
+const AI_OUTLINE_MODEL_KEY = "aiOutlineModel"
+let aiOutlineModelSaveRevision = 0
+let latestAiOutlineModel = ""
 const DEFAULT_LLM_MODEL_KEY = "defaultLlmModel"
 const PROVIDER_CONFIGS_KEY = "providerConfigs"
 const ACTIVE_PRESET_KEY = "activePresetId"
@@ -63,6 +73,24 @@ export async function saveAiChatModel(model: string): Promise<void> {
 export async function loadAiChatModel(): Promise<string | null> {
   const store = await getStore()
   return (await store.get<string>(AI_CHAT_MODEL_KEY)) ?? null
+}
+
+export async function saveAiOutlineModel(model: string): Promise<void> {
+  const writeRevision = ++aiOutlineModelSaveRevision
+  latestAiOutlineModel = model
+  const store = await getStore()
+  await store.set(AI_OUTLINE_MODEL_KEY, model)
+
+  let persistedRevision = writeRevision
+  while (persistedRevision !== aiOutlineModelSaveRevision) {
+    persistedRevision = aiOutlineModelSaveRevision
+    await store.set(AI_OUTLINE_MODEL_KEY, latestAiOutlineModel)
+  }
+}
+
+export async function loadAiOutlineModel(): Promise<string | null> {
+  const store = await getStore()
+  return (await store.get<string>(AI_OUTLINE_MODEL_KEY)) ?? null
 }
 
 export async function saveDefaultLlmModel(model: string): Promise<void> {
@@ -105,6 +133,19 @@ export async function saveSearchApiConfig(config: SearchApiConfig): Promise<void
 export async function loadSearchApiConfig(): Promise<SearchApiConfig | null> {
   const store = await getStore()
   return (await store.get<SearchApiConfig>(SEARCH_API_KEY)) ?? null
+}
+
+const MCP_CONFIG_KEY = "mcpConfig"
+
+export async function saveMcpConfig(config: McpConfig): Promise<void> {
+  const store = await getStore()
+  await store.set(MCP_CONFIG_KEY, normalizeMcpConfig(config))
+  await store.save()
+}
+
+export async function loadMcpConfig(): Promise<McpConfig> {
+  const store = await getStore()
+  return normalizeMcpConfig(await store.get<McpConfig>(MCP_CONFIG_KEY))
 }
 
 const EMBEDDING_KEY = "embeddingConfig"
@@ -595,6 +636,7 @@ export async function loadRerankConfig(projectId?: string, projectPath?: string)
 
 const THEME_KEY = "theme"
 const VISUAL_STYLE_KEY = "visualStyle"
+const VISUAL_STYLE_VERSION_KEY = "visualStyleVersion"
 
 export async function saveTheme(theme: "light" | "dark" | "system"): Promise<void> {
   const store = await getStore()
@@ -610,13 +652,23 @@ export async function loadTheme(): Promise<"light" | "dark" | "system" | null> {
 export async function saveVisualStyle(style: VisualStyle): Promise<void> {
   const store = await getStore()
   await store.set(VISUAL_STYLE_KEY, normalizeVisualStyle(style))
+  await store.set(VISUAL_STYLE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
   await store.save()
 }
 
 export async function loadVisualStyle(): Promise<VisualStyle | null> {
   const store = await getStore()
   const saved = await store.get<string>(VISUAL_STYLE_KEY)
-  return saved ? normalizeVisualStyle(saved) : null
+  if (!saved) return null
+  const savedVersion = await store.get<string>(VISUAL_STYLE_VERSION_KEY)
+  const normalized = normalizeVisualStyle(saved)
+  const resolved = resolveStoredVisualStyle(saved, savedVersion)
+  if (saved !== resolved || resolved !== normalized || savedVersion !== VISUAL_STYLE_STORAGE_VERSION) {
+    await store.set(VISUAL_STYLE_KEY, resolved)
+    await store.set(VISUAL_STYLE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
+    await store.save()
+  }
+  return resolved
 }
 
 const UI_FONT_SIZE_SCALE_KEY = "uiFontSizeScale"
@@ -674,6 +726,7 @@ function normalizeNovelConfig(
     summaryModel: config.summaryModel ?? DEFAULT_NOVEL_CONFIG.summaryModel,
     extractModel: config.extractModel ?? DEFAULT_NOVEL_CONFIG.extractModel,
     deAiModel: config.deAiModel ?? DEFAULT_NOVEL_CONFIG.deAiModel,
+    deAiBatchConcurrency: Math.max(1, Math.min(5, Math.floor(config.deAiBatchConcurrency ?? DEFAULT_NOVEL_CONFIG.deAiBatchConcurrency))),
     communitySummaryEnabled: config.communitySummaryEnabled ?? DEFAULT_NOVEL_CONFIG.communitySummaryEnabled,
     communitySummaryInterval: Math.max(1, Math.min(50, config.communitySummaryInterval ?? DEFAULT_NOVEL_CONFIG.communitySummaryInterval)),
     communitySummaryAsync: config.communitySummaryAsync ?? DEFAULT_NOVEL_CONFIG.communitySummaryAsync,

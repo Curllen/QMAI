@@ -18,6 +18,7 @@ interface SerializedAgentMemory {
   knownSecrets: string[]
   sentiments: Record<string, number>
   recentDecisions: string[]
+  rumorCredibility: number
 }
 
 interface SerializedNovelAgent {
@@ -62,6 +63,7 @@ function serializeMemory(memory: AgentMemory): SerializedAgentMemory {
     knownSecrets: Array.from(memory.knownSecrets),
     sentiments: Object.fromEntries(memory.sentiments),
     recentDecisions: Array.from(memory.recentDecisions),
+    rumorCredibility: memory.rumorCredibility,
   }
 }
 
@@ -111,6 +113,7 @@ function deserializeMemory(s: SerializedAgentMemory): AgentMemory {
     knownSecrets: new Set(s.knownSecrets),
     sentiments: new Map(Object.entries(s.sentiments)),
     recentDecisions: s.recentDecisions,
+    rumorCredibility: s.rumorCredibility ?? 0.5,
   }
 }
 
@@ -151,6 +154,8 @@ export function deserializeSimulationSnapshot(
     timelineEvents: snapshot.state.timelineEvents as SimulationState["timelineEvents"],
     activeAgents,
     worldState: snapshot.state.worldState,
+    directorEnabled: false,
+    nextNodeInjectionMap: new Map(),
   }
   return { agents, state }
 }

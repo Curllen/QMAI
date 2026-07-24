@@ -2,6 +2,7 @@ import { useWikiStore, type LlmConfig, type NovelConfig, type ProviderOverride }
 import { LLM_PRESETS } from "@/components/settings/llm-presets"
 import { resolveConfig } from "@/components/settings/preset-resolver"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
+import { getStableAvailableModelKey, getEffectiveSavedModels } from "@/lib/llm-model-keys"
 
 export type NovelTaskType = "writing" | "review" | "summary" | "extract" | "lint" | "deAi"
 
@@ -30,11 +31,11 @@ export function isModelKeyRegistered(
   if (slashIdx > 0) {
     const providerId = trimmed.slice(0, slashIdx)
     const modelId = trimmed.slice(slashIdx + 1)
-    return !!providerConfigs[providerId]?.savedModels?.some((m) => m.model === modelId)
+    return !!getEffectiveSavedModels(providerConfigs[providerId] ?? {}).some((m) => m.model === modelId)
   }
 
   for (const override of Object.values(providerConfigs)) {
-    if (override.savedModels?.some((m) => m.model === trimmed)) {
+    if (getEffectiveSavedModels(override).some((m) => m.model === trimmed)) {
       return true
     }
   }
@@ -65,7 +66,7 @@ export function resolveModelConfig(
     const providerId = targetModel.slice(0, slashIdx)
     const modelId = targetModel.slice(slashIdx + 1)
     const override = providerConfigs[providerId]
-    if (override?.savedModels?.some((m) => m.model === modelId)) {
+    if (override && getEffectiveSavedModels(override).some((m) => m.model === modelId)) {
       const template = LLM_PRESETS.find((p) => p.id === providerId) ?? LLM_PRESETS.find((p) => p.id === "custom")
       if (template) {
         return { ...resolveConfig(template, override, baseConfig), model: modelId }
@@ -75,7 +76,7 @@ export function resolveModelConfig(
   }
   // 回退：按纯模型名匹配（兼容旧数据）
   for (const [providerId, override] of Object.entries(providerConfigs)) {
-    if (override.savedModels?.some((m) => m.model === targetModel)) {
+    if (getEffectiveSavedModels(override).some((m) => m.model === targetModel)) {
       const template = LLM_PRESETS.find((p) => p.id === providerId) ?? LLM_PRESETS.find((p) => p.id === "custom")
       if (template) {
         return { ...resolveConfig(template, override, baseConfig), model: targetModel }
@@ -83,6 +84,17 @@ export function resolveModelConfig(
     }
   }
   return { ...baseConfig, model: targetModel }
+}
+
+export function resolveUsableModelKey(
+  targetModel: string,
+  baseConfig: LlmConfig,
+  providerConfigs: Record<string, ProviderOverride>,
+): string {
+  const stableModelKey = getStableAvailableModelKey(targetModel, providerConfigs)
+  if (!stableModelKey) return ""
+  const resolved = resolveModelConfig(stableModelKey, baseConfig, providerConfigs)
+  return isConfigUsable(resolved, providerConfigs) ? stableModelKey : ""
 }
 
 function resolveProjectDefaultLlmModel(): string {
@@ -165,4 +177,19 @@ export function resolveNovelModel(
   }
 
   return toUnusableConfig(llmConfig)
+}
+
+export function formatResolvedModelLabel(
+  config: LlmConfig,
+  providerConfigs: Record<string, ProviderOverride>,
+): string {
+  const model = config.model.trim()
+  if (!model) return "未知模型"
+
+  for (const override of Object.values(providerConfigs)) {
+    const found = getEffectiveSavedModels(override).find((saved) => saved.model === model)
+    if (found?.name?.trim()) return found.name.trim()
+  }
+
+  return model
 }

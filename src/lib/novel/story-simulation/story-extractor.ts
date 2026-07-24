@@ -17,12 +17,14 @@ import {
   loadCharacterStates,
   characterStatesToContextText,
 } from "@/lib/novel/character-state"
-import { loadSnapshot, listSnapshots } from "@/lib/novel/chapter-ingest"
+import { loadSnapshot } from "@/lib/novel/chapter-ingest"
 import {
   listCharacterAuras,
   getCharacterAuraBindings,
   loadCharacterAuraSkillDocument,
 } from "@/lib/novel/character-aura"
+import { streamChat } from "@/lib/llm-client"
+import type { LlmConfig } from "@/stores/wiki-store"
 import type {
   ExtractionResult,
   ExtractedCharacter,
@@ -34,6 +36,7 @@ import type {
 
 export interface ExtractionOptions {
   sourceChapters: number
+  llmConfig?: LlmConfig
   onProgress?: (progress: number, label: string) => void
 }
 
@@ -49,7 +52,7 @@ export async function extractStoryContent(
   options: ExtractionOptions,
 ): Promise<ExtractionResult> {
   const pp = normalizePath(projectPath)
-  const { sourceChapters, onProgress } = options
+  const { sourceChapters, llmConfig, onProgress } = options
   const report = (progress: number, label: string): void => {
     onProgress?.(progress, label)
   }
@@ -72,7 +75,7 @@ export async function extractStoryContent(
 
   // 5. 读取角色完整特征（55%）
   report(55, "正在提取角色完整特征...")
-  const characters = await extractCharacters(pp)
+  const characters = await extractCharacters(pp, chapterContents, llmConfig)
 
   // 6. 从大纲中提取世界规则和力量体系（70%）
   report(70, "正在从大纲中提取世界规则与力量体系...")
@@ -247,57 +250,276 @@ async function readMemoryData(pp: string): Promise<ExtractedMemoryData> {
 }
 
 /**
- * 提取角色完整特征。
+ * 从章节摄入产物（.novel/chapter-ingest-output/NNN.output.json）读取角色。
  *
- * 从章节快照中获取角色名列表，然后匹配光环（aura）、
- * 认知（cognition）和技能（skill）数据，并读取角色档案页。
+ * 每个摄入产物包含 wikiUpdatePatch.entries[]，其中 entryType === "character"
+ * 的条目携带角色名、别名、身份、阵营、目标、弧光、当前状态、认知等字段。
+ * 多个章节出现的同名角色会被合并：appearanceChapters 累加，其余字段取最新章节。
  */
-async function extractCharacters(pp: string): Promise<ExtractedCharacter[]> {
-  // 从章节快照中收集角色名
-  const snapshotNumbers = (await listSnapshots(pp).catch(() => [])).filter(
-    (n) => n > 0,
+async function extractCharactersFromIngestOutput(
+  pp: string,
+): Promise<
+  Map<
+    string,
+    {
+      name: string
+      aliases: string[]
+      profile: string
+      cognition: { knows: string[]; doesNotKnow: string[] } | null
+      appearanceChapters: number[]
+    }
+  >
+> {
+  const outputDir = `${pp}/.novel/chapter-ingest-output`
+  let nodes
+  try {
+    nodes = await listDirectory(outputDir)
+  } catch {
+    return new Map()
+  }
+  const outputFiles = nodes.filter(
+    (n) => !n.is_dir && n.name.endsWith(".output.json"),
   )
 
-  const characterNames = new Set<string>()
-  for (const num of snapshotNumbers) {
+  const characterMap = new Map<
+    string,
+    {
+      name: string
+      aliases: string[]
+      profile: string
+      cognition: { knows: string[]; doesNotKnow: string[] } | null
+      appearanceChapters: number[]
+    }
+  >()
+
+  // 按文件名排序，保证后续章节覆盖前面的（取最新）
+  outputFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+
+  for (const node of outputFiles) {
     try {
-      const snapshot = await loadSnapshot(pp, num)
-      if (snapshot) {
-        for (const name of snapshot.characters) {
-          const trimmed = name.trim()
-          if (trimmed) characterNames.add(trimmed)
+      const raw = await readFile(node.path)
+      const data = JSON.parse(raw)
+      const entries = data?.wikiUpdatePatch?.entries ?? []
+      for (const entry of entries) {
+        if (entry.entryType !== "character") continue
+        const f = entry.fields ?? {}
+        const name = String(f.name ?? entry.title ?? "").trim()
+        if (!name) continue
+
+        const existing = characterMap.get(name)
+        const appearanceChapters = existing?.appearanceChapters ?? []
+        const newChapters: unknown[] = f.appearanceChapters ?? []
+        for (const ch of newChapters) {
+          const n = Number(ch)
+          if (Number.isFinite(n) && !appearanceChapters.includes(n)) {
+            appearanceChapters.push(n)
+          }
         }
+
+        // 构建角色档案：身份/阵营/目标/弧光/当前状态
+        const profileParts: string[] = []
+        if (f.identity) profileParts.push(`身份：${f.identity}`)
+        if (f.faction) profileParts.push(`阵营：${f.faction}`)
+        if (f.goals) profileParts.push(`目标：${f.goals}`)
+        if (f.arcChange) profileParts.push(`角色弧光：${f.arcChange}`)
+        if (f.currentState) profileParts.push(`当前状态：${f.currentState}`)
+        const profile = profileParts.join("\n") || existing?.profile || ""
+
+        // 认知
+        const cog = f.cognition
+        const cognition =
+          cog && Array.isArray(cog.knows) && Array.isArray(cog.doesNotKnow)
+            ? {
+                knows: cog.knows.map(String),
+                doesNotKnow: cog.doesNotKnow.map(String),
+              }
+            : existing?.cognition ?? null
+
+        characterMap.set(name, {
+          name,
+          aliases: existing?.aliases ?? Array.isArray(f.aliases) ? f.aliases.map(String) : [],
+          profile,
+          cognition,
+          appearanceChapters,
+        })
       }
     } catch {
-      // 单个快照加载失败，跳过
+      // 单个摄入产物解析失败，跳过
     }
   }
 
-  if (characterNames.size === 0) return []
+  return characterMap
+}
 
-  // 加载光环数据和绑定关系
+/**
+ * 从章节正文用 LLM 提取角色。
+ *
+ * 当章节摄入产物为空时，调用 LLM 直接分析最近 N 章的正文内容，
+ * 从中提取出现的角色名称和基本特征（身份、性格、目标等）。
+ * 返回的格式与 extractCharactersFromIngestOutput 一致，便于后续补充逻辑复用。
+ */
+async function extractCharactersFromChapters(
+  chapterContents: ExtractedChapterContent[],
+  llmConfig: LlmConfig,
+): Promise<
+  Map<
+    string,
+    {
+      name: string
+      aliases: string[]
+      profile: string
+      cognition: { knows: string[]; doesNotKnow: string[] } | null
+      appearanceChapters: number[]
+    }
+  >
+> {
+  if (chapterContents.length === 0) return new Map()
+
+  const chaptersText = chapterContents
+    .map((ch) => {
+      const num = ch.chapterNumber ?? 0
+      return `## 第${num}章 ${ch.title}\n\n${ch.content}`
+    })
+    .join("\n\n---\n\n")
+
+  const systemPrompt = `你是资深小说角色分析专家。请从以下小说章节正文中提取出现的所有重要角色。
+
+输出要求：
+1. 只输出 JSON 数组，不要任何额外文字或解释
+2. 每个角色包含以下字段：
+   - name: 角色姓名（全名）
+   - aliases: 别名/昵称数组
+   - identity: 身份/职业
+   - personality: 性格特征
+   - goals: 目标/动机
+   - faction: 阵营/势力
+   - appearanceChapters: 出现的章节号数组
+
+3. 只提取有明确姓名或身份的角色，忽略路人甲、群众等无名角色
+4. 按角色重要性排序，主要角色在前`
+
+  const userPrompt = `以下是小说章节内容：
+
+${chaptersText.slice(0, 15000)}
+
+请提取其中的重要角色信息。`
+
+  try {
+    let fullText = ""
+    await streamChat(
+      llmConfig,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        onToken: (token: string) => {
+          fullText += token
+        },
+        onDone: () => {},
+        onError: () => {},
+      },
+    )
+
+    const jsonMatch = fullText.match(/\[[\s\S]*\]/)
+    if (!jsonMatch) return new Map()
+
+    const parsed = JSON.parse(jsonMatch[0])
+    if (!Array.isArray(parsed)) return new Map()
+
+    const characterMap = new Map<
+      string,
+      {
+        name: string
+        aliases: string[]
+        profile: string
+        cognition: { knows: string[]; doesNotKnow: string[] } | null
+        appearanceChapters: number[]
+      }
+    >()
+
+    for (const item of parsed) {
+      const name = String(item.name ?? "").trim()
+      if (!name) continue
+
+      const profileParts: string[] = []
+      if (item.identity) profileParts.push(`身份：${item.identity}`)
+      if (item.personality) profileParts.push(`性格：${item.personality}`)
+      if (item.goals) profileParts.push(`目标：${item.goals}`)
+      if (item.faction) profileParts.push(`阵营：${item.faction}`)
+
+      const appearanceChapters = Array.isArray(item.appearanceChapters)
+        ? item.appearanceChapters.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
+        : []
+
+      characterMap.set(name, {
+        name,
+        aliases: Array.isArray(item.aliases) ? item.aliases.map(String) : [],
+        profile: profileParts.join("\n"),
+        cognition: null,
+        appearanceChapters,
+      })
+    }
+
+    return characterMap
+  } catch {
+    return new Map()
+  }
+}
+
+/**
+ * 提取角色完整特征。
+ *
+ * 主路径：从章节摄入产物（.novel/chapter-ingest-output/）读取角色名与
+ * 基础特征（身份/阵营/目标/弧光/认知）。
+ * 补充源：光环（.qmai/character-auras/）、角色认知状态、角色档案页。
+ */
+async function extractCharacters(
+  pp: string,
+  chapterContents: ExtractedChapterContent[],
+  llmConfig?: LlmConfig,
+): Promise<ExtractedCharacter[]> {
+  // 1. 从章节摄入产物读取角色名和基础特征
+  let ingestCharacters = await extractCharactersFromIngestOutput(pp)
+
+  // 2. 如果摄入产物为空，尝试从章节正文用 LLM 提取角色
+  if (ingestCharacters.size === 0 && llmConfig && chapterContents.length > 0) {
+    const llmCharacters = await extractCharactersFromChapters(chapterContents, llmConfig)
+    if (llmCharacters.size > 0) {
+      ingestCharacters = llmCharacters
+    }
+  }
+
+  if (ingestCharacters.size === 0) return []
+
+  // 2. 加载光环数据和绑定关系（补充源）
   const auras = await listCharacterAuras(pp).catch(() => [])
   const bindings = await getCharacterAuraBindings(pp).catch(() => [])
 
-  // 加载角色认知状态
+  // 3. 加载角色认知状态（补充源）
   const cognitionState = await loadCognitionState(pp).catch(() => null)
 
   const characters: ExtractedCharacter[] = []
-  for (const name of characterNames) {
-    // 匹配光环绑定（按角色名或别名）
+  for (const [name, info] of ingestCharacters) {
+    // 匹配光环绑定（按角色名或别名双向匹配）
     const binding = bindings.find(
-      (b) => b.characterName === name || (b.aliases && b.aliases.includes(name)),
+      (b) =>
+        b.characterName === name ||
+        (b.aliases && b.aliases.includes(name)) ||
+        (info.aliases && info.aliases.includes(b.characterName)),
     )
     const aura = binding
       ? (auras.find((a) => a.id === binding.auraId) ?? null)
       : null
 
-    // 匹配认知数据
-    const cognitionEntry =
-      cognitionState?.characters.find((c) => c.character === name) ?? null
-    const cognition = cognitionEntry
-      ? { knows: cognitionEntry.knows, doesNotKnow: cognitionEntry.doesNotKnow }
-      : null
+    // 认知：优先用摄入产物的，其次用 cognitionState
+    let cognition = info.cognition
+    if (!cognition && cognitionState) {
+      const entry = cognitionState.characters.find((c) => c.character === name)
+      if (entry) {
+        cognition = { knows: entry.knows, doesNotKnow: entry.doesNotKnow }
+      }
+    }
 
     // 读取技能文档（来自光环的 skillFolder）
     let skillContent = ""
@@ -309,10 +531,13 @@ async function extractCharacters(pp: string): Promise<ExtractedCharacter[]> {
       }
     }
 
-    // 读取角色档案页（wiki/entities/{name}.md）
-    let profile = ""
+    // 读取角色档案页（wiki/entities/{name}.md），叠加到摄入产物的 profile 上
+    let profile = info.profile
     try {
-      profile = await readFile(`${pp}/wiki/entities/${name}.md`)
+      const fileProfile = await readFile(`${pp}/wiki/entities/${name}.md`)
+      if (fileProfile) {
+        profile = profile ? `${profile}\n\n${fileProfile}` : fileProfile
+      }
     } catch {
       // 无角色档案页，留空
     }

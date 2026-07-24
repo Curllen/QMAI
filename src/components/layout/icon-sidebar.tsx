@@ -77,7 +77,7 @@ interface SortableNavButtonProps {
 function SortableNavButton({ item, activeView, pendingCount, label, onClick }: SortableNavButtonProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const Icon = item.icon
-  const isActive = activeView === item.view
+  const isActive = activeView === item.view || (item.view === "skillLibrary" && activeView === "writingSkillLibrary")
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -270,14 +270,14 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
           />
         </button>
         {/* Top: configurable feature entries */}
-        <div className="flex flex-1 flex-col items-center gap-1">
+        <div className="flex flex-1 flex-col items-center gap-1.5">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={visibleNavIds} strategy={verticalListSortingStrategy}>
-              <div className="flex flex-col items-center gap-1">
+              <div className="flex flex-col items-center gap-1.5">
                 {visibleNavItems.map((item) => (
                   <SortableNavButton
                     key={item.id}
@@ -293,7 +293,7 @@ export function IconSidebar({ onToggleSidebar, onOpenSidebar, onSwitchProject }:
           </DndContext>
         </div>
         {/* Bottom: daemon status + theme toggle + settings + switch project */}
-        <div className="flex flex-col items-center gap-1 pb-1">
+        <div className="flex flex-col items-center gap-1.5 pb-1">
           {/* Theme selector dropdown */}
           <Tooltip>
             <TooltipTrigger

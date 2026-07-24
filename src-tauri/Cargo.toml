@@ -1,6 +1,6 @@
 [package]
 name = "qmai"
-version = "2.2.32"
+version = "3.0.1"
 description = "QMAI - AI writing system for long-form novels"
 authors = ["Mochocyang"]
 edition = "2021"
@@ -60,6 +60,7 @@ md-5 = "0.10"
 notify = "8"
 walkdir = "2"
 tauri-plugin-single-instance = "2"
+keepawake = "0.6"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

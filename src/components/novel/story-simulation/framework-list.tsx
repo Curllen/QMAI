@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+﻿import { useEffect, useMemo, useState } from "react"
 import { Link2, Search, Trash2 } from "lucide-react"
 
 import { useWikiStore } from "@/stores/wiki-store"
@@ -146,7 +146,7 @@ export function FrameworkList({
               </div>
             </div>
           )}
-          <div className="flex-1 space-y-1 overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
             {filteredFrameworks.length === 0 ? (
               <div className="py-4 text-center text-xs text-muted-foreground">
                 无匹配框架

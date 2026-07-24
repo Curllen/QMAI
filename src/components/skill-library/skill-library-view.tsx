@@ -3,7 +3,6 @@ import {
   createBlankProjectDeAiSkill,
   deleteProjectDeAiSkill,
   getAllDeAiSkills,
-  isDeAiSkillModified,
   isDeAiSkillConfigCorruptError,
   loadDeAiSkillConfig,
   recreateDeAiSkillConfig,
@@ -13,9 +12,11 @@ import {
   setDeAiSkillEnabled,
   setDefaultDeAiSkill,
   updateDeAiSkill,
+  deAiSkillToUserSkill,
   type DeAiSkill,
   type DeAiSkillConfig,
 } from "@/lib/novel/de-ai-skill-library"
+import { SKILL_KIND_LABELS, SKILL_MODE_LABELS, SKILL_STAGE_LABELS } from "@/lib/novel/skill-library"
 import { confirmDiscardSkillLibraryDraft, useWikiStore } from "@/stores/wiki-store"
 
 function sourceLabel(skill: DeAiSkill): string {
@@ -169,7 +170,6 @@ export function SkillLibrarySidebarPanel() {
         {allSkills.map((skill) => {
           const active = skill.id === selectedSkillId
           const enabled = !disabledSkillIds.has(skill.id)
-          const modified = isDeAiSkillModified(config!, skill.id)
           return (
             <div
               key={skill.id}
@@ -194,14 +194,6 @@ export function SkillLibrarySidebarPanel() {
                 </span>
                 {config?.defaultSkillId === skill.id ? (
                   <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">默认</span>
-                ) : null}
-                {modified ? (
-                  <span
-                    data-testid="skill-modified-badge"
-                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800"
-                  >
-                    已修改
-                  </span>
                 ) : null}
               </div>
               <div className="mt-1 truncate text-xs text-muted-foreground">{skill.description}</div>
@@ -249,9 +241,9 @@ export function SkillLibraryView() {
   const selectedSkill = allSkills.find((skill) => skill.id === selectedSkillId) ?? allSkills[0] ?? null
   const selectedIsEditable = Boolean(project && selectedSkill)
   const selectedIsBuiltIn = selectedSkill?.id.startsWith("built-in:") ?? false
+  const selectedGenericSkill = selectedSkill ? deAiSkillToUserSkill(selectedSkill) : null
   const selectedHasBuiltInOverride = selectedIsBuiltIn
     && Boolean(config?.builtInSkillOverrides.some((skill) => skill.id === selectedSkill?.id))
-  const selectedModified = Boolean(config && selectedSkill && isDeAiSkillModified(config, selectedSkill.id))
   const selectedEnabled = Boolean(
     config && selectedSkill && !config.disabledSkillIds.includes(selectedSkill.id),
   )
@@ -461,15 +453,20 @@ export function SkillLibraryView() {
                 <div className="text-sm text-muted-foreground">{sourceLabel(selectedSkill)}技能</div>
                 <div className="flex min-w-0 items-center gap-2">
                   <h2 className="truncate text-xl font-semibold">{selectedSkill.name}</h2>
-                  {selectedModified ? (
-                    <span
-                      data-testid="skill-modified-badge"
-                      className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
-                    >
-                      已修改
-                    </span>
-                  ) : null}
                 </div>
+                {selectedGenericSkill ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                    <span className="rounded bg-muted px-2 py-0.5">
+                      类型：{selectedGenericSkill.kind.map((kind) => SKILL_KIND_LABELS[kind]).join("、")}
+                    </span>
+                    <span className="rounded bg-muted px-2 py-0.5">
+                      阶段：{selectedGenericSkill.stages.map((stage) => SKILL_STAGE_LABELS[stage]).join("、")}
+                    </span>
+                    <span className="rounded bg-muted px-2 py-0.5">
+                      模式：{selectedGenericSkill.modes.map((mode) => SKILL_MODE_LABELS[mode]).join("、")}
+                    </span>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button

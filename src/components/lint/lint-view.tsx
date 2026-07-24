@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react"
+﻿import { useState, useCallback, useMemo, useEffect } from "react"
 import i18n from "@/i18n"
 import {
   Link2Off,
@@ -328,7 +328,7 @@ export function LintView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {error && (
           <div className="m-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0" />

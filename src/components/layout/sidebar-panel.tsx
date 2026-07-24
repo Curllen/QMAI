@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   BookOpenCheck,
@@ -20,20 +20,18 @@ import {
 import { KnowledgeTree, RawSourcesSection, type KnowledgeCreateRequest } from "./knowledge-tree"
 import { TrashPanel } from "./trash-panel"
 import { GraphSidebarPanel } from "./graph-sidebar-panel"
-import { SoulSidebarPanel } from "./soul-sidebar-panel"
 import { ReviewCenterSidebarPanel } from "./review-center-sidebar-panel"
-import { BookAnalysisSidebarPanel } from "./book-analysis-sidebar-panel"
 import { FrameworkList } from "@/components/novel/story-simulation/framework-list"
-import { SkillLibrarySidebarPanel } from "@/components/skill-library/skill-library-view"
 
 import { useWikiStore } from "@/stores/wiki-store"
+import { useChatStore } from "@/stores/chat-store"
+import { useOutlineChatStore } from "@/stores/outline-chat-store"
+import { useOutlineGenerationStore } from "@/stores/outline-generation-store"
 import { useStorySimulationStore } from "@/stores/story-simulation-store"
 import { loadFrameworks, loadSimulationResults, deleteSimulationResult } from "@/lib/novel/story-simulation/framework-store"
 import { loadBinding } from "@/lib/novel/story-simulation/framework-binding"
 import type { StoryFramework } from "@/lib/novel/story-simulation/types"
 import { createDirectory, fileExists, listDirectory, preprocessFile, readFile, writeFile } from "@/commands/fs"
-import { countChapterBodyWords } from "@/lib/chapter-word-count"
-import { buildChapterTotalWordCountLabel } from "@/lib/chapter-display"
 import { getFileName, getFileStem, normalizePath } from "@/lib/path-utils"
 import {
   loadDismantlingLibrary,
@@ -65,8 +63,25 @@ import {
   type ImportedChapter,
 } from "@/lib/novel/chapter-import"
 import { makeChapterFileName, makeDefaultChapterTitle, makeSafeFileSlug } from "@/lib/wiki-filename"
+import { buildPureOutlineMarkdown } from "@/lib/novel/outline-markdown"
 import { useImportProgressStore } from "@/stores/import-progress-store"
 import { openExternalUrl } from "@/lib/open-external-url"
+import type { ReferenceToken } from "@/lib/reference/types"
+
+const SoulSidebarPanel = lazy(async () => {
+  const mod = await import("./soul-sidebar-panel")
+  return { default: mod.SoulSidebarPanel }
+})
+
+const BookAnalysisSidebarPanel = lazy(async () => {
+  const mod = await import("./book-analysis-sidebar-panel")
+  return { default: mod.BookAnalysisSidebarPanel }
+})
+
+const UnifiedSkillLibrarySidebarPanel = lazy(async () => {
+  const mod = await import("@/components/skill-library/unified-skill-library-view")
+  return { default: mod.UnifiedSkillLibrarySidebarPanel }
+})
 
 const USAGE_GUIDE_URL = "https://tcnk9ik08e1c.feishu.cn/wiki/FWiSwYQKoifpwBk6mSRcSlB8nrh?from=from_copylink"
 
@@ -119,6 +134,16 @@ function SearchHistoryPanel() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function SidebarPanelLoading() {
+  const { t } = useTranslation()
+  return (
+    <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
+      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+      <span>{t("common.loading", { defaultValue: "加载中..." })}</span>
     </div>
   )
 }
@@ -673,7 +698,11 @@ export function SidebarPanel() {
   const setSelectedMemoryCenterEntry = useWikiStore((s) => s.setSelectedMemoryCenterEntry)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setFileTree = useWikiStore((s) => s.setFileTree)
-  const dataVersion = useWikiStore((s) => s.dataVersion)
+  const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
+  const enqueueChatReferenceTokens = useChatStore((s) => s.enqueueReferenceTokens)
+  const enqueueOutlineReferenceTokens = useOutlineChatStore((s) => s.enqueueReferenceTokens)
+  const setOutlineChatOpen = useOutlineGenerationStore((s) => s.setPanelOpen)
   const [mode, setMode] = useState<"knowledge" | "files">("knowledge")
   const [refreshKey, setRefreshKey] = useState(0)
   const [pendingCreate, setPendingCreate] = useState<KnowledgeCreateRequest | null>(null)
@@ -683,7 +712,6 @@ export function SidebarPanel() {
   const [memoryData, setMemoryData] = useState<MemoryCenterData | null>(null)
   const [memoryLoading, setMemoryLoading] = useState(false)
   const [memoryError, setMemoryError] = useState<string | null>(null)
-  const [sidebarTotalWordCount, setSidebarTotalWordCount] = useState<number | null>(null)
   const [outlineImporting, setOutlineImporting] = useState(false)
   const [outlineImportMenuOpen, setOutlineImportMenuOpen] = useState(false)
   const outlineImportMenuRef = useRef<HTMLDivElement | null>(null)
@@ -720,37 +748,6 @@ export function SidebarPanel() {
   }, [activeView, selectedFile])
 
   const isChapter = mode === "knowledge"
-
-  useEffect(() => {
-    if (!project || !isChapter) {
-      setSidebarTotalWordCount(null)
-      return
-    }
-
-    let cancelled = false
-
-    const loadSidebarTotalWordCount = async () => {
-      try {
-        const chapterNodes = await listDirectory(`${normalizePath(project.path)}/wiki/chapters`)
-        const files = flattenMdFiles(chapterNodes)
-        const contents = await Promise.all(files.map((file) => readFile(file.path).catch(() => "")))
-        const total = contents.reduce((sum, markdown) => sum + countChapterBodyWords(markdown), 0)
-        if (!cancelled) {
-          setSidebarTotalWordCount(total)
-        }
-      } catch {
-        if (!cancelled) {
-          setSidebarTotalWordCount(null)
-        }
-      }
-    }
-
-    void loadSidebarTotalWordCount()
-
-    return () => {
-      cancelled = true
-    }
-  }, [dataVersion, isChapter, project])
 
   useEffect(() => {
     if (!pendingCreate?.kind) return
@@ -901,50 +898,17 @@ export function SidebarPanel() {
   }
 
   async function extractImportedOutlineMemories(projectPath: string, importedPaths: string[]) {
-    outlineImportCancelledRef.current = false
-    const taskId = useImportProgressStore.getState().startTask({
-      projectPath,
-      kind: "outline",
-      total: importedPaths.length,
-      currentTitle: getFileName(importedPaths[0] ?? ""),
-      message: "正在提取 AI 大纲记忆",
-    })
-    activeImportTaskIdRef.current = taskId
-
-    let completed = 0
-    let failed = 0
-    for (const outlinePath of importedPaths) {
-      if (outlineImportCancelledRef.current) {
-        useImportProgressStore.getState().finishTask(taskId, "cancelled", {
-          completed,
-          currentTitle: "",
-          message: `已取消大纲记忆提取，已完成 ${completed}/${importedPaths.length} 个大纲。`,
-        })
-        activeImportTaskIdRef.current = null
-        return
-      }
-
-      useImportProgressStore.getState().updateTask(taskId, {
-        completed,
-        total: importedPaths.length,
-        currentTitle: getFileName(outlinePath),
+    const { runOutlineIngestPaths } = await import("@/lib/novel/outline-generation")
+    try {
+      await runOutlineIngestPaths(projectPath, importedPaths, {
+        onProgressTaskStarted: (taskId) => {
+          activeImportTaskIdRef.current = taskId
+        },
       })
-      const { createOutlineIngestTask, runOutlineIngestTask } = await import("@/lib/novel/outline-generation")
-      const outlineTaskId = createOutlineIngestTask(projectPath, outlinePath)
-      await runOutlineIngestTask(outlineTaskId)
-      completed += 1
+    } finally {
+      activeImportTaskIdRef.current = null
+      await refreshTree(projectPath, importedPaths[0])
     }
-
-    useImportProgressStore.getState().finishTask(taskId, failed > 0 ? "error" : "done", {
-      completed,
-      total: importedPaths.length,
-      currentTitle: "",
-      message: failed > 0
-        ? `大纲记忆提取完成：成功 ${completed - failed} 个，失败 ${failed} 个。`
-        : `大纲记忆提取完成：成功 ${completed} 个大纲。`,
-    })
-    activeImportTaskIdRef.current = null
-    await refreshTree(projectPath, importedPaths[0])
   }
 
   async function finishChapterImport(projectPath: string, importedChapters: ImportedChapter[], extractMemory: boolean) {
@@ -1168,15 +1132,7 @@ export function SidebarPanel() {
         await createDirectory(outlinesRoot).catch(() => {})
         await createDirectory(targetDir).catch(() => {})
         const filePath = await getUniqueWikiPagePath(targetDir, `${makeSafeFileSlug(title)}.md`)
-        const content = [
-          "---",
-          "type: outline",
-          `title: "${title.replace(/"/g, '\\"')}"`,
-          "---",
-          "",
-          `# ${title}`,
-          "",
-        ].join("\n")
+        const content = buildPureOutlineMarkdown(title, "")
         await writeFile(filePath, content)
         setPendingPages((prev) => [
           { path: filePath, title, type: "outline", tags: [] },
@@ -1209,6 +1165,17 @@ export function SidebarPanel() {
     setPendingCreate(request)
     setInputTitle("")
   }
+
+  const handleSendChapterToChat = useCallback((token: ReferenceToken) => {
+    enqueueChatReferenceTokens([token])
+    setChatExpanded(true)
+  }, [enqueueChatReferenceTokens, setChatExpanded])
+
+  const handleSendOutlineToOutlineChat = useCallback((token: ReferenceToken) => {
+    enqueueOutlineReferenceTokens([token])
+    setOutlineChatOpen(true)
+    setActiveView("sources")
+  }, [enqueueOutlineReferenceTokens, setActiveView, setOutlineChatOpen])
 
   const inputPlaceholder = pendingCreate?.kind === "outline"
     ? t("sidebar.newOutlinePrompt")
@@ -1270,11 +1237,19 @@ export function SidebarPanel() {
   }
 
   if (activeView === "soul") {
-    return <SoulSidebarPanel />
+    return (
+      <Suspense fallback={<SidebarPanelLoading />}>
+        <SoulSidebarPanel />
+      </Suspense>
+    )
   }
 
-  if (activeView === "skillLibrary") {
-    return <SkillLibrarySidebarPanel />
+  if (activeView === "skillLibrary" || activeView === "writingSkillLibrary") {
+    return (
+      <Suspense fallback={<SidebarPanelLoading />}>
+        <UnifiedSkillLibrarySidebarPanel />
+      </Suspense>
+    )
   }
 
   if (activeView === "reviewCenter") {
@@ -1282,7 +1257,11 @@ export function SidebarPanel() {
   }
 
   if (activeView === "bookAnalysis") {
-    return <BookAnalysisSidebarPanel />
+    return (
+      <Suspense fallback={<SidebarPanelLoading />}>
+        <BookAnalysisSidebarPanel />
+      </Suspense>
+    )
   }
 
   if (activeView === "search") {
@@ -1380,20 +1359,15 @@ export function SidebarPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b px-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm font-semibold">
+          <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
             <PanelHeaderWithHelp
               title={isChapter ? t("sidebar.knowledge") : t("sidebar.files")}
               helpKey={isChapter ? "chapter" : "outline"}
               helpTitle={isChapter ? "章节功能使用说明" : "大纲功能使用说明"}
             />
           </div>
-          {isChapter && sidebarTotalWordCount !== null ? (
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {buildChapterTotalWordCountLabel(sidebarTotalWordCount)}
-            </div>
-          ) : null}
         </div>
         <div className="flex items-center gap-1">
           {isChapter ? (
@@ -1527,6 +1501,8 @@ export function SidebarPanel() {
           pendingPages={pendingPages.filter((page) => page.type === (isChapter ? "chapter" : "outline"))}
           onRemovePendingPage={handleRemovePendingPage}
           onRequestCreate={beginCreate}
+          onSendToChat={isChapter ? handleSendChapterToChat : undefined}
+          onSendToOutline={!isChapter ? handleSendOutlineToOutlineChat : undefined}
         />
       </div>
       <div className="border-t px-3 py-2">

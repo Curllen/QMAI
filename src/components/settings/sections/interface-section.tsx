@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next"
+﻿import { useTranslation } from "react-i18next"
 import { Label } from "@/components/ui/label"
 import type { SettingsDraft, DraftSetter } from "../settings-types"
 import {
@@ -29,7 +29,13 @@ const VISUAL_STYLE_OPTIONS = [
     value: "classic",
     label: "经典原版",
     description: "保留当前浅色、深色配色。",
-    colors: ["#ffffff", "#171717", "#e5e5e5"],
+    colors: ["#FFFFFF", "#10251D", "#9AD7B7"],
+  },
+  {
+    value: "fangzheng",
+    label: "直角工具型",
+    description: "冷灰背景、清晰按钮与选中态、无圆角、紧凑设置密度。",
+    colors: ["#F0F4F7", "#007A68", "#C8EFE6"],
   },
   {
     value: "tianqing",
@@ -59,7 +65,7 @@ const VISUAL_STYLE_OPTIONS = [
     value: "yuebai",
     label: "月白黛蓝",
     description: "黛蓝主题色、霜月浅底、琥珀点缀。",
-    colors: ["#4A5E95", "#DDE5F0", "#C4956A"],
+    colors: ["#F4F7FC", "#304A8A", "#D6A35C"],
   },
   {
     value: "gumo",
@@ -112,7 +118,7 @@ export function InterfaceSection({ draft, setDraft }: Props) {
         <div>
           <Label>视觉风格</Label>
           <p className="mt-1 text-xs text-muted-foreground">
-            东方美学方案不会覆盖原设计，可随时切回经典原版。
+            选择软件界面的整体视觉方案；直角工具型会同时调整浅色、深色、按钮和选中状态。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -123,8 +129,10 @@ export function InterfaceSection({ draft, setDraft }: Props) {
                 key={option.value}
                 type="button"
                 onClick={() => setDraft("visualStyle", option.value)}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  active ? "border-primary bg-primary/5 ring-1 ring-primary/40" : "border-border hover:bg-accent/50"
+                className={`rounded-lg border p-3 text-left transition-all ${
+                  active
+                    ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/45"
+                    : "border-border hover:border-primary/70 hover:bg-accent/70 hover:shadow-sm hover:ring-1 hover:ring-primary/25"
                 }`}
               >
                 <div className="mb-3 flex gap-1.5">

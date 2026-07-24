@@ -23,21 +23,24 @@ import {
 import {
   DEFAULT_VISUAL_STYLE,
   VISUAL_STYLE_STORAGE_KEY,
+  VISUAL_STYLE_STORAGE_VERSION,
+  VISUAL_STYLE_STORAGE_VERSION_KEY,
   normalizeVisualStyle,
+  resolveStoredVisualStyle,
   type VisualStyle,
 } from "@/lib/visual-style-settings"
+import { DEFAULT_AI_WORKFLOW_MODE, resolveAiWorkflowMode, type AiWorkflowMode, type LegacyAiWorkflowMode } from "@/lib/agent/workflow-mode"
+import { DEFAULT_MCP_CONFIG, type McpConfig } from "@/lib/mcp/config"
 
 const GRAPH_LABEL_MODE_KEY = "lk-graph-label-display-mode"
 const GRAPH_EDGE_COLOR_KEY = "lk-graph-edge-color"
 const GRAPH_EDGE_STRENGTH_KEY = "lk-graph-edge-strength"
 const GRAPH_EDGE_STYLE_KEY = "lk-graph-edge-style"
 const GRAPH_EDGE_LABELS_ALWAYS_KEY = "lk-graph-edge-labels-always"
-const CHAT_DOCK_POSITION_KEY = "qmai-chat-dock-position"
 const UI_FONT_SIZE_SCALE_KEY = "qmai-ui-font-size-scale"
 const UI_FONT_FAMILY_KEY = "qmai-ui-font-family"
 const SIDEBAR_NAV_CONFIG_KEY = "qmai-sidebar-nav-config"
 
-export type ChatDockPosition = "bottom" | "right"
 export type SettingsCategoryId =
   | "llm"
   | "rerank"
@@ -52,12 +55,6 @@ export type SettingsCategoryId =
   | "contact-support"
   | "changelog"
 
-const readStoredChatDockPosition = (): ChatDockPosition => {
-  if (typeof localStorage === "undefined") return "bottom"
-  const saved = localStorage.getItem(CHAT_DOCK_POSITION_KEY)
-  return saved === "right" || saved === "bottom" ? saved : "bottom"
-}
-
 const readStoredUiFontSizeScale = (): number => {
   if (typeof localStorage === "undefined") return 1
   const saved = Number(localStorage.getItem(UI_FONT_SIZE_SCALE_KEY) ?? "1")
@@ -71,7 +68,14 @@ const readStoredUiFontFamily = (): UiFontFamily => {
 
 const readStoredVisualStyle = (): VisualStyle => {
   if (typeof localStorage === "undefined") return DEFAULT_VISUAL_STYLE
-  return normalizeVisualStyle(localStorage.getItem(VISUAL_STYLE_STORAGE_KEY))
+  const saved = localStorage.getItem(VISUAL_STYLE_STORAGE_KEY)
+  const version = localStorage.getItem(VISUAL_STYLE_STORAGE_VERSION_KEY)
+  const resolved = resolveStoredVisualStyle(saved, version)
+  if (saved !== resolved || version !== VISUAL_STYLE_STORAGE_VERSION) {
+    localStorage.setItem(VISUAL_STYLE_STORAGE_KEY, resolved)
+    localStorage.setItem(VISUAL_STYLE_STORAGE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
+  }
+  return resolved
 }
 
 const readStoredSidebarNavConfig = (): SidebarNavConfig => {
@@ -129,7 +133,7 @@ export interface ReasoningConfig {
 }
 
 interface LlmConfig {
-  provider: "openai" | "anthropic" | "google" | "azure" | "ollama" | "custom" | "minimax" | "claude-code" | "codex-cli"
+  provider: "openai" | "anthropic" | "google" | "azure" | "ollama" | "custom" | "minimax" | "claude-code" | "codex-cli" | "cursor-cli"
   apiKey: string
   model: string
   ollamaUrl: string
@@ -315,6 +319,8 @@ export interface NovelConfig {
   extractModel: string
   /** 去 AI 味：章节预览去 AI 味、深度生成阶段6。空字符串表示跟随默认模型。 */
   deAiModel: string
+  /** 批量去 AI 味同时运行的作品 Agent 数，范围 1–5。 */
+  deAiBatchConcurrency: number
   /** 社区摘要自动提取：开启后每 N 章用 LLM 为图谱社区生成叙事摘要，用于回答全局性问题（默认开）。 */
   communitySummaryEnabled: boolean
   /** 社区摘要提取间隔：每摄取多少章后自动重建一次社区摘要（默认 5）。 */
@@ -342,6 +348,7 @@ export const DEFAULT_NOVEL_CONFIG: NovelConfig = {
   summaryModel: "",
   extractModel: "",
   deAiModel: "",
+  deAiBatchConcurrency: 3,
   communitySummaryEnabled: true,
   communitySummaryInterval: 5,
   communitySummaryAsync: true,
@@ -541,15 +548,16 @@ interface WikiState {
   pendingScrollImageSrc: string | null
   selectedMemoryCenterEntry: string | null
   chatExpanded: boolean
-  chatDockPosition: ChatDockPosition
   searchPanelOpen: boolean
-  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "soul" | "skillLibrary" | "dismantling" | "bookAnalysis" | "settings" | "trash" | "reviewCenter" | "storySimulation"
+  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "soul" | "skillLibrary" | "writingSkillLibrary" | "bookAnalysis" | "settings" | "trash" | "reviewCenter" | "storySimulation"
   activeSettingsCategory: SettingsCategoryId | null
   selectedSoulId: string | null
   selectedSoulTab: "project" | "character"
   selectedSoulSection: "builtIn" | "custom"
   selectedSkillLibrarySkillId: string | null
   skillLibraryDraftDirty: boolean
+  selectedWritingSkillLibrarySkillId: string | null
+  writingSkillLibraryDraftDirty: boolean
   selectedReviewDimension: string | null
   selectedReviewFilePath: string
   selectedDismantlingProjectId: string | null
@@ -567,6 +575,9 @@ interface WikiState {
   refreshGraph: (() => void) | null
   llmConfig: LlmConfig
   aiChatModel: string
+  /** Dedicated global AI outline model key; isolated from AI chat. */
+  aiOutlineModel: string
+  aiOutlineModelRevision: number
   /** 默认模型（工作流）：拆文库、导入队列、去重、角色 aura 等。章节/大纲记忆摄取见 novelConfig.extractModel */
   defaultLlmModel: string
   /** Per-provider-preset stored overrides (API key, model, endpoint, …). */
@@ -574,6 +585,7 @@ interface WikiState {
   /** Which preset is currently active. `null` = no LLM configured. */
   activePresetId: string | null
   searchApiConfig: SearchApiConfig
+  mcpConfig: McpConfig
   embeddingConfig: EmbeddingConfig
   rerankConfig: RerankConfig
   multimodalConfig: MultimodalConfig
@@ -583,6 +595,8 @@ interface WikiState {
   sourceWatchConfig: SourceWatchConfig
   novelMode: boolean
   chatEditModeEnabled: boolean
+  aiWorkflowMode: AiWorkflowMode
+  planExecuteEnabled: boolean
   /** 深度模式状态：跨视图切换保持开启 */
   deepChapterEnabled: boolean
   novelConfig: NovelConfig
@@ -612,7 +626,6 @@ interface WikiState {
   setPendingScrollImageSrc: (src: string | null) => void
   setSelectedMemoryCenterEntry: (entry: string | null) => void
   setChatExpanded: (expanded: boolean) => void
-  setChatDockPosition: (position: ChatDockPosition) => void
   setSearchPanelOpen: (open: boolean) => void
   setActiveView: (view: WikiState["activeView"]) => void
   setActiveSettingsCategory: (category: SettingsCategoryId | null) => void
@@ -621,6 +634,8 @@ interface WikiState {
   setSelectedSoulSection: (section: "builtIn" | "custom") => void
   setSelectedSkillLibrarySkillId: (id: string | null) => void
   setSkillLibraryDraftDirty: (dirty: boolean) => void
+  setSelectedWritingSkillLibrarySkillId: (id: string | null) => void
+  setWritingSkillLibraryDraftDirty: (dirty: boolean) => void
   setSelectedReviewDimension: (dimension: string | null) => void
   setSelectedReviewFilePath: (path: string) => void
   setSelectedDismantlingProjectId: (id: string | null) => void
@@ -638,10 +653,12 @@ interface WikiState {
   setRefreshGraph: (refreshGraph: (() => void) | null) => void
   setLlmConfig: (config: LlmConfig) => void
   setAiChatModel: (model: string) => void
+  setAiOutlineModel: (model: string) => void
   setDefaultLlmModel: (model: string) => void
   setProviderConfigs: (configs: ProviderConfigs) => void
   setActivePresetId: (id: string | null) => void
   setSearchApiConfig: (config: SearchApiConfig) => void
+  setMcpConfig: (mcpConfig: McpConfig) => void
   setEmbeddingConfig: (config: EmbeddingConfig) => void
   setRerankConfig: (config: Partial<RerankConfig>) => void
   setMultimodalConfig: (config: MultimodalConfig) => void
@@ -651,6 +668,8 @@ interface WikiState {
   setSourceWatchConfig: (sourceWatchConfig: SourceWatchConfig) => void
   setNovelMode: (novelMode: boolean) => void
   setChatEditModeEnabled: (enabled: boolean) => void
+  setAiWorkflowMode: (mode: LegacyAiWorkflowMode) => void
+  setPlanExecuteEnabled: (enabled: boolean) => void
   setDeepChapterEnabled: (enabled: boolean) => void
   setNovelConfig: (config: Partial<NovelConfig>) => void
   setCommunitySummaryError: (error: string | null) => void
@@ -683,7 +702,6 @@ export const useWikiStore = create<WikiState>((set) => ({
   pendingScrollImageSrc: null,
   selectedMemoryCenterEntry: null,
   chatExpanded: false,
-  chatDockPosition: readStoredChatDockPosition(),
   searchPanelOpen: false,
   activeView: "wiki",
   activeSettingsCategory: null,
@@ -692,6 +710,8 @@ export const useWikiStore = create<WikiState>((set) => ({
   selectedSoulSection: "builtIn",
   selectedSkillLibrarySkillId: null,
   skillLibraryDraftDirty: false,
+  selectedWritingSkillLibrarySkillId: null,
+  writingSkillLibraryDraftDirty: false,
   selectedReviewDimension: null,
   selectedReviewFilePath: "",
   selectedDismantlingProjectId: null,
@@ -720,6 +740,8 @@ export const useWikiStore = create<WikiState>((set) => ({
     localCliIsolation: false,
   },
   aiChatModel: "",
+  aiOutlineModel: "",
+  aiOutlineModelRevision: 0,
   defaultLlmModel: "",
   providerConfigs: {},
   activePresetId: null,
@@ -744,12 +766,6 @@ export const useWikiStore = create<WikiState>((set) => ({
   setPendingScrollImageSrc: (pendingScrollImageSrc) => set({ pendingScrollImageSrc }),
   setSelectedMemoryCenterEntry: (selectedMemoryCenterEntry) => set({ selectedMemoryCenterEntry }),
   setChatExpanded: (chatExpanded) => set({ chatExpanded }),
-  setChatDockPosition: (chatDockPosition) => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(CHAT_DOCK_POSITION_KEY, chatDockPosition)
-    }
-    set({ chatDockPosition })
-  },
   setSearchPanelOpen: (searchPanelOpen) => set({ searchPanelOpen }),
   setActiveView: (activeView) => set((state) => {
     if (
@@ -760,9 +776,20 @@ export const useWikiStore = create<WikiState>((set) => ({
     ) {
       return {}
     }
+    if (
+      state.activeView === "writingSkillLibrary"
+      && activeView !== "writingSkillLibrary"
+      && state.writingSkillLibraryDraftDirty
+      && !confirmDiscardSkillLibraryDraft()
+    ) {
+      return {}
+    }
     return {
       activeView,
       skillLibraryDraftDirty: activeView === "skillLibrary" ? state.skillLibraryDraftDirty : false,
+      writingSkillLibraryDraftDirty: activeView === "writingSkillLibrary"
+        ? state.writingSkillLibraryDraftDirty
+        : false,
     }
   }),
   setActiveSettingsCategory: (activeSettingsCategory) => set({ activeSettingsCategory }),
@@ -778,6 +805,15 @@ export const useWikiStore = create<WikiState>((set) => ({
     }
   }),
   setSkillLibraryDraftDirty: (skillLibraryDraftDirty) => set({ skillLibraryDraftDirty }),
+  setSelectedWritingSkillLibrarySkillId: (selectedWritingSkillLibrarySkillId) => set((state) => {
+    if (state.selectedWritingSkillLibrarySkillId === selectedWritingSkillLibrarySkillId) return {}
+    if (state.writingSkillLibraryDraftDirty && !confirmDiscardSkillLibraryDraft()) return {}
+    return {
+      selectedWritingSkillLibrarySkillId,
+      writingSkillLibraryDraftDirty: false,
+    }
+  }),
+  setWritingSkillLibraryDraftDirty: (writingSkillLibraryDraftDirty) => set({ writingSkillLibraryDraftDirty }),
   setSelectedReviewDimension: (selectedReviewDimension) => set({ selectedReviewDimension }),
   setSelectedReviewFilePath: (selectedReviewFilePath) => set({ selectedReviewFilePath }),
   setSelectedDismantlingProjectId: (selectedDismantlingProjectId) => set({ selectedDismantlingProjectId }),
@@ -801,6 +837,7 @@ export const useWikiStore = create<WikiState>((set) => ({
     searXngCategories: ["general"],
     providerConfigs: {},
   },
+  mcpConfig: DEFAULT_MCP_CONFIG,
 
   embeddingConfig: {
     enabled: false,
@@ -849,6 +886,8 @@ export const useWikiStore = create<WikiState>((set) => ({
 
   novelMode: true,
   chatEditModeEnabled: false,
+  aiWorkflowMode: DEFAULT_AI_WORKFLOW_MODE,
+  planExecuteEnabled: false,
   deepChapterEnabled: false,
   novelConfig: { ...DEFAULT_NOVEL_CONFIG },
   communitySummaryError: null,
@@ -871,10 +910,15 @@ export const useWikiStore = create<WikiState>((set) => ({
 
   setLlmConfig: (llmConfig) => set({ llmConfig }),
   setAiChatModel: (aiChatModel) => set({ aiChatModel }),
+  setAiOutlineModel: (aiOutlineModel) => set((state) => ({
+    aiOutlineModel,
+    aiOutlineModelRevision: state.aiOutlineModelRevision + 1,
+  })),
   setDefaultLlmModel: (defaultLlmModel) => set({ defaultLlmModel }),
   setProviderConfigs: (providerConfigs) => set({ providerConfigs }),
   setActivePresetId: (activePresetId) => set({ activePresetId }),
   setSearchApiConfig: (searchApiConfig) => set({ searchApiConfig }),
+  setMcpConfig: (mcpConfig) => set({ mcpConfig }),
   setEmbeddingConfig: (embeddingConfig) => set({ embeddingConfig }),
   setRerankConfig: (rerankConfig) => set((state) => ({ rerankConfig: { ...state.rerankConfig, ...rerankConfig } })),
   setMultimodalConfig: (multimodalConfig) => set({ multimodalConfig }),
@@ -884,7 +928,18 @@ export const useWikiStore = create<WikiState>((set) => ({
   setSourceWatchConfig: (sourceWatchConfig) => set({ sourceWatchConfig }),
   setNovelMode: (novelMode) => set({ novelMode }),
   setChatEditModeEnabled: (chatEditModeEnabled) => set({ chatEditModeEnabled }),
-  setDeepChapterEnabled: (deepChapterEnabled) => set({ deepChapterEnabled }),
+  setAiWorkflowMode: (aiWorkflowMode) => {
+    const resolvedMode = resolveAiWorkflowMode(aiWorkflowMode)
+    set({
+      aiWorkflowMode: resolvedMode,
+      deepChapterEnabled: resolvedMode === "strict",
+    })
+  },
+  setPlanExecuteEnabled: (planExecuteEnabled) => set({ planExecuteEnabled }),
+  setDeepChapterEnabled: (deepChapterEnabled) => set({
+    deepChapterEnabled,
+    aiWorkflowMode: deepChapterEnabled ? "strict" : DEFAULT_AI_WORKFLOW_MODE,
+  }),
   setNovelConfig: (config) => set((state) => ({
     novelConfig: { ...state.novelConfig, ...config },
     ...(config.defaultLlmModel !== undefined
@@ -926,6 +981,7 @@ export const useWikiStore = create<WikiState>((set) => ({
     const normalized = normalizeVisualStyle(visualStyle)
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(VISUAL_STYLE_STORAGE_KEY, normalized)
+      localStorage.setItem(VISUAL_STYLE_STORAGE_VERSION_KEY, VISUAL_STYLE_STORAGE_VERSION)
     }
     set({ visualStyle: normalized })
   },

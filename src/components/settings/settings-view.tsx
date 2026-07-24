@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+﻿import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Bot,
   BookOpen,
@@ -12,6 +12,9 @@ import {
   MessageCircle,
   HeartHandshake,
   Archive,
+  FileText,
+  Download,
+  Brain,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -30,27 +33,35 @@ import { EmbeddingSection } from "./sections/embedding-section"
 import { RerankSection } from "./sections/rerank-section"
 import { InterfaceSection } from "./sections/interface-section"
 import { NovelSection } from "./sections/novel-section"
+import { ClassificationSection } from "./sections/classification-section"
 import { NetworkSection } from "./sections/network-section"
+import { McpSection } from "./sections/mcp-section"
 import { ChangelogSection } from "./sections/changelog-section"
 import { MaintenanceSection } from "./sections/maintenance-section"
 import { FeedbackSection } from "./sections/feedback-section"
 import { UsageGuideSection } from "./sections/usage-guide-section"
 import { ContactSupportSection } from "./sections/contact-support-section"
 import { DataManagementSection } from "./sections/data-management-section"
+import { ExportCenterSection } from "./sections/export-center-section"
+import { UserMemorySection } from "./sections/user-memory-section"
 
 type CategoryId =
   | "llm"
   | "rerank"
   | "embedding"
   | "network"
+  | "mcp"
   | "interface"
   | "novel"
+  | "user-memory"
   | "usage-guide"
   | "maintenance"
   | "data-management"
+  | "export-center"
   | "feedback"
   | "contact-support"
-  | "changelog"
+  | "classification"
+| "changelog"
 
 interface Category {
   id: CategoryId
@@ -61,6 +72,7 @@ interface Category {
   /** Optional muted subtitle under the label (e.g. novel → model setup). */
   hintKey?: string
   icon: typeof Bot
+  defaultLabel?: string
 }
 
 const CATEGORIES: Category[] = [
@@ -68,13 +80,17 @@ const CATEGORIES: Category[] = [
   { id: "rerank", labelKey: "settings.categories.rerank", icon: ListFilter },
   { id: "embedding", labelKey: "settings.categories.embedding", icon: Database },
   { id: "network", labelKey: "settings.categories.network", icon: Network },
+  { id: "mcp", labelKey: "settings.categories.mcp", icon: Network },
   { id: "interface", labelKey: "settings.categories.interface", icon: Palette },
   { id: "novel", labelKey: "settings.categories.novel", hintKey: "settings.categories.novelHint", icon: BookOpen },
+  { id: "user-memory", labelKey: "settings.categories.userMemory", icon: Brain },
   { id: "usage-guide", labelKey: "settings.categories.usageGuide", icon: HelpCircle },
   { id: "maintenance", labelKey: "settings.categories.maintenance", icon: Wrench },
   { id: "data-management", labelKey: "settings.categories.dataManagement", icon: Archive },
+  { id: "export-center", labelKey: "settings.categories.exportCenter", defaultLabel: "导出中心", icon: Download },
   { id: "feedback", labelKey: "settings.categories.feedback", icon: MessageCircle },
   { id: "contact-support", labelKey: "settings.categories.contactSupport", icon: HeartHandshake },
+  { id: "classification", labelKey: "settings.categories.classification", icon: FileText },
   { id: "changelog", labelKey: "settings.categories.changelog", icon: History },
 ]
 
@@ -518,16 +534,24 @@ export function SettingsView() {
         return <EmbeddingSection draft={draft} setDraft={setDraft} />
       case "network":
         return <NetworkSection draft={draft} setDraft={setDraft} />
+      case "mcp":
+        return <McpSection />
       case "interface":
         return <InterfaceSection draft={draft} setDraft={setDraft} />
       case "novel":
         return <NovelSection draft={draft} setDraft={setDraft} />
+      case "user-memory":
+        return <UserMemorySection />
+      case "classification":
+        return <ClassificationSection projectPath={project?.path ?? undefined} />
       case "usage-guide":
         return <UsageGuideSection />
       case "maintenance":
         return <MaintenanceSection />
       case "data-management":
         return <DataManagementSection />
+      case "export-center":
+        return <ExportCenterSection currentProject={project} />
       case "feedback":
         return <FeedbackSection />
       case "contact-support":
@@ -543,15 +567,15 @@ export function SettingsView() {
     <div className="flex h-full overflow-hidden">
       {/* Sidebar — category nav. Matches the IconSidebar's pill-on-accent
           pattern so the two navigational surfaces feel like one app. */}
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-muted/30">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
         <div className="flex items-center gap-1.5 px-4 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-wider">
           <PanelHeaderWithHelp
             title={t("settings.title")}
             helpKey="settings"
-            className="cursor-pointer text-muted-foreground transition-colors hover:text-primary"
+            className="cursor-pointer text-sidebar-foreground/65 transition-colors hover:text-sidebar-foreground"
           />
         </div>
-        <nav className="flex-1 overflow-y-auto px-2 pb-3">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {CATEGORIES.map((c) => {
             const Icon = c.icon
             const isActive = c.id === active
@@ -564,19 +588,21 @@ export function SettingsView() {
                 aria-current={isActive ? "page" : undefined}
                 className={`group mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                   isActive
-                    ? "bg-foreground/[0.08] font-medium text-foreground ring-1 ring-border/70"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 transition-colors ${
-                    isActive ? "text-primary" : "text-muted-foreground/80 group-hover:text-accent-foreground"
+                    isActive ? "text-sidebar-primary" : "text-sidebar-foreground/70 group-hover:text-sidebar-accent-foreground"
                   }`}
                 />
                 <span className="flex min-w-0 flex-1 flex-col items-start">
-                  <span className="truncate">{t(c.labelKey)}</span>
+                  <span className="truncate">{t(c.labelKey, { defaultValue: c.defaultLabel })}</span>
                   {c.hintKey ? (
-                    <span className="truncate text-[10px] leading-tight text-muted-foreground/80">
+                    <span className={`truncate text-[10px] leading-tight ${
+                      isActive ? "text-sidebar-accent-foreground/70" : "text-sidebar-foreground/55"
+                    }`}>
                       {t(c.hintKey)}
                     </span>
                   ) : null}
@@ -588,8 +614,8 @@ export function SettingsView() {
       </aside>
 
       {/* Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
           <div className="mx-auto max-w-2xl">{body}</div>
         </div>
 
